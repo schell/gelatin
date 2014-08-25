@@ -44,29 +44,21 @@ main = do
     wvar <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
     scs <- simpleColorShader
     sts <- simpleTextureShader
+    (_, win) <- readMVar wvar
+    (fbw, fbh)  <- getFramebufferSize win
     let proj = orthoMatrix 0 600 0 600 0 1
         rndr = Renderer scs sts M.empty
-    (draw, cleanup) <- renderDrawing proj eye4 rndr scene
+        fbsize = Size (fromIntegral fbw) (fromIntegral fbh)
+    (draw, cleanup) <- renderDrawing fbsize proj eye4 rndr scene
 
     forever $ do
         pollEvents
         (_, window) <- takeMVar wvar
         putMVar wvar ([], window)
         makeContextCurrent $ Just window
-        (fbw, fwh) <- getFramebufferSize window
-        (ww, wh)   <- getWindowSize window
-
-        currentProgram $= (Just $ program scs)
-        viewport $= (Position 0 0, Size (fromIntegral fbw) (fromIntegral fwh))
-        clearColor $= black
-        depthFunc $= Nothing
-        blend $= Enabled
-        blendEquationSeparate $= (FuncAdd, FuncAdd)
-        blendFuncSeparate $= ((SrcAlpha, OneMinusSrcAlpha), (One, Zero))
-        clear [ColorBuffer, DepthBuffer]
 
         draw
 
         swapBuffers window
         shouldClose <- windowShouldClose window
-        when shouldClose exitSuccess
+        when shouldClose $ cleanup >> exitSuccess

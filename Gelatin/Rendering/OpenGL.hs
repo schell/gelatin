@@ -79,14 +79,11 @@ renderCommand pj mv rndr (Free (WithTexture src d n)) = do
     case et of
         Left err -> do putStrLn err
                        exitFailure
-        Right t  -> do (fd', fc') <- renderCommand pj mv rndr $ fromF d
-                       let pg = program $ textureShader rndr
-                           fd = do currentProgram $= (Just pg)
-                                   texture Texture2D $= Enabled
-                                   textureFilter   Texture2D   $= ((Nearest, Nothing), Nearest)
-                                   textureWrapMode Texture2D S $= (Repeated, Clamp)
-                                   textureWrapMode Texture2D T $= (Repeated, Clamp)
-                                   withTextures2D [t] fd'
+        Right t  -> do textureFilter   Texture2D   $= ((Nearest, Nothing), Nearest)
+                       textureWrapMode Texture2D S $= (Repeated, Clamp)
+                       textureWrapMode Texture2D T $= (Repeated, Clamp)
+                       (fd', fc') <- renderCommand pj mv rndr $ fromF d
+                       let fd = withTextures2D [t] fd'
                        (fd'',fc'') <- renderCommand pj mv rndr n
                        return (fd >> fd'', fc' >> fc'')
 renderCommand pj mv rndr (Free (TexTris vs ts n)) = do
@@ -108,5 +105,15 @@ renderCommand pj mv rndr (Free (TexTris vs ts n)) = do
 
 -- | Render a drawing down to a set of functions. The first draws into the
 -- OpenGL context and the second cleans up resources used for that drawing.
-renderDrawing :: (Num a, Real a) => M44 a -> M44 a -> Renderer -> Drawing a () -> IO (IO (), IO ())
-renderDrawing pj mv r = renderCommand pj mv r . fromF
+renderDrawing :: (Num a, Real a) => Size -> M44 a -> M44 a -> Renderer -> Drawing a () -> IO (IO (), IO ())
+renderDrawing s pj mv r d = do
+    texture Texture2D $= Enabled
+    depthFunc $= Nothing
+    blend $= Enabled
+    blendEquationSeparate $= (FuncAdd, FuncAdd)
+    blendFuncSeparate $= ((SrcAlpha, OneMinusSrcAlpha), (One, Zero))
+    (draw, clean) <- renderCommand pj mv r $ fromF d
+    return (fd >> draw, clean)
+        where fd = do viewport $= (Position 0 0, s)
+                      clearColor $= Color4 0 0 0 1
+                      clear [ColorBuffer, DepthBuffer]

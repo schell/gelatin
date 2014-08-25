@@ -52,7 +52,7 @@ library
 
 executable example
   buildable:           True
-  ghc-options:         -Wall
+  ghc-options:         -Wall -O2
   main-is:             Example.hs
   build-depends:       base >=4.6 && <5.0,
                        gelatin -any,
