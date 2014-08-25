@@ -1,8 +1,11 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Gelatin.Core where
 
 import Linear
-import Graphics.Rendering.OpenGL hiding (Color, Fill)
+import Graphics.Rendering.OpenGL hiding (Color, Fill, Texture)
+import Graphics.GLUtil
 import Control.Monad.Free.Church
+import qualified Data.Map as M
 
 --------------------------------------------------------------------------------
 -- Types
@@ -12,11 +15,24 @@ data Transform a = Transform (V3 a) (V3 a) (Quaternion a) deriving (Show, Eq, Or
 
 type Color a = Color4 a
 
-data DrawCommand a next = Fill (Color a) [V3 a] next
-                        | Gradient [Color a] [V3 a] next
-                        | WithTransform (Transform a) (Drawing a ()) next
+data DrawCommand a next = WithTransform (Transform a) (Drawing a ()) next
+                        | Fill [V3 a] (Color a) next
+                        | Gradient [V3 a] [Color a] next
+                        | WithTexture TextureSrc (Drawing a ()) next
+                        | TexTris [V3 a] [V2 a] next
 
 type Drawing a = F (DrawCommand a)
+
+data TextureSrc = Local FilePath
+                | Relative FilePath
+                deriving (Show, Eq, Ord)
+
+type TextureAtlas = M.Map TextureSrc TextureObject
+
+data Renderer = Renderer { colorShader :: ShaderProgram
+                         , textureShader :: ShaderProgram
+                         , textureAtlas :: TextureAtlas
+                         }
 
 --------------------------------------------------------------------------------
 -- Classes
@@ -30,9 +46,11 @@ class Embedable a where
 --------------------------------------------------------------------------------
 
 instance Functor (DrawCommand a) where
+    fmap f (WithTransform t d n) = WithTransform t d $ f n
     fmap f (Fill c vs n) = Fill c vs $ f n
     fmap f (Gradient cs vs n) = Gradient cs vs $ f n
-    fmap f (WithTransform t d n) = WithTransform t d $ f n
+    fmap f (WithTexture src d n) = WithTexture src d $ f n
+    fmap f (TexTris vs ts n) = TexTris vs ts $ f n
 
 instance (Real a, Fractional a) => Embedable (V1 a) where
     embed (V1 x) = V3 (realToFrac x) 0 0
@@ -85,11 +103,17 @@ setRotation (Transform p s _) q = Transform p s q
 -- Building a drawing
 --------------------------------------------------------------------------------
 
-fill :: (Embedable v, Fractional a) => Color a -> [v] -> Drawing a ()
-fill c vs = liftF $ Fill c (map embed vs) ()
+fill :: (Embedable v, Fractional a) => [v] -> Color a -> Drawing a ()
+fill vs c = liftF $ Fill (map embed vs) c ()
 
-gradient :: (Embedable v, Fractional a) => [Color a] -> [v] -> Drawing a ()
-gradient cs vs = liftF $ Gradient cs (map embed vs) ()
+gradient :: (Embedable v, Fractional a) => [v] -> [Color a] -> Drawing a ()
+gradient vs cs = liftF $ Gradient (map embed vs) cs ()
+
+textris :: (Embedable v, Fractional a) => [v] -> [V2 a] -> Drawing a ()
+textris vs ts = liftF $ TexTris (map embed vs) ts ()
+
+withTexture :: Fractional a => TextureSrc -> Drawing a () -> Drawing a ()
+withTexture src d = liftF $ WithTexture src d ()
 
 withTransform :: Transform a -> Drawing a () -> Drawing a ()
 withTransform t d = liftF $ WithTransform t d ()

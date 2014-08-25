@@ -20,20 +20,53 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Gelatin.Color,
                        Gelatin.Core,
-                       Gelatin.Render,
-                       Gelatin.Shaders
+                       Gelatin.Rendering.String,
+                       Gelatin.Rendering.OpenGL,
+                       Gelatin.Rendering,
+                       Gelatin.Shaders.Core,
+                       Gelatin.Shaders.SimpleColorShader,
+                       Gelatin.Shaders,
+                       Gelatin
   -- other-modules:
   other-extensions:    DataKinds,
                        TypeOperators,
-                       FlexibleInstances
+                       FlexibleInstances,
+                       TemplateHaskell
 
   build-depends:       base >=4.7 && <4.8,
+                       containers -any,
+                       lens -any,
+                       directory -any,
+                       filepath -any,
                        OpenGL >=2.9 && <2.10,
+                       GLFW-b >=1.4 && <1.5,
                        linear >=1.10 && <1.11,
                        free >=4.9 && <4.10,
                        GLUtil >=0.8 && <0.9,
                        vinyl-gl >=0.2 && <0.3,
                        vinyl >=0.4 && <0.5,
                        bytestring >=0.10 && <0.11
+
   -- hs-source-dirs:
+  default-language:    Haskell2010
+
+executable example
+  buildable:           True
+  ghc-options:         -Wall
+  main-is:             Example.hs
+  build-depends:       base >=4.6 && <5.0,
+                       gelatin -any,
+                       directory -any,
+                       filepath -any,
+                       containers -any,
+                       lens -any,
+                       linear -any,
+                       OpenGL -any,
+                       GLFW-b -any,
+                       vinyl -any,
+                       vinyl-gl -any,
+                       GLUtil -any,
+                       free -any,
+                       bytestring -any
+
   default-language:    Haskell2010
