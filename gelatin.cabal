@@ -38,6 +38,7 @@ library
                        lens -any,
                        directory -any,
                        filepath -any,
+                       mtl -any,
                        OpenGL >=2.9 && <2.10,
                        GLFW-b >=1.4 && <1.5,
                        linear >=1.10 && <1.11,
@@ -52,10 +53,11 @@ library
 
 executable example
   buildable:           True
-  ghc-options:         -Wall -O2
+  ghc-options:         -Wall -rtsopts -fprof-auto -fprof-cafs
   main-is:             Example.hs
   build-depends:       base >=4.6 && <5.0,
                        gelatin -any,
+                       mtl -any,
                        directory -any,
                        filepath -any,
                        containers -any,

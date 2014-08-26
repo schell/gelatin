@@ -1,10 +1,13 @@
 module Main where
 
 import Gelatin
+import Gelatin.Shaders.Core
 import Linear
 import Control.Monad
 import Control.Concurrent
-import Graphics.Rendering.OpenGL
+import Data.IORef
+import Data.Monoid
+import Graphics.Rendering.OpenGL hiding (position, color)
 import Graphics.GLUtil
 import Graphics.GLUtil.Camera3D
 import Graphics.VinylGL
@@ -30,6 +33,52 @@ scene = do
         fill r red
         withPosition (V2 100 0) $
             fill r pink
+    renderWith $ \_ _ rndr -> do
+        let pj = projectionMatrix (pi/4) 1 0.1 10
+            mv = transform2Mat $ Transform (V3 0 0 (-5)) (V3 1 1 1) $ rotateX (pi/8)
+            vs = [ V3 (-0.5) ( 0.5) ( 0.5)
+                 , V3 ( 0.5) ( 0.5) ( 0.5)
+                 , V3 (-0.5) (-0.5) ( 0.5)
+                 , V3 ( 0.5) (-0.5) ( 0.5)
+
+                 , V3 (-0.5) ( 0.5) (-0.5)
+                 , V3 ( 0.5) ( 0.5) (-0.5)
+                 , V3 (-0.5) (-0.5) (-0.5)
+                 , V3 ( 0.5) (-0.5) (-0.5)
+                 ]
+
+            cs = map ((color =:) . up . fmap (+0.5)) vs
+            es = [ 0, 2, 3 -- front
+                 , 0, 1, 3
+                 , 4, 0, 1 -- top
+                 , 4, 5, 1
+                 , 4, 6, 7 -- bock
+                 , 4, 5, 7
+                 , 6, 2, 3 -- bottom
+                 , 6, 7, 3
+                 , 0, 2, 6 -- left
+                 , 0, 4, 6
+                 , 1, 3, 7 -- right
+                 , 1, 5, 7
+                 ]
+            up (V3 x y z) = V4 x y z 1
+            s  = colorShader rndr
+        vbo <- bufferVertices $ zipWith (<+>) (map (position =:) vs) cs
+        ebo <- bufferIndices es
+        let draw = do depthFunc $= Just Less
+                      currentProgram $= (Just $ program s)
+                      setUniforms s (projection =: pj <+>
+                                     modelview =: mv)
+                      bindVertices vbo
+                      enableVertices' s vbo
+                      bindBuffer ElementArrayBuffer $= Just ebo
+                      drawIndexedTris $ floor $ (fromIntegral $ length es) / 3
+                      bindBuffer ElementArrayBuffer $= Nothing
+                      depthFunc $= Nothing
+            clean = do deleteVertices vbo
+                       deleteObjectName ebo
+        return (draw, clean)
+
     --withPosition (V2 0 100) $
 
 
@@ -41,10 +90,10 @@ main = do
 
     putStrLn "...or you can render to an OpenGL window..."
 
-    wvar <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
+    wref <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
     scs <- simpleColorShader
     sts <- simpleTextureShader
-    (_, win) <- readMVar wvar
+    (_, win)    <- readIORef wref
     (fbw, fbh)  <- getFramebufferSize win
     let proj = orthoMatrix 0 600 0 600 0 1
         rndr = Renderer scs sts M.empty
@@ -53,8 +102,8 @@ main = do
 
     forever $ do
         pollEvents
-        (_, window) <- takeMVar wvar
-        putMVar wvar ([], window)
+        (_, window) <- readIORef wref
+        writeIORef wref ([], window)
         makeContextCurrent $ Just window
 
         draw

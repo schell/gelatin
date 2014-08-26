@@ -5,6 +5,7 @@ import Linear
 import Graphics.Rendering.OpenGL hiding (Color, Fill, Texture)
 import Graphics.GLUtil
 import Control.Monad.Free.Church
+import Control.Monad.Reader
 import qualified Data.Map as M
 
 --------------------------------------------------------------------------------
@@ -20,6 +21,7 @@ data DrawCommand a next = WithTransform (Transform a) (Drawing a ()) next
                         | Gradient [V3 a] [Color a] next
                         | WithTexture TextureSrc (Drawing a ()) next
                         | TexTris [V3 a] [V2 a] next
+                        | OtherRendering (M44 a -> M44 a -> Renderer -> IO (IO (), IO ())) next
 
 type Drawing a = F (DrawCommand a)
 
@@ -33,6 +35,14 @@ data Renderer = Renderer { colorShader :: ShaderProgram
                          , textureShader :: ShaderProgram
                          , textureAtlas :: TextureAtlas
                          }
+
+data REnv = Renv { reWindowSize      :: V2 Int
+                 , reFrameBufferSize :: V2 Int
+                 }
+
+type Render = ReaderT REnv IO
+
+type RenderPair = (Render (), IO ())
 
 --------------------------------------------------------------------------------
 -- Classes
@@ -51,6 +61,7 @@ instance Functor (DrawCommand a) where
     fmap f (Gradient cs vs n) = Gradient cs vs $ f n
     fmap f (WithTexture src d n) = WithTexture src d $ f n
     fmap f (TexTris vs ts n) = TexTris vs ts $ f n
+    fmap f (OtherRendering g n) = OtherRendering g $ f n
 
 instance (Real a, Fractional a) => Embedable (V1 a) where
     embed (V1 x) = V3 (realToFrac x) 0 0
@@ -87,6 +98,12 @@ idTransform = Transform (V3 0 0 0) (V3 1 1 1) $ axisAngle (V3 0 0 1) 0
 tfrm :: (Embedable v, Fractional a) => v -> v -> Quaternion a -> Transform a
 tfrm p s q = Transform (embed p) (embed s) q
 
+rotateX :: (Epsilon a, Floating a) => a -> Quaternion a
+rotateX = axisAngle (V3 1 0 0)
+
+rotateY :: (Epsilon a, Floating a) => a -> Quaternion a
+rotateY = axisAngle (V3 0 1 0)
+
 rotateZ :: (Epsilon a, Floating a) => a -> Quaternion a
 rotateZ = axisAngle (V3 0 0 1)
 
@@ -111,6 +128,11 @@ gradient vs cs = liftF $ Gradient (map embed vs) cs ()
 
 textris :: (Embedable v, Fractional a) => [v] -> [V2 a] -> Drawing a ()
 textris vs ts = liftF $ TexTris (map embed vs) ts ()
+
+renderWith :: Fractional a
+               => (M44 a -> M44 a -> Renderer -> IO (IO (), IO ()))
+               -> Drawing a ()
+renderWith f = liftF $ OtherRendering f ()
 
 withTexture :: Fractional a => TextureSrc -> Drawing a () -> Drawing a ()
 withTexture src d = liftF $ WithTexture src d ()

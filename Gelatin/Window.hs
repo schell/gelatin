@@ -17,7 +17,7 @@ module Gelatin.Window (
 ) where
 
 import Graphics.UI.GLFW as GLFW
-import Control.Concurrent
+import Data.IORef
 import Linear
 import Control.Lens
 import System.IO
@@ -55,17 +55,17 @@ makeLensesFor [("ienvEvents", "ienvEventsLens")
               ,("ienvWindowSize", "ienvWindowSizeLens")
               ] ''InputEnv
 
-type WindowVar = MVar ([InputEvent], Window)
+type WindowRef = IORef ([InputEvent], Window)
 
 --------------------------------------------------------------------------------
 -- Creating a window.
 --------------------------------------------------------------------------------
 
 -- | @initWindow pos size title@ creates and opens a new window stored in an
--- mvar. The window will be positioned at `pos` with size `size`.
--- The mvar is necessary for accumulating certain events that occur in
+-- ref. The window will be positioned at `pos` with size `size`.
+-- The ref is necessary for accumulating certain events that occur in
 -- callbacks.
-initWindow :: V2 Int -> V2 Int -> String -> IO WindowVar
+initWindow :: V2 Int -> V2 Int -> String -> IO WindowRef
 initWindow (V2 x y) (V2 w h) title = do
     setErrorCallback $ Just $ \_ -> hPutStrLn stderr
     True <- GLFW.init
@@ -75,49 +75,49 @@ initWindow (V2 x y) (V2 w h) title = do
     makeNewWindow (x,y) (w,h) title
 
 -- | Creates a new window. Fails and crashes if no window can be created.
-makeNewWindow :: (Int,Int) -> (Int,Int) -> String -> IO WindowVar
+makeNewWindow :: (Int,Int) -> (Int,Int) -> String -> IO WindowRef
 makeNewWindow pos size title = do
     Just win <- uncurry createWindow size title Nothing Nothing
     makeContextCurrent $ Just win
     (uncurry $ setWindowPos win) pos
 
     let (w, h) = over both fromIntegral size
-    mvar <- newMVar ([WindowSizeEvent w h, WindowSizeEvent w h], win)
+    ref <- newIORef ([WindowSizeEvent w h, WindowSizeEvent w h], win)
 
     setCharCallback win $ Just $ \_ c ->
-        input mvar $ CharEvent c
+        input ref $ CharEvent c
 
     setWindowSizeCallback win $ Just $ \_ w' h' -> do
-        input mvar $ WindowSizeEvent w' h'
+        input ref $ WindowSizeEvent w' h'
 
     setKeyCallback win $ Just $ \_ k i ks modi ->
-        input mvar $ KeyEvent k i ks modi
+        input ref $ KeyEvent k i ks modi
 
     setMouseButtonCallback win $ Just $ \_ mb mbs modi ->
-        input mvar $ MouseButtonEvent mb mbs modi
+        input ref $ MouseButtonEvent mb mbs modi
 
     setCursorPosCallback win $ Just $ \_ x y ->
-        input mvar $ CursorMoveEvent x y
+        input ref $ CursorMoveEvent x y
 
     setCursorEnterCallback win $ Just $ \_ cs ->
-        input mvar $ CursorEnterEvent cs
+        input ref $ CursorEnterEvent cs
 
     setScrollCallback win $ Just $ \_ x y ->
-        input mvar $ ScrollEvent x y
+        input ref $ ScrollEvent x y
 
-    return mvar
+    return ref
 
--- | Inject some input into a WindowVar.
-input :: WindowVar -> InputEvent -> IO ()
-input mvar e@(WindowSizeEvent _ _) = do
-    (es, w) <- takeMVar mvar
+-- | Inject some input into a WindowRef.
+input :: WindowRef -> InputEvent -> IO ()
+input ref e@(WindowSizeEvent _ _) = do
+    (es, w) <- readIORef ref
     let es' = filter noWindowEvs es
         noWindowEvs (WindowSizeEvent _ _) = False
         noWindowEvs _                     = True
-    putMVar mvar (es' ++ [e], w)
-input mvar e = do
-    (es, w) <- takeMVar mvar
-    putMVar mvar (es ++ [e], w)
+    writeIORef ref (es' ++ [e], w)
+input ref e = do
+    (es, w) <- readIORef ref
+    writeIORef ref (es ++ [e], w)
 
 --------------------------------------------------------------------------------
 -- Processing input events.

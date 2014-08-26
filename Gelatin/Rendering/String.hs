@@ -10,17 +10,17 @@ pad i = replicate (2*i) ' '
 showCommand :: Show a => Int -> Free (DrawCommand a) () -> String
 showCommand _ (Pure ()) = ""
 showCommand i (Free (Fill c vs n)) =
-    unlines [ pad i ++ "Fill:" ++ show i
+    unlines [ pad i ++ "Fill:"
             , pad i ++ show vs
             , pad i ++ show c
             ] ++ pad i ++ showCommand i n
 showCommand i (Free (Gradient cs vs n)) =
-    unlines [ pad i ++ "Gradient:" ++ show i
+    unlines [ pad i ++ "Gradient:"
             , pad i ++ show vs
             , pad i ++ show cs
             ] ++ pad i ++ showCommand i n
 showCommand i (Free (WithTransform t d n)) =
-    unlines [ pad i ++ "WithTransform:" ++ show i
+    unlines [ pad i ++ "WithTransform:"
             , pad i ++ show t
             , pad i ++ (showCommand (i+1) $ fromF d)
             ] ++ pad i ++ showCommand i n
@@ -29,9 +29,12 @@ showCommand i (Free (WithTexture src d n)) =
             , pad i ++ (showCommand (i+1) $ fromF d)
             ] ++ pad i ++ showCommand i n
 showCommand i (Free (TexTris vs ts n)) =
-    unlines [ pad i ++ "TexTris:" ++ show i
+    unlines [ pad i ++ "TexTris:"
             , pad i ++ show vs
             , pad i ++ show ts
+            ] ++ pad i ++ showCommand i n
+showCommand i (Free (OtherRendering _ n)) =
+    unlines [ pad i ++ "OtherRendering:"
             ] ++ pad i ++ showCommand i n
 
 showDrawing' :: Show a => Int -> Drawing a () -> String

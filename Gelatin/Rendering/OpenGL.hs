@@ -1,6 +1,8 @@
 {-# LANGUAGE DataKinds #-}
 module Gelatin.Rendering.OpenGL (
-    renderDrawing
+    renderDrawing,
+    transform2Mat,
+    color2V4
 ) where
 
 import Graphics.Rendering.OpenGL hiding (Fill, Color, color, position)
@@ -100,6 +102,10 @@ renderCommand pj mv rndr (Free (TexTris vs ts n)) = do
                 enableVertices' t vbo
                 drawArrays Triangles 0 len
         fc = deleteVertices vbo
+    (fd', fc') <- renderCommand pj mv rndr n
+    return (fd >> fd', fc >> fc')
+renderCommand pj mv rndr (Free (OtherRendering f n)) = do
+    (fd, fc)   <- f pj mv rndr
     (fd', fc') <- renderCommand pj mv rndr n
     return (fd >> fd', fc >> fc')
 
