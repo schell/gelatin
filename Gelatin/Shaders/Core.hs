@@ -25,7 +25,7 @@ type V4clr = "color" ::: V4 GLfloat
 -- Vinyl
 --------------------------------------------------------------------------------
 
-position :: SField V3pos
+position :: SField ("position" ::: V3 GLfloat)
 position = SField
 
 color :: SField V4clr

@@ -12,18 +12,38 @@ import qualified Data.Map as M
 -- Types
 --------------------------------------------------------------------------------
 
-data Transform a = Transform (V3 a) (V3 a) (Quaternion a) deriving (Show, Eq, Ord)
+data REnv a = REnv { reWindowSize      :: V2 Int
+                   , reFrameBufferSize :: V2 Int
+                   , reProjection      :: M44 Double
+                   , reModelview       :: M44 Double
+                   , reUserData        :: a
+                   }
 
-type Color a = Color4 a
+type Render a = ReaderT (REnv a) IO
 
-data DrawCommand a next = WithTransform (Transform a) (Drawing a ()) next
-                        | Fill [V3 a] (Color a) next
-                        | Gradient [V3 a] [Color a] next
-                        | WithTexture TextureSrc (Drawing a ()) next
-                        | TexTris [V3 a] [V2 a] next
-                        | OtherRendering (M44 a -> M44 a -> Renderer -> IO (IO (), IO ())) next
+type RenderPair a = (Render a (), IO ())
 
-type Drawing a = F (DrawCommand a)
+data Transform = Transform (V3 Double) (V3 Double) (Quaternion Double) deriving (Show, Eq, Ord)
+
+type Color = V4 Double
+
+--data VertexDefinition next = AddColor [V4 Double] next
+--                           | AddPosition [V3 Double] next
+--                           | AddUVMap [V2 Double] next
+--                           | AddElements [Int] next
+--
+--type Vertices = F VertexDefinition
+--
+--data DrawCommand a next = WithTransform Transform (Drawing a ()) next
+--                        | WithProjection (M44 Double) (Drawing a ()) next
+--                        | Fill [V3 Double] (Color) next
+--                        | Gradient [V3 Double] [Color] next
+--                        | WithTexture TextureSrc (Vertices ()) next
+--                        | WithVertices (Vertices ()) next
+--                        | TexTris [V3 Double] [V2 Double] next
+--                        | RawRendering (Renderer -> IO (RenderPair a)) next
+--
+--type Drawing a = F (DrawCommand a)
 
 data TextureSrc = Local FilePath
                 | Relative FilePath
@@ -36,14 +56,6 @@ data Renderer = Renderer { colorShader :: ShaderProgram
                          , textureAtlas :: TextureAtlas
                          }
 
-data REnv = Renv { reWindowSize      :: V2 Int
-                 , reFrameBufferSize :: V2 Int
-                 }
-
-type Render = ReaderT REnv IO
-
-type RenderPair = (Render (), IO ())
-
 --------------------------------------------------------------------------------
 -- Classes
 --------------------------------------------------------------------------------
@@ -55,13 +67,14 @@ class Embedable a where
 -- Instances
 --------------------------------------------------------------------------------
 
-instance Functor (DrawCommand a) where
-    fmap f (WithTransform t d n) = WithTransform t d $ f n
-    fmap f (Fill c vs n) = Fill c vs $ f n
-    fmap f (Gradient cs vs n) = Gradient cs vs $ f n
-    fmap f (WithTexture src d n) = WithTexture src d $ f n
-    fmap f (TexTris vs ts n) = TexTris vs ts $ f n
-    fmap f (OtherRendering g n) = OtherRendering g $ f n
+--instance Functor (DrawCommand a) where
+--    fmap f (WithTransform t d n) = WithTransform t d $ f n
+--    fmap f (WithProjection pj d n) = WithProjection pj d $ f n
+--    fmap f (Fill c vs n) = Fill c vs $ f n
+--    fmap f (Gradient cs vs n) = Gradient cs vs $ f n
+--    fmap f (WithTexture src d n) = WithTexture src d $ f n
+--    fmap f (TexTris vs ts n) = TexTris vs ts $ f n
+--    fmap f (RawRendering g n) = RawRendering g $ f n
 
 instance (Real a, Fractional a) => Embedable (V1 a) where
     embed (V1 x) = V3 (realToFrac x) 0 0
@@ -78,10 +91,9 @@ instance Real a => Embedable (V3 a) where
 
 -- | Given two points, creates a pair of triangles representing
 -- a rectangle.
-rectangle :: Num a
-          => V2 a -- ^ The top left of the rectangle
-          -> V2 a -- ^ The width and height of the rectangle
-          -> [V2 a]
+rectangle :: V2 Double -- ^ The top left of the rectangle
+          -> V2 Double -- ^ The width and height of the rectangle
+          -> [V2 Double]
 rectangle (V2 x y) (V2 w h) = [ tl, bl, br, tl, tr, br ]
     where tl = V2 x y
           tr = V2 (x+w) y
@@ -92,62 +104,61 @@ rectangle (V2 x y) (V2 w h) = [ tl, bl, br, tl, tr, br ]
 -- Building transforms
 --------------------------------------------------------------------------------
 
-idTransform :: (Epsilon a, Num a, Floating a) => Transform a
+idTransform :: Transform
 idTransform = Transform (V3 0 0 0) (V3 1 1 1) $ axisAngle (V3 0 0 1) 0
 
-tfrm :: (Embedable v, Fractional a) => v -> v -> Quaternion a -> Transform a
+tfrm :: Embedable v => v -> v -> Quaternion Double -> Transform
 tfrm p s q = Transform (embed p) (embed s) q
 
-rotateX :: (Epsilon a, Floating a) => a -> Quaternion a
+rotateX :: Double -> Quaternion Double
 rotateX = axisAngle (V3 1 0 0)
 
-rotateY :: (Epsilon a, Floating a) => a -> Quaternion a
+rotateY :: Double -> Quaternion Double
 rotateY = axisAngle (V3 0 1 0)
 
-rotateZ :: (Epsilon a, Floating a) => a -> Quaternion a
+rotateZ :: Double -> Quaternion Double
 rotateZ = axisAngle (V3 0 0 1)
 
-setPosition :: (Embedable v, Fractional a) => Transform a -> v -> Transform a
+setPosition :: Embedable v => Transform -> v -> Transform
 setPosition (Transform _ s q) p = Transform (embed p) s q
 
-setScale :: (Embedable v, Fractional a) => Transform a -> v -> Transform a
+setScale :: Embedable v => Transform -> v -> Transform
 setScale (Transform p _ q) s = Transform p (embed s) q
 
-setRotation :: Transform a -> Quaternion a -> Transform a
+setRotation :: Transform -> Quaternion Double -> Transform
 setRotation (Transform p s _) q = Transform p s q
 
 --------------------------------------------------------------------------------
 -- Building a drawing
 --------------------------------------------------------------------------------
 
-fill :: (Embedable v, Fractional a) => [v] -> Color a -> Drawing a ()
-fill vs c = liftF $ Fill (map embed vs) c ()
-
-gradient :: (Embedable v, Fractional a) => [v] -> [Color a] -> Drawing a ()
-gradient vs cs = liftF $ Gradient (map embed vs) cs ()
-
-textris :: (Embedable v, Fractional a) => [v] -> [V2 a] -> Drawing a ()
-textris vs ts = liftF $ TexTris (map embed vs) ts ()
-
-renderWith :: Fractional a
-               => (M44 a -> M44 a -> Renderer -> IO (IO (), IO ()))
-               -> Drawing a ()
-renderWith f = liftF $ OtherRendering f ()
-
-withTexture :: Fractional a => TextureSrc -> Drawing a () -> Drawing a ()
-withTexture src d = liftF $ WithTexture src d ()
-
-withTransform :: Transform a -> Drawing a () -> Drawing a ()
-withTransform t d = liftF $ WithTransform t d ()
-
-withPosition :: (Embedable v, Fractional a, Epsilon a, Floating a)
-             => v -> Drawing a () -> Drawing a ()
-withPosition = withTransform . setPosition idTransform
-
-withScale :: (Embedable v, Fractional a, Epsilon a, Floating a)
-          => v -> Drawing a () -> Drawing a ()
-withScale = withTransform . setScale idTransform
-
-withRotation :: (Fractional a, Epsilon a, Floating a)
-             => Quaternion a -> Drawing a () -> Drawing a ()
-withRotation = withTransform . setRotation idTransform
+--fill :: Embedable v => [v] -> Color -> Drawing a ()
+--fill vs c = liftF $ Fill (map embed vs) c ()
+--
+--gradient :: Embedable v => [v] -> [Color] -> Drawing a ()
+--gradient vs cs = liftF $ Gradient (map embed vs) cs ()
+--
+--textris :: Embedable v => [v] -> [V2 Double] -> Drawing a ()
+--textris vs ts = liftF $ TexTris (map embed vs) ts ()
+--
+--renderWith :: (Renderer -> IO (RenderPair a))
+--           -> Drawing a ()
+--renderWith f = liftF $ RawRendering f ()
+--
+--withTexture :: TextureSrc -> Vertices () -> Drawing a ()
+--withTexture src vs = liftF $ WithTexture src vs ()
+--
+--withProjection :: M44 Double -> Drawing a () -> Drawing a ()
+--withProjection pj d = liftF $ WithProjection pj d ()
+--
+--withTransform :: Transform -> Drawing a () -> Drawing a ()
+--withTransform t d = liftF $ WithTransform t d ()
+--
+--withPosition :: Embedable v => v -> Drawing a () -> Drawing a ()
+--withPosition = withTransform . setPosition idTransform
+--
+--withScale :: Embedable v => v -> Drawing a () -> Drawing a ()
+--withScale = withTransform . setScale idTransform
+--
+--withRotation :: Quaternion Double -> Drawing a () -> Drawing a ()
+--withRotation = withTransform . setRotation idTransform
