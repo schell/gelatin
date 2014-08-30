@@ -4,15 +4,21 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Gelatin.Shaders.Core where
 
-import           Graphics.Rendering.OpenGL hiding (Color, color)
-import           Graphics.GLUtil
-import           Data.Vinyl.Universe
-import           Linear
+import Graphics.Rendering.OpenGL hiding (Color, color, position)
+import Graphics.GLUtil
+import Data.Vinyl.Universe
+import Linear
 
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
 
+type UniformType u t = u ::: t
+
+data Uniform = PJ (SField ("projection" ::: M44 GLfloat))
+             | MV (SField ("modelview" ::: M44 GLfloat))
+
+type UniformM44 u = u ::: M44 GLfloat
 type Projection = "projection" ::: M44 GLfloat
 type Modelview  = "modelview" ::: M44 GLfloat
 type Sampler = "sampler" ::: GLint
@@ -25,7 +31,7 @@ type V4clr = "color" ::: V4 GLfloat
 -- Vinyl
 --------------------------------------------------------------------------------
 
-position :: SField ("position" ::: V3 GLfloat)
+position :: SField V3pos
 position = SField
 
 color :: SField V4clr
