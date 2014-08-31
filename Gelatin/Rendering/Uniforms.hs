@@ -16,28 +16,26 @@ import Data.Vinyl
 import Data.Vinyl.Universe
 import Data.Vinyl.Reflect
 
-data ShaderUniform where
-    ShaderUniform :: ( HasFieldNames (PlainFieldRec '[n ::: t])
-                     , HasFieldGLTypes (PlainFieldRec '[n ::: t])
-                     , SetUniformFields (PlainFieldRec '[n ::: t])
-                     ) => SField (n:::t) -> t -> ShaderUniform
-
-data SetUniform next = SetUniform ShaderUniform next
+data SetUniform next where
+    SetUniform :: ( HasFieldNames (PlainFieldRec '[n ::: t])
+                  , HasFieldGLTypes (PlainFieldRec '[n ::: t])
+                  , SetUniformFields (PlainFieldRec '[n ::: t])
+                  ) => SField (n:::t) -> t -> next -> SetUniform next
 
 type SetUniformCommand = F SetUniform
 
 instance Functor SetUniform where
-    fmap f (SetUniform su next) = SetUniform su $ f next
+    fmap f (SetUniform u d next) = SetUniform u d $ f next
 
 setUniform :: ( HasFieldNames (PlainFieldRec '[n ::: t])
               , HasFieldGLTypes (PlainFieldRec '[n ::: t])
               , SetUniformFields (PlainFieldRec '[n ::: t])
               ) => SField (n:::t) -> t -> SetUniformCommand ()
-setUniform u d = liftF $ SetUniform (ShaderUniform u d) ()
+setUniform u d = liftF $ SetUniform u d ()
 
 performUniformCommand :: ShaderProgram -> Free SetUniform () -> IO ()
 performUniformCommand _ (Pure ()) = return ()
-performUniformCommand s (Free (SetUniform (ShaderUniform u m) next)) = do
+performUniformCommand s (Free (SetUniform u m next)) = do
     setUniforms s (u =: m)
     performUniformCommand s next
 
