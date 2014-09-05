@@ -1,17 +1,13 @@
 module Main where
 
-import Gelatin
 import Linear
+import Gelatin
+import Graphics.Rendering.OpenGL hiding (position, color, drawElements)
 import Control.Monad
-import Control.Monad.Reader
 import Data.IORef
-import Graphics.Rendering.OpenGL hiding (position, color)
-import Graphics.GLUtil
+import Graphics.GLUtil hiding (setUniform)
 import Graphics.GLUtil.Camera3D
-import Graphics.VinylGL
-import Data.Vinyl
 import System.Exit
-import qualified Data.Map as M
 
 cube :: [V3 GLfloat]
 cube = [ V3 (-0.5) ( 0.5) ( 0.5)
@@ -59,38 +55,40 @@ cubeIndices = [ 0, 2, 3 -- front
 --        withPosition (V2 100 0) $
 --            fill r pink
 
-renderCube :: ShaderProgram -> IO ()
-renderCube shader = do
-    let vs = cube
-        es = cubeIndices
-        cs = map ((color =:) . up . fmap (+0.5)) vs
-        up (V3 x y z) = V4 x y z 1
-        s  = colorShader rndr
-    vbo <- bufferVertices $ zipWith (<+>) (map (position =:) vs) cs
-    ebo <- bufferIndices es
-
-    depthFunc $= Just Less
-    currentProgram $= (Just $ program s)
-    bindVertices vbo
-    enableVertices' s vbo
-    bindBuffer ElementArrayBuffer $= Just ebo
-    drawIndexedTris $ floor $ (fromIntegral $ length es) / 3
-    bindBuffer ElementArrayBuffer $= Nothing
-    depthFunc $= Nothing
+--renderCube :: ShaderProgram -> IO ()
+--renderCube shader = do
+--    let vs = cube
+--        es = cubeIndices
+--        cs = map ((color =:) . up . fmap (+0.5)) vs
+--        up (V3 x y z) = V4 x y z 1
+--        s  = colorShader rndr
+--    vbo <- bufferVertices $ zipWith (<+>) (map (position =:) vs) cs
+--    ebo <- bufferIndices es
+--
+--    depthFunc $= Just Less
+--    currentProgram $= (Just $ program s)
+--    bindVertices vbo
+--    enableVertices' s vbo
+--    bindBuffer ElementArrayBuffer $= Just ebo
+--    drawIndexedTris $ floor $ (fromIntegral $ length es) / 3
+--    bindBuffer ElementArrayBuffer $= Nothing
+--    depthFunc $= Nothing
 
 colorCube :: ShaderProgram -> Rendering ()
 colorCube shader = do
     usingDepthFunc Less $ usingShader shader $ do
-        setUniform projection $ projectionMatrix (pi/4) 1 0.1 10)
-        setUniform modelview $ transform2Mat $ Transform (V3 0 0 (-5)) (V3 1 1 1) $ rotateX (pi/8))
-        addVertexComponent position cube
-        addVertexComponent color $ map (up . fmap (+0.5)) cube
-        usingElements cubeIndices $ draw 12 Triangles
+        setUniform projection $ projectionMatrix (pi/4) 1 0.1 10
+        setUniform modelview t
+        setVertices $ do
+            addVertexComponent position cube
+            addVertexComponent color $ map (up . fmap (+0.5)) cube
+        withIndices cubeIndices $ drawElements (12*3) Triangles
 
     where up (V3 x y z) = V4 x y z 1
+          t = transform (V3 0 0 (-5)) (V3 1 1 1) $ rotateX (pi/8)
 
-scene :: Drawing () ()
-scene = background >> colorCube
+--scene :: Drawing () ()
+--scene = background >> colorCube
 
 main :: IO ()
 main = do
@@ -102,27 +100,17 @@ main = do
 
     wref          <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
     scs           <- simpleColorShader
-    sts           <- simpleTextureShader
-    (_, win)      <- readIORef wref
-    --(draw, clean) <- renderDrawing (Renderer scs sts M.empty) scene
+    --sts           <- simpleTextureShader
 
     forever $ do
         pollEvents
 
         (_, window) <- readIORef wref
-        (ww, wh)    <- getWindowSize win
-        (fbw, fbh)  <- getFramebufferSize win
         writeIORef wref ([], window)
 
         makeContextCurrent $ Just window
-
-        --runReaderT draw $ REnv { reWindowSize = V2 ww wh
-        --                       , reFrameBufferSize = V2 fbw fbh
-        --                       , reProjection = eye4
-        --                       , reModelview = eye4
-        --                       , reUserData = ()
-        --                       }
+        performRendering $ colorCube scs
 
         swapBuffers window
         shouldClose <- windowShouldClose window
-        when shouldClose $ clean >> exitSuccess
+        when shouldClose exitSuccess

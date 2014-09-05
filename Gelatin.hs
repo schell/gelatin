@@ -8,7 +8,8 @@ module Gelatin (
 
 import Linear
 import Gelatin.Color as G
-import Gelatin.Core as G
 import Gelatin.Rendering as G
 import Gelatin.Shaders as G
 import Gelatin.Window as G
+import Gelatin.ShaderCommands as G
+import Gelatin.Compiling.IO as G

@@ -4,7 +4,6 @@ module Gelatin.Core where
 import Linear
 import Graphics.Rendering.OpenGL hiding (Color, Fill, Texture)
 import Graphics.GLUtil
-import Control.Monad.Free.Church
 import Control.Monad.Reader
 import qualified Data.Map as M
 
@@ -109,15 +108,6 @@ idTransform = Transform (V3 0 0 0) (V3 1 1 1) $ axisAngle (V3 0 0 1) 0
 
 tfrm :: Embedable v => v -> v -> Quaternion Double -> Transform
 tfrm p s q = Transform (embed p) (embed s) q
-
-rotateX :: Double -> Quaternion Double
-rotateX = axisAngle (V3 1 0 0)
-
-rotateY :: Double -> Quaternion Double
-rotateY = axisAngle (V3 0 1 0)
-
-rotateZ :: Double -> Quaternion Double
-rotateZ = axisAngle (V3 0 0 1)
 
 setPosition :: Embedable v => Transform -> v -> Transform
 setPosition (Transform _ s q) p = Transform (embed p) s q

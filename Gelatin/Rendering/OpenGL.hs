@@ -7,22 +7,17 @@ module Gelatin.Rendering.OpenGL (
 import Graphics.Rendering.OpenGL hiding (Fill, Color, color, position)
 import Graphics.GLUtil.ShaderProgram
 import Graphics.GLUtil.JuicyTextures
-import Graphics.GLUtil.Textures
-import Graphics.GLUtil.Camera3D
 import Graphics.VinylGL
 import Gelatin.Core
 import Gelatin.Shaders
 import Data.Vinyl
 import Linear
 import Control.Monad.Reader
-import Control.Monad.Free
-import Control.Monad.Free.Church
-import System.Exit
 import System.Directory
 import System.FilePath ( (</>) )
 
-transform2Mat :: Transform -> M44 Double
-transform2Mat (Transform p (V3 sx sy sz) q) = t !*! s !*! q'
+transform2Mat :: Transform -> M44 GLfloat
+transform2Mat (Transform p (V3 sx sy sz) q) = fmap (fmap realToFrac) $ t !*! s !*! q'
     where t  = mkTransformationMat eye3 p
           q' = mkTransformation q $ V3 0 0 0
           s  = V4 (V4 sx 0 0  0)
