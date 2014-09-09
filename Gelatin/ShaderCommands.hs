@@ -39,6 +39,7 @@ data ShaderOp next where
 type DrawElementsCommand = F DrawElements
 type DrawArraysCommand = F DrawArrays
 type ShaderCommand = F ShaderOp
+
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------

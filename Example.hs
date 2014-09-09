@@ -7,6 +7,7 @@ import Control.Monad
 import Data.IORef
 import Graphics.GLUtil hiding (setUniform)
 import Graphics.GLUtil.Camera3D
+import Graphics.VinylGL
 import Data.Vinyl
 import System.Exit
 
@@ -56,24 +57,25 @@ cubeIndices = [ 0, 2, 3 -- front
 --        withPosition (V2 100 0) $
 --            fill r pink
 
---renderCube :: ShaderProgram -> IO ()
---renderCube shader = do
---    let vs = cube
---        es = cubeIndices
---        cs = map ((color =:) . up . fmap (+0.5)) vs
---        up (V3 x y z) = V4 x y z 1
---        s  = colorShader rndr
---    vbo <- bufferVertices $ zipWith (<+>) (map (position =:) vs) cs
---    ebo <- bufferIndices es
---
---    depthFunc $= Just Less
---    currentProgram $= (Just $ program s)
---    bindVertices vbo
---    enableVertices' s vbo
---    bindBuffer ElementArrayBuffer $= Just ebo
---    drawIndexedTris $ floor $ (fromIntegral $ length es) / 3
---    bindBuffer ElementArrayBuffer $= Nothing
---    depthFunc $= Nothing
+renderCube :: ShaderProgram -> IO ()
+renderCube shader = do
+    let vs = cube
+        es = cubeIndices
+        cs = map ((color =:) . up . fmap (+0.5)) vs
+        up (V3 x y z) = V4 x y z 1
+    vbo <- bufferVertices $ zipWith (<+>) (map (position =:) vs) cs
+    ebo <- bufferIndices es
+
+    depthFunc $= Just Less
+    currentProgram $= (Just $ program shader)
+    setUniforms shader (projection =: projectionMatrix (pi/4) 1 0.1 10)
+    setUniforms shader (modelview =: transform (V3 0 0 (-5)) (V3 1 1 1) $ rotateX (pi/8))
+    bindVertices vbo
+    enableVertices' shader vbo
+    bindBuffer ElementArrayBuffer $= Just ebo
+    drawIndexedTris $ floor $ (fromIntegral $ length es) / 3
+    bindBuffer ElementArrayBuffer $= Nothing
+    depthFunc $= Nothing
 
 colorCube :: ShaderProgram -> Rendering ()
 colorCube shader = do
