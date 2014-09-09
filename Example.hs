@@ -7,6 +7,7 @@ import Control.Monad
 import Data.IORef
 import Graphics.GLUtil hiding (setUniform)
 import Graphics.GLUtil.Camera3D
+import Data.Vinyl
 import System.Exit
 
 cube :: [V3 GLfloat]
@@ -79,27 +80,17 @@ colorCube shader = do
     usingDepthFunc Less $ usingShader shader $ do
         setUniform projection $ projectionMatrix (pi/4) 1 0.1 10
         setUniform modelview t
-        setVertices $ do
-            addVertexComponent position cube
-            addVertexComponent color $ map (up . fmap (+0.5)) cube
+        setVertices $ zipWith (<+>) (map (position =:) cube) (map (color =:) cs)
         withIndices cubeIndices $ drawElements (12*3) Triangles
 
     where up (V3 x y z) = V4 x y z 1
           t = transform (V3 0 0 (-5)) (V3 1 1 1) $ rotateX (pi/8)
-
---scene :: Drawing () ()
---scene = background >> colorCube
+          cs = map (up . fmap (+0.5)) cube
 
 main :: IO ()
 main = do
-    --putStrLn "Welcome to Gelatin!"
-    --putStrLn "With Gelatin you can easily render drawings to strings:\n"
-    --putStrLn $ showDrawing scene
-
-    --putStrLn "...or you can render to an OpenGL window..."
-
-    wref          <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
-    scs           <- simpleColorShader
+    wref <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
+    scs  <- simpleColorShader
     --sts           <- simpleTextureShader
 
     forever $ do

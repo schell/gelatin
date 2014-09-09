@@ -3,7 +3,6 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# OPTIONS_GHC -fdefer-type-errors #-}
 module Gelatin.ShaderCommands where
 
 import Linear
@@ -12,7 +11,6 @@ import Graphics.GLUtil hiding (Elem, setUniform)
 import Graphics.Rendering.OpenGL hiding (position, color, VertexComponent)
 import Control.Monad.Free
 import Control.Monad.Free.Church
-import Data.Maybe
 import Data.Vinyl
 import Data.Vinyl.Universe
 import Data.Vinyl.Reflect
@@ -24,25 +22,22 @@ import Foreign.Storable
 data DrawElements next = DrawElements GLint PrimitiveMode next
 data DrawArrays next = DrawArrays GLint PrimitiveMode next
 
-data VertexComponent next where
-    VertexComponent :: ( Storable t
-                       , HasFieldDims (PlainFieldRec '[n ::: t])
-                       , HasFieldNames (PlainFieldRec '[n ::: t])
-                       , HasFieldSizes (PlainFieldRec '[n ::: t])
-                       , HasFieldGLTypes (PlainFieldRec '[n ::: t])
-                       ) => SField (n:::t) -> [t] -> next -> VertexComponent next
-
 data ShaderOp next where
     SetUniform :: ( HasFieldNames (PlainFieldRec '[n ::: t])
                   , HasFieldGLTypes (PlainFieldRec '[n ::: t])
                   , SetUniformFields (PlainFieldRec '[n ::: t])
                   ) => SField (n:::t) -> t -> next -> ShaderOp next
-    SetVertices :: VertexComponentCommand () -> next -> ShaderOp next
+    SetVertices :: ( Storable (PlainFieldRec rs)
+                   , BufferSource (v (PlainFieldRec rs))
+                   , HasFieldDims (PlainFieldRec rs)
+                   , HasFieldNames (PlainFieldRec rs)
+                   , HasFieldSizes (PlainFieldRec rs)
+                   , HasFieldGLTypes (PlainFieldRec rs)
+                   ) => v (PlainFieldRec rs) -> next -> ShaderOp next
     WithIndices :: [Word32] -> DrawElementsCommand () -> next -> ShaderOp next
 
 type DrawElementsCommand = F DrawElements
 type DrawArraysCommand = F DrawArrays
-type VertexComponentCommand = F VertexComponent
 type ShaderCommand = F ShaderOp
 --------------------------------------------------------------------------------
 -- Instances
@@ -53,12 +48,9 @@ instance Functor DrawElements where
 instance Functor DrawArrays where
     fmap f (DrawArrays n mode next) = DrawArrays n mode $ f next
 
-instance Functor VertexComponent where
-    fmap f (VertexComponent u d next) = VertexComponent u d $ f next
-
 instance Functor ShaderOp where
     fmap f (SetUniform u d next) = SetUniform u d $ f next
-    fmap f (SetVertices cmd next) = SetVertices cmd $ f next
+    fmap f (SetVertices vs next) = SetVertices vs $ f next
     fmap f (WithIndices ns cmd next) = WithIndices ns cmd $ f next
 --------------------------------------------------------------------------------
 -- User API
@@ -75,13 +67,15 @@ setUniform :: ( HasFieldNames (PlainFieldRec '[n ::: t])
               ) => SField (n:::t) -> t -> ShaderCommand ()
 setUniform u d = liftF $ SetUniform u d ()
 
-addVertexComponent :: ( Storable t
-                      , HasFieldDims (PlainFieldRec '[n ::: t])
-                      , HasFieldNames (PlainFieldRec '[n ::: t])
-                      , HasFieldSizes (PlainFieldRec '[n ::: t])
-                      , HasFieldGLTypes (PlainFieldRec '[n ::: t])
-                      ) => SField (n:::t) -> [t] -> VertexComponentCommand ()
-addVertexComponent u d = liftF $ VertexComponent u d ()
+setVertices :: ( Storable (PlainFieldRec rs)
+               , MonadFree ShaderOp m
+               , BufferSource (v (PlainFieldRec rs))
+               , HasFieldDims (PlainFieldRec rs)
+               , HasFieldNames (PlainFieldRec rs)
+               , HasFieldSizes (PlainFieldRec rs)
+               , HasFieldGLTypes (PlainFieldRec rs)
+               ) => v (PlainFieldRec rs) -> m ()
+setVertices vs = liftF $ SetVertices vs ()
 
 withIndices :: [Word32] -> DrawElementsCommand () -> ShaderCommand ()
 withIndices ns cmd = liftF $ WithIndices ns cmd ()
@@ -105,19 +99,3 @@ transform p (V3 sx sy sz) q = t !*! s !*! q'
                   (V4 0 sy 0  0)
                   (V4 0  0 sz 0)
                   (V4 0  0 0  1)
-
---compileVertexComponent :: ( Storable (PlainFieldRec rs)
---                          , BufferSource (v (PlainFieldRec rs))
---                          ) => Maybe (v (PlainFieldRec rs))
---                            -> Free VertexComponent ()
---                            -> Maybe (v (PlainFieldRec rs))
-compileVertexComponent vs (Pure ()) = vs
-compileVertexComponent Nothing (Free (VertexComponent v vs next)) =
-    compileVertexComponent (Just vs') next
-        where vs' = map (v =:) vs
-
-compileVertexComponent (Just vs') (Free (VertexComponent v vs next)) =
-    compileVertexComponent (Just vs') next
-        where vs'' = zipWith (<+>) vs' (map (v =:) vs)
-
-compileVertexComponents cmd = fromJust $ compileVertexComponent Nothing $ fromF cmd

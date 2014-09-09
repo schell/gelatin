@@ -14,7 +14,6 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Control.Monad.Free
 import Control.Monad.Free.Church
 import Data.Vinyl
-import Data.Maybe
 import Foreign
 
 data RenderingDefaults = RenderingDefaults { rdefDepthFunc     :: Maybe ComparisonFunction
@@ -27,26 +26,20 @@ data RenderingDefaults = RenderingDefaults { rdefDepthFunc     :: Maybe Comparis
 performDrawElementsCommand :: Free DrawElements () -> IO ()
 performDrawElementsCommand (Pure ()) = return ()
 performDrawElementsCommand (Free (DrawElements n mode next)) = do
-    putStrLn "Drawing elements"
     GL.drawElements mode n UnsignedInt nullPtr
     performDrawElementsCommand next
-
 
 performShaderCommand :: ShaderProgram -> Free ShaderOp () -> IO ()
 performShaderCommand _ (Pure ()) = return ()
 performShaderCommand s (Free (SetUniform u m next)) = do
-    putStrLn "Setting a uniform."
     setUniforms s (u =: m)
     performShaderCommand s next
-performShaderCommand s (Free (VertexComponent cmd next)) = do
-    putStrLn "Buffering vertices."
-    let vs = compileVertexComponents $ fromF cmd
+performShaderCommand s (Free (SetVertices vs next)) = do
     vbo <- bufferVertices vs
     enableVertices' s vbo
     performShaderCommand s next
     deleteVertices vbo
 performShaderCommand s (Free (WithIndices ns cmd next)) = do
-    putStrLn "Buffering indices."
     ebo <- bufferIndices ns
     bindBuffer ElementArrayBuffer $= Just ebo
     performDrawElementsCommand $ fromF cmd
@@ -56,17 +49,14 @@ performShaderCommand s (Free (WithIndices ns cmd next)) = do
 performRenderCommand :: RenderingDefaults -> Free Render () -> IO ()
 performRenderCommand _ (Pure ()) = return ()
 performRenderCommand rd (Free (UsingDepthFunc func r next)) = do
-    putStrLn "Setting a depth func."
     depthFunc $= Just func
     performRenderCommand (rd{ rdefDepthFunc = Just func }) $ fromF r
     depthFunc $= (rdefDepthFunc rd)
     performRenderCommand rd next
 performRenderCommand rd (Free (UsingShader s sc next)) = do
-    putStrLn "Using a program."
     currentProgram $= (Just $ program s)
     performShaderCommand s $ fromF sc
     currentProgram $= (fmap program $ rdefShaderProgram rd)
-    putStrLn ""
     performRenderCommand rd next
 
 performRendering :: Rendering () -> IO ()
