@@ -5,18 +5,23 @@ import Linear
 -- Classes
 --------------------------------------------------------------------------------
 class Embedable a where
-    embed  :: Fractional b => a -> V3 b
+    embedWith :: Fractional b => b -> a -> V3 b
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
 instance (Real a, Fractional a) => Embedable (V1 a) where
-    embed (V1 x) = V3 (realToFrac x) 0 0
+    embedWith i (V1 x) = V3 (realToFrac x) i i
 
 instance Real a => Embedable (V2 a) where
-    embed (V2 x y) = V3 (realToFrac x) (realToFrac y) 0
+    embedWith i (V2 x y) = V3 (realToFrac x) (realToFrac y) i
 
 instance Real a => Embedable (V3 a) where
-    embed = fmap realToFrac
+    embedWith = const (fmap realToFrac)
+--------------------------------------------------------------------------------
+-- API
+--------------------------------------------------------------------------------
+embed :: (Embedable a, Fractional b) => a -> V3 b
+embed = embedWith 0
 --------------------------------------------------------------------------------
 -- Building geometry
 --------------------------------------------------------------------------------
