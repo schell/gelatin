@@ -1,27 +1,36 @@
 module Main where
 
-import Linear
+import Linear hiding (rotate)
 import Gelatin
-import Graphics.Rendering.OpenGL hiding (position, color, drawElements)
+import Gelatin.Transform
+import Graphics.Rendering.OpenGL hiding (position, color, drawElements,
+                                         translate, rotate, perspective,
+                                         ortho, clearDepth, drawArrays)
+import qualified Graphics.Rendering.OpenGL as GL
 import Control.Monad
+import Control.Concurrent
 import Data.IORef
 import Graphics.GLUtil hiding (setUniform)
-import Graphics.GLUtil.Camera3D
 import Graphics.VinylGL
 import Data.Vinyl
 import System.Exit
 
-cube :: [V3 GLfloat]
-cube = [ V3 (-0.5) ( 0.5) ( 0.5)
-       , V3 ( 0.5) ( 0.5) ( 0.5)
-       , V3 (-0.5) (-0.5) ( 0.5)
-       , V3 ( 0.5) (-0.5) ( 0.5)
+cubePoints :: [V3 GLfloat]
+cubePoints =
+    [ V3 (-0.5) ( 0.5) ( 0.5)
+    , V3 ( 0.5) ( 0.5) ( 0.5)
+    , V3 (-0.5) (-0.5) ( 0.5)
+    , V3 ( 0.5) (-0.5) ( 0.5)
 
-       , V3 (-0.5) ( 0.5) (-0.5)
-       , V3 ( 0.5) ( 0.5) (-0.5)
-       , V3 (-0.5) (-0.5) (-0.5)
-       , V3 ( 0.5) (-0.5) (-0.5)
-       ]
+    , V3 (-0.5) ( 0.5) (-0.5)
+    , V3 ( 0.5) ( 0.5) (-0.5)
+    , V3 (-0.5) (-0.5) (-0.5)
+    , V3 ( 0.5) (-0.5) (-0.5)
+    ]
+
+cubeColors :: [V4 GLfloat]
+cubeColors = map (up . fmap (+0.5)) cubePoints
+    where up (V3 x y z) = V4 x y z 1
 
 cubeIndices :: [Word32]
 cubeIndices = [ 0, 2, 3 -- front
@@ -38,72 +47,114 @@ cubeIndices = [ 0, 2, 3 -- front
               , 1, 5, 7
               ]
 
---background :: Drawing () ()
---background = do
---    -- Draw a textured rectangle for the background.
---    withTexture (Relative "img/quantum-foam.jpg") $
---        textris (rectangle (V2 0 0) (V2 640 480)) (rectangle (V2 0 0) (V2 1 1))
---
---    let r = rectangle (V2 0 0) (V2 100 100)
---    -- Draw a yellow square with width and height = 100px
---    fill r yellow
---    -- Draw a gradient box.
---    withPosition (V2 100 0) $
---        gradient r (take 6 $ cycle [red, green, blue])
---    -- Transalte by (10,10) then scale to 10% and rotate pi/4, then draw
---    -- some more squares.
---    withTransform (tfrm (V2 10 10) (V2 0.1 0.1) $ rotateZ $ pi/4) $ do
---        fill r red
---        withPosition (V2 100 0) $
---            fill r pink
-
 renderCube :: ShaderProgram -> IO ()
 renderCube shader = do
-    let vs = cube
-        es = cubeIndices
-        cs = map ((color =:) . up . fmap (+0.5)) vs
-        up (V3 x y z) = V4 x y z 1
-    vbo <- bufferVertices $ zipWith (<+>) (map (position =:) vs) cs
-    ebo <- bufferIndices es
-
+    let pj = perspective (pi/4) 1 0.1 10
+        mv = mkM44 $ do translate $ V3 0 0 (-5)
+                        rotate (pi/8) $ V3 1 0 0
+    vbo <- bufferVertices (comp position cubePoints .+ comp color cubeColors)
+    ebo <- bufferIndices cubeIndices
+    clearColor $= Color4 0 0 0 1
     depthFunc $= Just Less
+    clear [ColorBuffer, DepthBuffer]
     currentProgram $= (Just $ program shader)
-    setUniforms shader (projection =: projectionMatrix (pi/4) 1 0.1 10)
-    setUniforms shader (modelview =: transform (V3 0 0 (-5)) (V3 1 1 1) $ rotateX (pi/8))
+    setUniforms shader (projection =: pj)
+    setUniforms shader (modelview =: mv)
     bindVertices vbo
     enableVertices' shader vbo
     bindBuffer ElementArrayBuffer $= Just ebo
-    drawIndexedTris $ floor $ (fromIntegral $ length es) / 3
+    drawIndexedTris $ floor $ (fromIntegral $ length cubeIndices) / 3
     bindBuffer ElementArrayBuffer $= Nothing
     depthFunc $= Nothing
+
+renderTex :: MVar (Maybe TextureObject) -> ShaderProgram -> IO ()
+renderTex mvar shader = do
+    let pj = ortho 0 600 0 600 0 1
+        mv = eye4
+        t = rectangle (V2 0 0) (V2 1 1)
+        tr = map embed (rectangle (V2 0 0) (V2 600 600) :: [V2 GLfloat])
+        cs = take 6 $ cycle [red, green, blue]
+    mTex <- takeMVar mvar
+    tex  <- case mTex of
+        Just tex -> return tex
+        Nothing  -> do putStrLn "Loading texture."
+                       texture Texture2D $= Enabled
+                       (Right tex) <- loadTextureSrc $ Relative "img/quantum-foam.jpg"
+                       textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
+                       textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
+                       textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+                       return tex
+    putMVar mvar $ Just tex
+    vbo <- bufferVertices (comp position tr .+ comp texcoord t)
+    clearColor $= Color4 0 0 0 1
+    depthFunc $= Nothing
+    clear [ColorBuffer, DepthBuffer]
+    withTextures Texture2D [tex] $ do
+    --activeTexture $= TextureUnit 0
+    --textureBinding Texture2D $= Just tex
+        currentProgram $= (Just $ program shader)
+        setUniforms shader (projection =: pj)
+        setUniforms shader (modelview =: mv)
+        setUniforms shader (sampler =: 0)
+        bindVertices vbo
+        enableVertices' shader vbo
+        GL.drawArrays Triangles 0 6
+        deleteVertices vbo
 
 colorCube :: ShaderProgram -> Rendering ()
 colorCube shader = do
     usingDepthFunc Less $ usingShader shader $ do
-        setUniform projection $ projectionMatrix (pi/4) 1 0.1 10
-        setUniform modelview t
-        setVertices $ zipWith (<+>) (map (position =:) cube) (map (color =:) cs)
-        withIndices cubeIndices $ drawElements (12*3) Triangles
+        setUniform projection pj
+        setUniform modelview mv
+        withVertices (comp position cubePoints .+ comp color cubeColors) $
+            drawIndexedTriangles cubeIndices 12
+    where pj = perspective (pi/4) 1 0.1 10
+          mv = mkM44 $ do translate $ V3 0 0 (-5)
+                          rotate (pi/8) $ V3 1 0 0
 
-    where up (V3 x y z) = V4 x y z 1
-          t = transform (V3 0 0 (-5)) (V3 1 1 1) $ rotateX (pi/8)
-          cs = map (up . fmap (+0.5)) cube
+sceneRendering :: ShaderProgram -> ShaderProgram -> Rendering ()
+sceneRendering colorShader textureShader = do
+    -- Clear the stage.
+    clearDepth
+    clearColorWith (black :: V4 GLfloat)
+    -- Draw a background using a texture.
+    usingTexture Texture2D (Relative "img/quantum-foam.jpg") params $
+        usingShader textureShader $ do
+            setUniform projection pj
+            setUniform modelview eye4
+            setUniform sampler 0
+            withVertices (comp position tr .+ comp texcoord t) $
+                drawArrays Triangles 6
+    -- Draw a gradient box in the upper left corner.
+    usingShader colorShader $ do
+        setUniform projection pj
+        setUniform modelview eye4
+        withVertices (comp position gr .+ comp color cs) $
+            drawArrays Triangles 6
+    colorCube colorShader
+    where pj = ortho 0 600 0 600 0 1
+          tr = map embed (rectangle (V2 0 0) (V2 600 600) :: [V2 GLfloat])
+          t  = rectangle (V2 0 0) (V2 1 1)
+          gr = map embed $ (rectangle (V2 0 0) (V2 100 100) :: [V2 GLfloat])
+          cs = take 6 $ cycle [red, green, blue]
+          params = do setFilter (Nearest, Nothing) Nearest
+                      setWrapMode S Repeated Clamp
+                      setWrapMode T Repeated Clamp
 
 main :: IO ()
 main = do
-    wref <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
-    scs  <- simpleColorShader
-    --sts           <- simpleTextureShader
+    wref  <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
+    scs   <- simpleColorShader
+    sts   <- simpleTextureShader
+    scene <- compileRendering $ sceneRendering scs sts
 
     forever $ do
         pollEvents
-
         (_, window) <- readIORef wref
         writeIORef wref ([], window)
-
         makeContextCurrent $ Just window
-        performRendering $ colorCube scs
-
+        render scene
+        printError
         swapBuffers window
         shouldClose <- windowShouldClose window
         when shouldClose exitSuccess

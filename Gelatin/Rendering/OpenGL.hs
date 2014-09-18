@@ -25,11 +25,6 @@ transform2Mat (Transform p (V3 sx sy sz) q) = fmap (fmap realToFrac) $ t !*! s !
                   (V4 0  0 sz 0)
                   (V4 0  0 0  1)
 
-loadTextureSrc :: TextureSrc -> IO (Either String TextureObject)
-loadTextureSrc (Local fp) = readTexture fp
-loadTextureSrc (Relative fp) = do
-    fp' <- fmap (</> fp) getCurrentDirectory
-    readTexture fp'
 
 combineRenderPairs :: RenderPair a -> RenderPair a -> RenderPair a
 combineRenderPairs (fd, fc) (fd', fc') = (fd >> fd', fc >> fc')

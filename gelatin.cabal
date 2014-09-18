@@ -19,10 +19,8 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Gelatin.Color,
-                       Gelatin.Core,
-                       Gelatin.Rendering.String,
-                       Gelatin.Rendering.OpenGL,
                        Gelatin.Rendering,
+                       Gelatin.Compiling,
                        Gelatin.Shaders.Core,
                        Gelatin.Shaders.SimpleColorShader,
                        Gelatin.Shaders,

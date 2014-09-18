@@ -5,62 +5,56 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Gelatin.ShaderCommands where
 
-import Linear
 import Graphics.VinylGL
 import Graphics.GLUtil hiding (Elem, setUniform)
-import Graphics.Rendering.OpenGL hiding (position, color, VertexComponent)
+import Graphics.Rendering.OpenGL hiding (position, color, VertexComponent, drawElements)
 import Control.Monad.Free
 import Control.Monad.Free.Church
+import Control.Applicative
 import Data.Vinyl
 import Data.Vinyl.Universe
 import Data.Vinyl.Reflect
+import Data.Vinyl.TyFun
 import Foreign.Storable
 
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
 data DrawElements next = DrawElements GLint PrimitiveMode next
-data DrawArrays next = DrawArrays GLint PrimitiveMode next
 
 data ShaderOp next where
     SetUniform :: ( HasFieldNames (PlainFieldRec '[n ::: t])
                   , HasFieldGLTypes (PlainFieldRec '[n ::: t])
                   , SetUniformFields (PlainFieldRec '[n ::: t])
                   ) => SField (n:::t) -> t -> next -> ShaderOp next
-    SetVertices :: ( Storable (PlainFieldRec rs)
-                   , BufferSource (v (PlainFieldRec rs))
-                   , HasFieldDims (PlainFieldRec rs)
-                   , HasFieldNames (PlainFieldRec rs)
-                   , HasFieldSizes (PlainFieldRec rs)
-                   , HasFieldGLTypes (PlainFieldRec rs)
-                   ) => v (PlainFieldRec rs) -> next -> ShaderOp next
+    WithVertices :: ( Storable (PlainFieldRec rs)
+                 , BufferSource (v (PlainFieldRec rs))
+                 , HasFieldDims (PlainFieldRec rs)
+                 , HasFieldNames (PlainFieldRec rs)
+                 , HasFieldSizes (PlainFieldRec rs)
+                 , HasFieldGLTypes (PlainFieldRec rs)
+                 ) => v (PlainFieldRec rs) -> ShaderCommand () -> next -> ShaderOp next
     WithIndices :: [Word32] -> DrawElementsCommand () -> next -> ShaderOp next
+    DrawArrays :: PrimitiveMode -> GLint -> next -> ShaderOp next
 
 type DrawElementsCommand = F DrawElements
-type DrawArraysCommand = F DrawArrays
 type ShaderCommand = F ShaderOp
-
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
 instance Functor DrawElements where
     fmap f (DrawElements n mode next) = DrawElements n mode $ f next
 
-instance Functor DrawArrays where
-    fmap f (DrawArrays n mode next) = DrawArrays n mode $ f next
-
 instance Functor ShaderOp where
     fmap f (SetUniform u d next) = SetUniform u d $ f next
-    fmap f (SetVertices vs next) = SetVertices vs $ f next
+    fmap f (WithVertices vs cmd next) = WithVertices vs cmd $ f next
     fmap f (WithIndices ns cmd next) = WithIndices ns cmd $ f next
+    fmap f (DrawArrays n mode next) = DrawArrays n mode $ f next
 --------------------------------------------------------------------------------
 -- User API
 --------------------------------------------------------------------------------
 drawElements :: GLint -> PrimitiveMode -> DrawElementsCommand ()
 drawElements n mode = liftF $ DrawElements n mode ()
-
-drawArrays :: GLint -> PrimitiveMode -> DrawArraysCommand ()
-drawArrays n mode = liftF $ DrawArrays n mode ()
 
 setUniform :: ( HasFieldNames (PlainFieldRec '[n ::: t])
               , HasFieldGLTypes (PlainFieldRec '[n ::: t])
@@ -68,35 +62,28 @@ setUniform :: ( HasFieldNames (PlainFieldRec '[n ::: t])
               ) => SField (n:::t) -> t -> ShaderCommand ()
 setUniform u d = liftF $ SetUniform u d ()
 
-setVertices :: ( Storable (PlainFieldRec rs)
-               , MonadFree ShaderOp m
-               , BufferSource (v (PlainFieldRec rs))
-               , HasFieldDims (PlainFieldRec rs)
-               , HasFieldNames (PlainFieldRec rs)
-               , HasFieldSizes (PlainFieldRec rs)
-               , HasFieldGLTypes (PlainFieldRec rs)
-               ) => v (PlainFieldRec rs) -> m ()
-setVertices vs = liftF $ SetVertices vs ()
+withVertices :: ( Storable (PlainFieldRec rs)
+             , BufferSource (v (PlainFieldRec rs))
+             , HasFieldDims (PlainFieldRec rs)
+             , HasFieldNames (PlainFieldRec rs)
+             , HasFieldSizes (PlainFieldRec rs)
+             , HasFieldGLTypes (PlainFieldRec rs)
+             ) => v (PlainFieldRec rs) -> ShaderCommand () -> ShaderCommand ()
+withVertices vs cmd = liftF $ WithVertices vs cmd ()
 
 withIndices :: [Word32] -> DrawElementsCommand () -> ShaderCommand ()
 withIndices ns cmd = liftF $ WithIndices ns cmd ()
+
+drawIndexedTriangles :: [Word32] -> GLint -> ShaderCommand ()
+drawIndexedTriangles ns i = withIndices ns $ drawElements (i*3) Triangles
+
+drawArrays :: PrimitiveMode -> GLint -> ShaderCommand ()
+drawArrays mode n = liftF $ DrawArrays mode n ()
 --------------------------------------------------------------------------------
--- Matrix Helpers
+-- Making vertices from components
 --------------------------------------------------------------------------------
-rotateX :: (Epsilon a, Floating a) => a -> Quaternion a
-rotateX = axisAngle (V3 1 0 0)
+comp :: Applicative f => sing k1 -> [el Data.Vinyl.TyFun.$ k1] -> [Rec el f '[k1]]
+comp a as = map (a =:) as
 
-rotateY :: (Epsilon a, Floating a) => a -> Quaternion a
-rotateY = axisAngle (V3 0 1 0)
-
-rotateZ :: (Epsilon a, Floating a) => a -> Quaternion a
-rotateZ = axisAngle (V3 0 0 1)
-
-transform :: Real a => V3 a -> V3 a -> Quaternion a -> M44 a
-transform p (V3 sx sy sz) q = t !*! s !*! q'
-    where t  = mkTransformationMat eye3 p
-          q' = mkTransformation q $ V3 0 0 0
-          s  = V4 (V4 sx 0 0  0)
-                  (V4 0 sy 0  0)
-                  (V4 0  0 sz 0)
-                  (V4 0  0 0  1)
+(.+) :: [Rec el f as] -> [Rec el f bs] -> [Rec el f (as ++ bs)]
+(.+) = zipWith (<+>)

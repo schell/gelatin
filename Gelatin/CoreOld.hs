@@ -24,7 +24,6 @@ type RenderPair a = (Render a (), IO ())
 
 data Transform = Transform (V3 Double) (V3 Double) (Quaternion Double) deriving (Show, Eq, Ord)
 
-type Color = V4 Double
 
 --data VertexDefinition next = AddColor [V4 Double] next
 --                           | AddPosition [V3 Double] next
@@ -44,10 +43,6 @@ type Color = V4 Double
 --
 --type Drawing a = F (DrawCommand a)
 
-data TextureSrc = Local FilePath
-                | Relative FilePath
-                deriving (Show, Eq, Ord)
-
 type TextureAtlas = M.Map TextureSrc TextureObject
 
 data Renderer = Renderer { colorShader :: ShaderProgram
@@ -58,10 +53,6 @@ data Renderer = Renderer { colorShader :: ShaderProgram
 --------------------------------------------------------------------------------
 -- Classes
 --------------------------------------------------------------------------------
-
-class Embedable a where
-    embed  :: Fractional b => a -> V3 b
-
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
@@ -74,30 +65,6 @@ class Embedable a where
 --    fmap f (WithTexture src d n) = WithTexture src d $ f n
 --    fmap f (TexTris vs ts n) = TexTris vs ts $ f n
 --    fmap f (RawRendering g n) = RawRendering g $ f n
-
-instance (Real a, Fractional a) => Embedable (V1 a) where
-    embed (V1 x) = V3 (realToFrac x) 0 0
-
-instance Real a => Embedable (V2 a) where
-    embed (V2 x y) = V3 (realToFrac x) (realToFrac y) 0
-
-instance Real a => Embedable (V3 a) where
-    embed = fmap realToFrac
-
---------------------------------------------------------------------------------
--- Building geometry
---------------------------------------------------------------------------------
-
--- | Given two points, creates a pair of triangles representing
--- a rectangle.
-rectangle :: V2 Double -- ^ The top left of the rectangle
-          -> V2 Double -- ^ The width and height of the rectangle
-          -> [V2 Double]
-rectangle (V2 x y) (V2 w h) = [ tl, bl, br, tl, tr, br ]
-    where tl = V2 x y
-          tr = V2 (x+w) y
-          bl = V2 x (y+h)
-          br = V2 (x+w) (y+h)
 
 --------------------------------------------------------------------------------
 -- Building transforms
