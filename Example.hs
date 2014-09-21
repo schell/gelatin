@@ -2,18 +2,18 @@ module Main where
 
 import Linear hiding (rotate)
 import Gelatin
+import Gelatin.Rendering.Two
 import Gelatin.Transform
 import Graphics.Rendering.OpenGL hiding (position, color, drawElements,
                                          translate, rotate, perspective,
                                          ortho, clearDepth, drawArrays)
-import qualified Graphics.Rendering.OpenGL as GL
 import Control.Monad
-import Control.Concurrent
 import Data.IORef
 import Graphics.GLUtil hiding (setUniform)
-import Graphics.VinylGL
-import Data.Vinyl
 import System.Exit
+
+-- | TODO: Add a main renderer type that will hold shaders, projections and
+-- possibly
 
 cubePoints :: [V3 GLfloat]
 cubePoints =
@@ -54,35 +54,43 @@ colorCube shader = do
         setUniform modelview mv
         withVertices (comp position cubePoints .+ comp color cubeColors) $
             drawIndexedTriangles cubeIndices 12
-    where pj = perspective (pi/4) 1 0.1 10
-          mv = mkM44 $ do translate $ V3 0 0 (-5)
-                          rotate (pi/8) $ V3 1 0 0
+    where pj = fmap (fmap realToFrac) $ perspective (pi/4) 1 0.1 10
+          mv = fmap (fmap realToFrac) $ mkM44 $ do translate $ V3 0 0 (-5)
+                                                   rotate (pi/8) $ V3 1 0 0
+
+boxes :: Rendering2d ()
+boxes = do
+    gradient box grad
+    withPosition (V2 100 200) $ fillTex (Relative "img/quantum-foam.jpg") box tbx
+    withPosition (V2 100 100) $ do
+        fill box yellow
+        withPosition (V2 100 (-50)) $ withScale (V2 0.5 0.5) $ do
+            fill box red
+            withScale (V2 0.5 0.5) $ withRotation (pi/4) $ do
+                fill box blue
+    where box  = rectangle (V2 0 0) (V2 100 100)
+          tbx  = rectangle (V2 0 0) (V2 1 1)
+          grad = take 6 $ cycle [red, green, blue]
 
 sceneRendering :: ShaderProgram -> ShaderProgram -> Rendering ()
 sceneRendering colorShader textureShader = do
     -- Clear the stage.
     clearDepth
-    clearColorWith (black :: V4 GLfloat)
+    clearColorWith black
     -- Draw a background using a texture.
     usingTexture Texture2D (Relative "img/quantum-foam.jpg") params $
         usingShader textureShader $ do
             setUniform projection pj
-            setUniform modelview $ mkM44 $ translate $ V3 100 0 0
+            setUniform modelview eye4
             setUniform sampler 0
             withVertices (comp position tr .+ comp texcoord t) $
-                drawArrays Triangles 6
-    -- Draw a gradient box in the upper left corner.
-    usingShader colorShader $ do
-        setUniform projection pj
-        setUniform modelview eye4
-        withVertices (comp position gr .+ comp color cs) $
-            drawArrays Triangles 6
+                drawArrays Triangles $ length tr
+
+    clearDepth
     colorCube colorShader
     where pj = ortho 0 600 0 600 0 1
           t  = rectangle (V2 0 0) (V2 1 1)
-          tr = map embed $ (rectangle (V2 0 0) (V2 128 96) :: [V2 GLfloat])
-          gr = map embed $ (rectangle (V2 0 0) (V2 100 100) :: [V2 GLfloat])
-          cs = take 6 $ cycle [red, green, blue]
+          tr = map embedGL $ (rectangle (V2 0 0) (V2 640 480) :: [V2 GLfloat])
           params = do setFilter (Nearest, Nothing) Nearest
                       setWrapMode S Repeated Clamp
                       setWrapMode T Repeated Clamp
@@ -93,6 +101,7 @@ main = do
     scs   <- simpleColorShader
     sts   <- simpleTextureShader
     scene <- compileRendering $ sceneRendering scs sts
+    box   <- compileTwo (V2 600 600) boxes
 
     forever $ do
         pollEvents
@@ -100,6 +109,7 @@ main = do
         writeIORef wref ([], window)
         makeContextCurrent $ Just window
         render scene
+        render box
         printError
         swapBuffers window
         shouldClose <- windowShouldClose window

@@ -1,15 +1,16 @@
 module Gelatin.Geometry where
 
 import Linear
+import Graphics.Rendering.OpenGL (GLfloat)
 --------------------------------------------------------------------------------
 -- Classes
 --------------------------------------------------------------------------------
 class Embedable a where
-    embedWith :: Fractional b => b -> a -> V3 b
+    embedWith :: Double -> a -> V3 Double
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
-instance (Real a, Fractional a) => Embedable (V1 a) where
+instance Real a => Embedable (V1 a) where
     embedWith i (V1 x) = V3 (realToFrac x) i i
 
 instance Real a => Embedable (V2 a) where
@@ -20,8 +21,11 @@ instance Real a => Embedable (V3 a) where
 --------------------------------------------------------------------------------
 -- API
 --------------------------------------------------------------------------------
-embed :: (Embedable a, Fractional b) => a -> V3 b
+embed :: Embedable a => a -> V3 Double
 embed = embedWith 0
+
+embedGL :: Embedable a => a -> V3 GLfloat
+embedGL = fmap realToFrac . embed
 --------------------------------------------------------------------------------
 -- Building geometry
 --------------------------------------------------------------------------------

@@ -47,14 +47,14 @@ compileShaderCommand s (Free (WithVertices vs cmd next)) = do
 compileShaderCommand s (Free (WithIndices ns cmd next)) = do
     sub <- compileDrawElementsCommand $ fromF cmd
     nxt <- compileShaderCommand s next
-    ebo <- bufferIndices ns
+    ebo <- bufferIndices $ map fromIntegral ns
     let io = do bindBuffer ElementArrayBuffer $= Just ebo
                 render sub
         cu = do cleanup sub
                 bindBuffer ElementArrayBuffer $= Nothing
     return $ nxt `mappend` Compiled io cu
 compileShaderCommand s (Free (DrawArrays mode i next)) =
-    fmap (prefixRender $ GL.drawArrays mode 0 i) $ compileShaderCommand s next
+    fmap (prefixRender $ GL.drawArrays mode 0 $ fromIntegral i) $ compileShaderCommand s next
 
 compileTextureCommand :: ParameterizedTextureTarget t
                       => t -> Free TextureOp () -> IO CompiledRendering
@@ -68,14 +68,13 @@ compileTextureCommand t (Free (SetWrapMode c rp clamp n)) =
 
 compileRenderCommand :: Free Render () -> IO CompiledRendering
 compileRenderCommand (Pure ()) = return mempty
-compileRenderCommand (Free (UsingDepthFunc func r next)) = do
-    sub <- compileRenderCommand $ fromF r
+compileRenderCommand (Free (SetViewport x y w h n)) = do
+    let [x', y', w', h'] = map fromIntegral [x, y, w, h]
+    nxt <- compileRenderCommand n
+    return $ nxt `mappend` Compiled (viewport $= (Position x' y', Size w' h')) (return ())
+compileRenderCommand (Free (SetDepthFunc mfunc next)) = do
     nxt <- compileRenderCommand next
-    let io = do depthFunc $= Just func
-                render sub
-        cu = do cleanup sub
-                depthFunc $= Nothing
-    return $ nxt `mappend` Compiled io cu
+    return $ nxt `mappend` Compiled (depthFunc $= mfunc) (return ())
 compileRenderCommand (Free (UsingShader s sc next)) = do
     sub <- compileShaderCommand s $ fromF sc
     nxt <- compileRenderCommand next
@@ -96,7 +95,6 @@ compileRenderCommand (Free (UsingTextures t ts cmd r n)) = do
     let io = withTextures t ts' $ render sub
         cu = do cleanup sub
     return $ nxt `mappend` Compiled io cu
-
 
 loadTextures :: ( BindableTextureTarget t
                 , ParameterizedTextureTarget t

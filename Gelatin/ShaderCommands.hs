@@ -34,8 +34,8 @@ data ShaderOp next where
                  , HasFieldSizes (PlainFieldRec rs)
                  , HasFieldGLTypes (PlainFieldRec rs)
                  ) => v (PlainFieldRec rs) -> ShaderCommand () -> next -> ShaderOp next
-    WithIndices :: [Word32] -> DrawElementsCommand () -> next -> ShaderOp next
-    DrawArrays :: PrimitiveMode -> GLint -> next -> ShaderOp next
+    WithIndices :: Integral i => [i] -> DrawElementsCommand () -> next -> ShaderOp next
+    DrawArrays :: Integral i => PrimitiveMode -> i -> next -> ShaderOp next
 
 type DrawElementsCommand = F DrawElements
 type ShaderCommand = F ShaderOp
@@ -71,13 +71,13 @@ withVertices :: ( Storable (PlainFieldRec rs)
              ) => v (PlainFieldRec rs) -> ShaderCommand () -> ShaderCommand ()
 withVertices vs cmd = liftF $ WithVertices vs cmd ()
 
-withIndices :: [Word32] -> DrawElementsCommand () -> ShaderCommand ()
+withIndices :: Integral i => [i] -> DrawElementsCommand () -> ShaderCommand ()
 withIndices ns cmd = liftF $ WithIndices ns cmd ()
 
-drawIndexedTriangles :: [Word32] -> GLint -> ShaderCommand ()
-drawIndexedTriangles ns i = withIndices ns $ drawElements (i*3) Triangles
+drawIndexedTriangles :: Integral i => [i] -> i -> ShaderCommand ()
+drawIndexedTriangles ns i = withIndices ns $ drawElements (fromIntegral $ i*3) Triangles
 
-drawArrays :: PrimitiveMode -> GLint -> ShaderCommand ()
+drawArrays :: Integral i => PrimitiveMode -> i -> ShaderCommand ()
 drawArrays mode n = liftF $ DrawArrays mode n ()
 --------------------------------------------------------------------------------
 -- Making vertices from components
