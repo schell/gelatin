@@ -9,7 +9,9 @@ module Gelatin.Rendering.Two (
     withScale,
     withRotation,
     compileTwo,
-    mk2dRendering
+    mk2dRendering,
+    mkRenderer2d,
+    Renderer2d(..)
 ) where
 
 import Gelatin.Transform
@@ -74,28 +76,32 @@ withRotation r t = withTransform (rotate r $ V3 0 0 1) t
 --------------------------------------------------------------------------------
 -- Compiling a Rendering2d
 --------------------------------------------------------------------------------
-data TwoRenderer = TwoRenderer { twoColorShader :: ShaderProgram
+data Renderer2d = Renderer2d { twoColorShader :: ShaderProgram
                                , twoTextureShader :: ShaderProgram
                                , twoProjection :: M44 GLfloat
                                , twoModelview :: M44 GLfloat
                                }
 
 compileTwo :: Integral i => V2 i -> Rendering2d () -> IO CompiledRendering
-compileTwo (V2 w h) two = do
-    clr <- simpleColorShader
-    tex <- simpleTextureShader
-    compileRendering $ mk2dRendering (TwoRenderer clr tex pj mv) two
-        where pj = ortho 0 (fromIntegral w) 0 (fromIntegral h) 0 1
-              mv = eye4
+compileTwo v two = do
+    r <- mkRenderer2d v
+    compileRendering $ mk2dRendering r two
 
-mk2dRendering :: TwoRenderer -> Rendering2d () -> Rendering ()
+mk2dRendering :: Renderer2d -> Rendering2d () -> Rendering ()
 mk2dRendering r t = do
     -- Start out by setting the projection on both shaders.
     forM_ [twoColorShader r, twoTextureShader r] $ \shader ->
         usingShader shader $ setUniform projection $ twoProjection r
     render2 r $ fromF t
 
-render2 :: TwoRenderer -> Free TwoCommand () -> Rendering ()
+mkRenderer2d :: Integral i => V2 i -> IO Renderer2d
+mkRenderer2d (V2 w h) = do
+    clr <- simpleColorShader
+    tex <- simpleTextureShader
+    return $ Renderer2d clr tex pj eye4
+        where pj = ortho 0 (fromIntegral w) 0 (fromIntegral h) 0 1
+
+render2 :: Renderer2d -> Free TwoCommand () -> Rendering ()
 render2 _ (Pure ()) = return ()
 render2 r (Free (WithTransform t d n)) = do
     let mv' = (twoModelview r) !*! (fmap (fmap realToFrac) $ mkM44 t)

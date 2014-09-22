@@ -18,18 +18,23 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Gelatin.Color,
-                       Gelatin.Rendering,
-                       Gelatin.Compiling,
+  exposed-modules:
+                       Gelatin.Rendering.Two,
                        Gelatin.Shaders.Core,
                        Gelatin.Shaders.SimpleColorShader,
+                       Gelatin.Shaders.SimpleTextureShader,
+                       Gelatin.Color,
+                       Gelatin.Compiling,
+                       Gelatin.Geometry,
+                       Gelatin.Rendering,
+                       Gelatin.ShaderCommands,
                        Gelatin.Shaders,
+                       Gelatin.TextureCommands,
+                       Gelatin.Transform,
+                       Gelatin.Window,
                        Gelatin
   -- other-modules:
-  other-extensions:    DataKinds,
-                       TypeOperators,
-                       FlexibleInstances,
-                       TemplateHaskell
+  other-extensions:    GADTs
 
   build-depends:       base >=4.7 && <4.8,
                        containers -any,

@@ -1,8 +1,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Gelatin.Window (
     -- * Creating a window
+    WindowRef,
     initWindow,
     -- * Input
+    emptyInputEnv,
     InputEvent(..),
     InputEnv(..),
     ienvEventsLens,
@@ -56,11 +58,9 @@ makeLensesFor [("ienvEvents", "ienvEventsLens")
               ] ''InputEnv
 
 type WindowRef = IORef ([InputEvent], Window)
-
 --------------------------------------------------------------------------------
 -- Creating a window.
 --------------------------------------------------------------------------------
-
 -- | @initWindow pos size title@ creates and opens a new window stored in an
 -- ref. The window will be positioned at `pos` with size `size`.
 -- The ref is necessary for accumulating certain events that occur in
@@ -118,10 +118,11 @@ input ref e@(WindowSizeEvent _ _) = do
 input ref e = do
     (es, w) <- readIORef ref
     writeIORef ref (es ++ [e], w)
-
 --------------------------------------------------------------------------------
 -- Processing input events.
 --------------------------------------------------------------------------------
+emptyInputEnv :: InputEnv
+emptyInputEnv = InputEnv [] False (0,0) S.empty S.empty (V2 0 0)
 
 -- | Take an input event and fold it into an input environment variable.
 foldInput :: InputEnv -> InputEvent -> InputEnv
@@ -141,4 +142,3 @@ foldInput ienv e@(WindowSizeEvent w h) =
     ienv & (ienvWindowSizeLens .~ V2 w h)
          & ienvEventsLens %~ (++ [e])
 foldInput ienv e = ienv & ienvEventsLens %~ (++ [e])
-
