@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Gelatin.Compiling where
 
 import Gelatin.Rendering
@@ -23,6 +24,9 @@ data RenderingDefaults = RenderingDefaults { rdefDepthFunc     :: Maybe Comparis
                                            , rdefClearColor    :: Color4 GLfloat
                                            }
 
+sizeOfList :: forall a. Storable a => [a] -> GLsizeiptr
+sizeOfList vs = fromIntegral $ (length vs) * sizeOf (undefined :: a)
+
 --------------------------------------------------------------------------------
 -- Compiling/Running
 --------------------------------------------------------------------------------
@@ -32,12 +36,19 @@ compileVertexBufferCommand s (Free (AddComponent v n)) = do
     nxt <- compileVertexBufferCommand s n
     let vname = vertexName v
         vdesc = vertexDescriptor v
+        vdata = vertexData v
         vinth = vertexHandling v
-    b <- makeBuffer ArrayBuffer $ vertexData v
-    enableAttrib s vname
-    setAttrib s vname vinth vdesc
-    let io = do enableAttrib s vname
-                bindBuffer ArrayBuffer $= Just b
+        aloc  = getAttrib s vname
+    b <- genObjectName
+    bindBuffer ArrayBuffer $= Just b
+    vertexAttribPointer aloc $= (vinth, vdesc)
+    vertexAttribArray aloc $= Enabled
+    withArray vdata $ \ptr ->
+        bufferData ArrayBuffer $= (sizeOfList vdata, ptr, StaticDraw)
+    bindBuffer ArrayBuffer $= Nothing
+    let io = do bindBuffer ArrayBuffer $= Just b
+                vertexAttribPointer aloc $= (vinth, vdesc)
+                vertexAttribArray aloc $= Enabled
         cu = deleteObjectName b
     return $ nxt `mappend`  Compiled io cu
 
