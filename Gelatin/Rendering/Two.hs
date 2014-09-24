@@ -91,7 +91,7 @@ mk2dRendering :: Renderer2d -> Rendering2d () -> Rendering ()
 mk2dRendering r t = do
     -- Start out by setting the projection on both shaders.
     forM_ [twoColorShader r, twoTextureShader r] $ \shader ->
-        usingShader shader $ setUniform projection $ twoProjection r
+        usingShader shader $ setProjection $ twoProjection r
     render2 r $ fromF t
 
 mkRenderer2d :: Integral i => V2 i -> IO Renderer2d
@@ -114,7 +114,7 @@ render2 r (Free (Gradient vs cs n)) = do
     usingShader (twoColorShader r) $ do
         let cs' = map (fmap realToFrac) cs
             vs' = map (fmap realToFrac . embed) vs
-        setUniform modelview $ twoModelview r
+        setModelview $ twoModelview r
         withVertices (comp position vs' .+ comp color cs') $
             drawArrays Triangles (length vs)
     render2 r n
@@ -124,7 +124,7 @@ render2 r (Free (TexTris src vs uvs n)) = do
                     setWrapMode T Repeated Clamp
     usingTexture Texture2D src params $ do
         usingShader (twoTextureShader r) $ do
-            setUniform modelview $ twoModelview r
+            setModelview $ twoModelview r
             let vNtoGLfloat = fmap realToFrac . embed
             withVertices (comp position (map vNtoGLfloat vs) .+
                           comp texcoord (map (fmap realToFrac) uvs)) $

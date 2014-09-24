@@ -5,14 +5,16 @@ import Gelatin.ShaderCommands
 import Gelatin.TextureCommands
 import Graphics.VinylGL
 import Graphics.GLUtil hiding (Elem, setUniform)
+import qualified Graphics.GLUtil as GLU
 import Graphics.Rendering.OpenGL hiding (Color, position, color, VertexComponent)
 import qualified Graphics.Rendering.OpenGL as GL
 import Control.Monad
 import Control.Monad.Free
 import Control.Monad.Free.Church
-import Data.Vinyl
 import Data.Monoid
 import Data.Either
+import Data.List (intercalate)
+import qualified Data.Map as M
 import Foreign
 import Linear (V4(..))
 
@@ -32,8 +34,17 @@ compileDrawElementsCommand (Free (DrawElements n mode next)) =
 
 compileShaderCommand :: ShaderProgram -> Free ShaderOp () -> IO CompiledRendering
 compileShaderCommand _ (Pure ()) = return mempty
-compileShaderCommand s (Free (SetUniform u m next)) =
-    fmap (prefixRender $ setUniforms s (u =: m)) $ compileShaderCommand s next
+compileShaderCommand s (Free (SetUniform u next)) = do
+    let uname = uniformName u
+        udata = uniformData u
+        muLoc = fmap fst $ M.lookup uname $ uniforms s
+    case muLoc of
+        Nothing  -> error $ unwords [ "Could not find uniform '" ++ uname ++ "'."
+                                    , " Available uniforms include "
+                                    , intercalate ", " $ M.keys $ uniforms s
+                                    , "."
+                                    ]
+        Just _ -> fmap (prefixRender $ GLU.setUniform s uname udata) $ compileShaderCommand s next
 compileShaderCommand s (Free (WithVertices vs cmd next)) = do
     sub <- compileShaderCommand s $ fromF cmd
     nxt <- compileShaderCommand s next

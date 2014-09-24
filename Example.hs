@@ -50,8 +50,8 @@ cubeIndices = [ 0, 2, 3 -- front
 colorCube :: ShaderProgram -> Rendering ()
 colorCube shader = do
     usingDepthFunc Less $ usingShader shader $ do
-        setUniform projection pj
-        setUniform modelview mv
+        setProjection pj
+        setModelview mv
         withVertices (comp position cubePoints .+ comp color cubeColors) $
             drawIndexedTriangles cubeIndices 12
     where pj = fmap (fmap realToFrac) $ perspective (pi/4) 1 0.1 10
@@ -80,12 +80,11 @@ sceneRendering colorShader textureShader = do
     -- Draw a background using a texture.
     usingTexture Texture2D (Relative "img/quantum-foam.jpg") params $
         usingShader textureShader $ do
-            setUniform projection pj
-            setUniform modelview eye4
-            setUniform sampler 0
+            setProjection pj
+            setModelview eye4
+            setSampler 0
             withVertices (comp position tr .+ comp texcoord t) $
                 drawArrays Triangles $ length tr
-
     clearDepth
     colorCube colorShader
     where pj = ortho 0 600 0 600 0 1
@@ -113,4 +112,6 @@ main = do
         printError
         swapBuffers window
         shouldClose <- windowShouldClose window
-        when shouldClose exitSuccess
+        when shouldClose $ do cleanup scene
+                              cleanup box
+                              exitSuccess

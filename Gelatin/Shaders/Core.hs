@@ -5,32 +5,19 @@
 module Gelatin.Shaders.Core where
 
 import Graphics.Rendering.OpenGL hiding (Color, color, position)
-import Graphics.GLUtil
 import Data.Vinyl.Universe
 import Linear
+import Gelatin.ShaderCommands
 
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
-
-type UniformType u t = u ::: t
-
-data Uniform = PJ (SField ("projection" ::: M44 GLfloat))
-             | MV (SField ("modelview" ::: M44 GLfloat))
-
-type UniformM44 u = u ::: M44 GLfloat
-type Projection = "projection" ::: M44 GLfloat
-type Modelview  = "modelview" ::: M44 GLfloat
-type Sampler = "sampler" ::: GLint
-
 type V2tx = "texcoord" ::: V2 GLfloat
 type V3pos = "position" ::: V3 GLfloat
 type V4clr = "color" ::: V4 GLfloat
-
---------------------------------------------------------------------------------
--- Vinyl
---------------------------------------------------------------------------------
-
+----------------------------------------------------------------------------------
+---- Vinyl
+----------------------------------------------------------------------------------
 position :: SField V3pos
 position = SField
 
@@ -40,17 +27,17 @@ color = SField
 texcoord :: SField V2tx
 texcoord = SField
 
-projection :: SField Projection
-projection = SField
+setProjection :: Real a => M44 a -> ShaderCommand ()
+setProjection = setUniform . uniformM44GLfloat "projection"
 
-modelview :: SField Modelview
-modelview = SField
+setModelview :: Real a => M44 a -> ShaderCommand ()
+setModelview = setUniform . uniformM44GLfloat "modelview"
 
-sampler :: SField Sampler
-sampler = SField
+setSampler :: Integral a => a -> ShaderCommand ()
+setSampler = setUniform . uniformGLint "sampler"
 
---------------------------------------------------------------------------------
--- Instances
---------------------------------------------------------------------------------
+uniformM44GLfloat :: Real a => String -> M44 a -> ShaderUniform (M44 GLfloat)
+uniformM44GLfloat s = ShaderUniform s . fmap (fmap realToFrac)
 
-instance HasVariableType (Color4 GLfloat) where variableType _ = FloatVec4
+uniformGLint :: Integral a => String -> a -> ShaderUniform GLint
+uniformGLint s = ShaderUniform s . fromIntegral

@@ -7,6 +7,7 @@ module Gelatin (
 ) where
 
 import Linear
+import Gelatin.Shaders.Parser as G
 import Gelatin.Color as G
 import Gelatin.Geometry as G
 import Gelatin.Rendering as G

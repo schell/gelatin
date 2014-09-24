@@ -49,7 +49,8 @@ library
                        GLUtil >=0.8 && <0.9,
                        vinyl-gl >=0.2 && <0.3,
                        vinyl >=0.4 && <0.5,
-                       bytestring >=0.10 && <0.11
+                       bytestring >=0.10 && <0.11,
+                       attoparsec -any
 
   -- hs-source-dirs:
   default-language:    Haskell2010
@@ -72,6 +73,7 @@ executable example
                        vinyl-gl -any,
                        GLUtil -any,
                        free -any,
-                       bytestring -any
+                       bytestring -any,
+                       attoparsec -any
 
   default-language:    Haskell2010
