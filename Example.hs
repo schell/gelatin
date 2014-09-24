@@ -1,21 +1,13 @@
 module Main where
 
-import Linear hiding (rotate)
 import Gelatin
-import Gelatin.Rendering.Two
-import Gelatin.Transform
-import Graphics.Rendering.OpenGL hiding (position, color, drawElements,
-                                         translate, rotate, perspective,
-                                         ortho, clearDepth, drawArrays)
 import Control.Monad
 import Data.IORef
-import Graphics.GLUtil hiding (setUniform)
 import System.Exit
 
--- | TODO: Add a main renderer type that will hold shaders, projections and
--- possibly
+-- | TODO: Add a main renderer type that will hold textures loaded.
 
-cubePoints :: [V3 GLfloat]
+cubePoints :: [V3 Double]
 cubePoints =
     [ V3 (-0.5) ( 0.5) ( 0.5)
     , V3 ( 0.5) ( 0.5) ( 0.5)
@@ -28,11 +20,11 @@ cubePoints =
     , V3 ( 0.5) (-0.5) (-0.5)
     ]
 
-cubeColors :: [V4 GLfloat]
+cubeColors :: [V4 Double]
 cubeColors = map (up . fmap (+0.5)) cubePoints
     where up (V3 x y z) = V4 x y z 1
 
-cubeIndices :: [Word32]
+cubeIndices :: [Int]
 cubeIndices = [ 0, 2, 3 -- front
               , 0, 1, 3
               , 4, 0, 1 -- top
@@ -111,7 +103,6 @@ main = do
         makeContextCurrent $ Just window
         render scene
         render box
-        printError
         swapBuffers window
         shouldClose <- windowShouldClose window
         when shouldClose $ do cleanup scene

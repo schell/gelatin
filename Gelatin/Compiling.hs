@@ -6,8 +6,7 @@ import Gelatin.ShaderCommands
 import Gelatin.TextureCommands
 import Graphics.GLUtil hiding (Elem, setUniform)
 import qualified Graphics.GLUtil as GLU
-import Graphics.Rendering.OpenGL hiding (Color, position, color, VertexComponent)
-import qualified Graphics.Rendering.OpenGL as GL
+import Graphics.Rendering.OpenGL as GL
 import Control.Monad
 import Control.Monad.Free
 import Control.Monad.Free.Church
@@ -16,7 +15,7 @@ import Data.Either
 import Data.List (intercalate)
 import qualified Data.Map as M
 import Foreign
-import Linear (V4(..))
+import Linear
 
 data RenderingDefaults = RenderingDefaults { rdefDepthFunc     :: Maybe ComparisonFunction
                                            , rdefShaderProgram :: Maybe ShaderProgram

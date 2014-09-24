@@ -1,12 +1,29 @@
 {-# LANGUAGE GADTs #-}
-module Gelatin.Rendering where
+module Gelatin.Rendering (
+    -- * User API
+    Rendering,
+    setViewport,
+    setDepthFunc,
+    usingDepthFunc,
+    usingShader,
+    usingTextures,
+    usingTexture,
+    clearDepth,
+    clearColorWith,
+    -- * For compiling
+    Render(..),
+    CompiledRendering(..),
+    setRender,
+    setCleanup,
+    prefixRender,
+) where
 
 import Gelatin.ShaderCommands
 import Gelatin.TextureCommands
 import Graphics.GLUtil
-import Graphics.Rendering.OpenGL
+import qualified Graphics.Rendering.OpenGL as GL
 import Control.Monad.Free.Church
-import Linear (V4(..))
+import Linear as L hiding (rotate)
 import Data.Monoid
 
 --------------------------------------------------------------------------------
@@ -14,12 +31,12 @@ import Data.Monoid
 --------------------------------------------------------------------------------
 data Render next where
     SetViewport :: Integral a => a -> a -> a -> a -> next -> Render next
-    SetDepthFunc :: Maybe ComparisonFunction -> next -> Render next
+    SetDepthFunc :: Maybe GL.ComparisonFunction -> next -> Render next
     ClearDepth :: next -> Render next
     ClearColorWith :: (Real a, Fractional a) => (V4 a) -> next -> Render next
     UsingShader :: ShaderProgram -> (ShaderCommand ()) -> next -> Render next
-    UsingTextures :: ( ParameterizedTextureTarget t
-                     , BindableTextureTarget t
+    UsingTextures :: ( GL.ParameterizedTextureTarget t
+                     , GL.BindableTextureTarget t
                      )
                   => t -> [TextureSrc] -> (TextureCommand ()) -> (Rendering ()) -> next -> Render next
 
@@ -47,21 +64,21 @@ instance Monoid CompiledRendering where
 setViewport :: Integral a => a -> a -> a -> a -> Rendering ()
 setViewport l t w h = liftF $ SetViewport l t w h ()
 
-setDepthFunc :: Maybe ComparisonFunction -> Rendering ()
+setDepthFunc :: Maybe GL.ComparisonFunction -> Rendering ()
 setDepthFunc mcf = liftF $ SetDepthFunc mcf ()
 
-usingDepthFunc :: ComparisonFunction -> Rendering () -> Rendering ()
+usingDepthFunc :: GL.ComparisonFunction -> Rendering () -> Rendering ()
 usingDepthFunc cf r = setDepthFunc (Just cf) >> r >> setDepthFunc Nothing
 
 usingShader :: ShaderProgram -> ShaderCommand () -> Rendering ()
 usingShader p sc = liftF $ UsingShader p sc ()
 
-usingTextures :: (ParameterizedTextureTarget t, BindableTextureTarget t)
+usingTextures :: (GL.ParameterizedTextureTarget t, GL.BindableTextureTarget t)
               => t -> [TextureSrc] -> TextureCommand () -> Rendering ()
               -> Rendering ()
 usingTextures t ts ccmd rcmd = liftF $ UsingTextures t ts ccmd rcmd ()
 
-usingTexture :: (ParameterizedTextureTarget t, BindableTextureTarget t)
+usingTexture :: (GL.ParameterizedTextureTarget t, GL.BindableTextureTarget t)
              => t -> TextureSrc -> TextureCommand () -> Rendering ()
              -> Rendering ()
 usingTexture t tex = usingTextures t [tex]

@@ -1,21 +1,12 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 module Gelatin.Shaders.Core where
 
-import Graphics.Rendering.OpenGL hiding (Color, color, position, VertexComponent)
-import Linear
-import Foreign
 import Gelatin.ShaderCommands
+import Foreign
+import Linear
+import Graphics.Rendering.OpenGL hiding (VertexComponent)
 
 --------------------------------------------------------------------------------
--- Helpers
---------------------------------------------------------------------------------
-(.+) :: (Storable a) => VertexBufferCommand () -> VertexComponent a b -> VertexBufferCommand ()
-(.+) m xs = m >> addComponent xs
---------------------------------------------------------------------------------
--- Vertex Attributes & Uniforms
+-- Included Vertex Attributes & Uniforms
 --------------------------------------------------------------------------------
 position :: Real a => [V3 a] -> VertexComponent (V3 GLfloat) [Float]
 position = avecfv "position" 3
@@ -26,21 +17,27 @@ color = avecfv "color" 4
 texcoord :: Real a => [V2 a] -> VertexComponent (V2 GLfloat) [Float]
 texcoord = avecfv "texcoord" 2
 
+setProjection :: Real a => M44 a -> ShaderCommand ()
+setProjection = setUniform . uniformM4f "projection"
+
+setModelview :: Real a => M44 a -> ShaderCommand ()
+setModelview = setUniform . uniformM4f "modelview"
+
+setSampler :: Integral a => a -> ShaderCommand ()
+setSampler = setUniform . uniformi "sampler"
+--------------------------------------------------------------------------------
+-- Uniform Helpers
+--------------------------------------------------------------------------------
+-- | TODO: Add more of these uniform helpers!
+uniformM4f :: Real a => String -> M44 a -> ShaderUniform (M44 GLfloat)
+uniformM4f s = ShaderUniform s . fmap (fmap realToFrac)
+
+uniformi :: Integral a => String -> a -> ShaderUniform GLint
+uniformi s = ShaderUniform s . fromIntegral
+--------------------------------------------------------------------------------
+-- Vertex Attribute Helpers
+--------------------------------------------------------------------------------
+-- | TODO: Add more of these attribute helpers!
 avecfv :: (Real a, Functor f, Fractional b) => String -> NumComponents -> [f a] -> VertexComponent (f b) a1
 avecfv s n vs = VertexComponent s vs' ToFloat $ VertexArrayDescriptor n Float 0 nullPtr
     where vs' = map (fmap realToFrac) vs
-
-setProjection :: Real a => M44 a -> ShaderCommand ()
-setProjection = setUniform . uniformM44GLfloat "projection"
-
-setModelview :: Real a => M44 a -> ShaderCommand ()
-setModelview = setUniform . uniformM44GLfloat "modelview"
-
-setSampler :: Integral a => a -> ShaderCommand ()
-setSampler = setUniform . uniformGLint "sampler"
-
-uniformM44GLfloat :: Real a => String -> M44 a -> ShaderUniform (M44 GLfloat)
-uniformM44GLfloat s = ShaderUniform s . fmap (fmap realToFrac)
-
-uniformGLint :: Integral a => String -> a -> ShaderUniform GLint
-uniformGLint s = ShaderUniform s . fromIntegral

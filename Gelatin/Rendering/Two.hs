@@ -17,16 +17,16 @@ module Gelatin.Rendering.Two (
 import Gelatin.Transform
 import Gelatin.TextureCommands
 import Gelatin.Geometry
-import Linear hiding (rotate)
-import Control.Monad.Free.Church
 import Gelatin.Rendering
 import Gelatin.Shaders
 import Gelatin.ShaderCommands
 import Gelatin.Compiling
-import Control.Monad.Free
 import Control.Monad
-import Graphics.Rendering.OpenGL (GLfloat, PrimitiveMode(..), TextureFilter(..), TextureCoordName(..), Repetition(..), Clamping(..), TextureTarget2D(..))
+import Control.Monad.Free
+import Control.Monad.Free.Church
 import Graphics.GLUtil hiding (setUniform)
+import Graphics.Rendering.OpenGL hiding (Fill, translate, scale, rotate, ortho, position, color, drawArrays)
+import Linear hiding (rotate)
 
 --------------------------------------------------------------------------------
 -- Types
