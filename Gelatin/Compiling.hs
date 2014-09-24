@@ -4,7 +4,6 @@ module Gelatin.Compiling where
 import Gelatin.Rendering
 import Gelatin.ShaderCommands
 import Gelatin.TextureCommands
-import Graphics.VinylGL
 import Graphics.GLUtil hiding (Elem, setUniform)
 import qualified Graphics.GLUtil as GLU
 import Graphics.Rendering.OpenGL hiding (Color, position, color, VertexComponent)
@@ -71,7 +70,7 @@ compileShaderCommand s (Free (SetUniform u next)) = do
                                     , "."
                                     ]
         Just _ -> fmap (prefixRender $ GLU.setUniform s uname udata) $ compileShaderCommand s next
-compileShaderCommand s (Free (WithVertexBuffer vb cmd next)) = do
+compileShaderCommand s (Free (WithVertices vb cmd next)) = do
     sub <- compileShaderCommand s $ fromF cmd
     nxt <- compileShaderCommand s next
     vbs <- compileVertexBufferCommand s $ fromF vb
@@ -79,16 +78,6 @@ compileShaderCommand s (Free (WithVertexBuffer vb cmd next)) = do
                 render sub
                 bindBuffer ArrayBuffer $= Nothing
         cu = return ()
-    return $ nxt `mappend` Compiled io cu
-compileShaderCommand s (Free (WithVertices vs cmd next)) = do
-    sub <- compileShaderCommand s $ fromF cmd
-    nxt <- compileShaderCommand s next
-    vbo <- bufferVertices vs
-    let io = do bindVertices vbo
-                enableVertices' s vbo
-                render sub
-        cu = do cleanup sub
-                deleteVertices vbo
     return $ nxt `mappend` Compiled io cu
 compileShaderCommand s (Free (WithIndices ns cmd next)) = do
     sub <- compileDrawElementsCommand $ fromF cmd

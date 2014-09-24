@@ -17,6 +17,10 @@ build-type:          Simple
 -- extra-source-files:
 cabal-version:       >=1.10
 
+source-repository head
+  type: git
+  location: https://github.com/schell/gelatin
+
 library
   exposed-modules:
                        Gelatin.Rendering.Two,
@@ -47,8 +51,6 @@ library
                        linear >=1.10 && <1.11,
                        free >=4.9 && <4.10,
                        GLUtil >=0.8 && <0.9,
-                       vinyl-gl >=0.2 && <0.3,
-                       vinyl >=0.4 && <0.5,
                        bytestring >=0.10 && <0.11,
                        attoparsec -any
 
@@ -69,8 +71,6 @@ executable example
                        linear -any,
                        OpenGL -any,
                        GLFW-b -any,
-                       vinyl -any,
-                       vinyl-gl -any,
                        GLUtil -any,
                        free -any,
                        bytestring -any,

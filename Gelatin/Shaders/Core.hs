@@ -5,40 +5,29 @@
 module Gelatin.Shaders.Core where
 
 import Graphics.Rendering.OpenGL hiding (Color, color, position, VertexComponent)
-import Data.Vinyl.Universe
 import Linear
 import Foreign
 import Gelatin.ShaderCommands
 
 --------------------------------------------------------------------------------
--- Types
+-- Helpers
 --------------------------------------------------------------------------------
-type V2tx = "texcoord" ::: V2 GLfloat
-type V3pos = "position" ::: V3 GLfloat
-type V4clr = "color" ::: V4 GLfloat
-----------------------------------------------------------------------------------
----- Vinyl
-----------------------------------------------------------------------------------
---position :: SField V3pos
---position = SField
-
---color :: SField V4clr
---color = SField
-
---texcoord :: SField V2tx
---texcoord = SField
-
+(.+) :: (Storable a) => VertexBufferCommand () -> VertexComponent a b -> VertexBufferCommand ()
+(.+) m xs = m >> addComponent xs
+--------------------------------------------------------------------------------
+-- Vertex Attributes & Uniforms
+--------------------------------------------------------------------------------
 position :: Real a => [V3 a] -> VertexComponent (V3 GLfloat) [Float]
-position = attrVecVF "position" 3
+position = avecfv "position" 3
 
 color :: Real a => [V4 a] -> VertexComponent (V4 GLfloat) [Float]
-color = attrVecVF "color" 4
+color = avecfv "color" 4
 
 texcoord :: Real a => [V2 a] -> VertexComponent (V2 GLfloat) [Float]
-texcoord = attrVecVF "texcoord" 2
+texcoord = avecfv "texcoord" 2
 
-attrVecVF :: (Real a, Functor f, Fractional b) => String -> NumComponents -> [f a] -> VertexComponent (f b) a1
-attrVecVF s n vs = VertexComponent s vs' ToFloat $ VertexArrayDescriptor n Float 0 nullPtr
+avecfv :: (Real a, Functor f, Fractional b) => String -> NumComponents -> [f a] -> VertexComponent (f b) a1
+avecfv s n vs = VertexComponent s vs' ToFloat $ VertexArrayDescriptor n Float 0 nullPtr
     where vs' = map (fmap realToFrac) vs
 
 setProjection :: Real a => M44 a -> ShaderCommand ()

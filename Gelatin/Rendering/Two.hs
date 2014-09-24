@@ -114,10 +114,8 @@ render2 r (Free (Gradient vs cs n)) = do
     usingShader (twoColorShader r) $ do
         let vs' = position $ map embed vs
             cs' = color cs
-            vb  = do addComponent vs'
-                     addComponent cs'
         setModelview $ twoModelview r
-        withVertexBuffer vb $
+        withVertices (addComponent vs' >> addComponent cs') $
             drawArrays Triangles (length vs)
     render2 r n
 render2 r (Free (TexTris src vs uvs n)) = do
@@ -129,7 +127,6 @@ render2 r (Free (TexTris src vs uvs n)) = do
             setModelview $ twoModelview r
             let vs'  = position $ map embed vs
                 uvs' = texcoord uvs
-                vb   = do addComponent vs'
-                          addComponent uvs'
-            withVertexBuffer vb $ drawArrays Triangles $ length vs
+            withVertices (addComponent vs' >> addComponent uvs') $
+                drawArrays Triangles $ length vs
     render2 r n

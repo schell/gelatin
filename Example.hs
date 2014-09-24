@@ -52,7 +52,7 @@ colorCube shader = do
     usingDepthFunc Less $ usingShader shader $ do
         setProjection pj
         setModelview mv
-        withVertexBuffer cubeVertices $ drawIndexedTriangles cubeIndices 12
+        withVertices cubeVertices $ drawIndexedTriangles cubeIndices 12
     where pj = perspective (pi/4) 1 0.1 10
           mv = mkM44 $ do translate $ V3 0 0 (-5)
                           rotate (pi/8) $ V3 1 0 0
@@ -86,7 +86,7 @@ sceneRendering colorShader textureShader = do
             setSampler 0
             let vb = do addComponent $ position tr
                         addComponent $ texcoord t
-            withVertexBuffer vb $ drawArrays Triangles $ length tr
+            withVertices vb $ drawArrays Triangles $ length tr
     clearDepth
     colorCube colorShader
     where pj = ortho 0 600 0 600 0 1
