@@ -52,11 +52,12 @@ colorCube shader = do
     usingDepthFunc Less $ usingShader shader $ do
         setProjection pj
         setModelview mv
-        withVertices (comp position cubePoints .+ comp color cubeColors) $
-            drawIndexedTriangles cubeIndices 12
-    where pj = fmap (fmap realToFrac) $ perspective (pi/4) 1 0.1 10
-          mv = fmap (fmap realToFrac) $ mkM44 $ do translate $ V3 0 0 (-5)
-                                                   rotate (pi/8) $ V3 1 0 0
+        withVertexBuffer cubeVertices $ drawIndexedTriangles cubeIndices 12
+    where pj = perspective (pi/4) 1 0.1 10
+          mv = mkM44 $ do translate $ V3 0 0 (-5)
+                          rotate (pi/8) $ V3 1 0 0
+          cubeVertices = do addComponent $ position cubePoints
+                            addComponent $ color cubeColors
 
 boxes :: Rendering2d ()
 boxes = do
@@ -83,13 +84,14 @@ sceneRendering colorShader textureShader = do
             setProjection pj
             setModelview eye4
             setSampler 0
-            withVertices (comp position tr .+ comp texcoord t) $
-                drawArrays Triangles $ length tr
+            let vb = do addComponent $ position tr
+                        addComponent $ texcoord t
+            withVertexBuffer vb $ drawArrays Triangles $ length tr
     clearDepth
     colorCube colorShader
     where pj = ortho 0 600 0 600 0 1
           t  = rectangle (V2 0 0) (V2 1 1)
-          tr = map embedGL $ (rectangle (V2 0 0) (V2 640 480) :: [V2 GLfloat])
+          tr = map embed (rectangle (V2 0 0) (V2 640 480) :: [V2 Double])
           params = do setFilter (Nearest, Nothing) Nearest
                       setWrapMode S Repeated Clamp
                       setWrapMode T Repeated Clamp

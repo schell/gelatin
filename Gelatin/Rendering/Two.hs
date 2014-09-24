@@ -112,10 +112,12 @@ render2 r (Free (Fill vs c n)) =
     in render2 r (Free (Gradient vs cs n))
 render2 r (Free (Gradient vs cs n)) = do
     usingShader (twoColorShader r) $ do
-        let cs' = map (fmap realToFrac) cs
-            vs' = map (fmap realToFrac . embed) vs
+        let vs' = position $ map embed vs
+            cs' = color cs
+            vb  = do addComponent vs'
+                     addComponent cs'
         setModelview $ twoModelview r
-        withVertices (comp position vs' .+ comp color cs') $
+        withVertexBuffer vb $
             drawArrays Triangles (length vs)
     render2 r n
 render2 r (Free (TexTris src vs uvs n)) = do
@@ -125,8 +127,9 @@ render2 r (Free (TexTris src vs uvs n)) = do
     usingTexture Texture2D src params $ do
         usingShader (twoTextureShader r) $ do
             setModelview $ twoModelview r
-            let vNtoGLfloat = fmap realToFrac . embed
-            withVertices (comp position (map vNtoGLfloat vs) .+
-                          comp texcoord (map (fmap realToFrac) uvs)) $
-                drawArrays Triangles $ length vs
+            let vs'  = position $ map embed vs
+                uvs' = texcoord uvs
+                vb   = do addComponent vs'
+                          addComponent uvs'
+            withVertexBuffer vb $ drawArrays Triangles $ length vs
     render2 r n

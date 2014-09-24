@@ -26,6 +26,21 @@ data RenderingDefaults = RenderingDefaults { rdefDepthFunc     :: Maybe Comparis
 --------------------------------------------------------------------------------
 -- Compiling/Running
 --------------------------------------------------------------------------------
+compileVertexBufferCommand :: ShaderProgram -> Free VertexBufferOp () -> IO CompiledRendering
+compileVertexBufferCommand _ (Pure ()) = return mempty
+compileVertexBufferCommand s (Free (AddComponent v n)) = do
+    nxt <- compileVertexBufferCommand s n
+    let vname = vertexName v
+        vdesc = vertexDescriptor v
+        vinth = vertexHandling v
+    b <- makeBuffer ArrayBuffer $ vertexData v
+    enableAttrib s vname
+    setAttrib s vname vinth vdesc
+    let io = do enableAttrib s vname
+                bindBuffer ArrayBuffer $= Just b
+        cu = deleteObjectName b
+    return $ nxt `mappend`  Compiled io cu
+
 compileDrawElementsCommand :: Free DrawElements () -> IO CompiledRendering
 compileDrawElementsCommand (Pure ()) = return mempty
 compileDrawElementsCommand (Free (DrawElements n mode next)) =
@@ -45,6 +60,15 @@ compileShaderCommand s (Free (SetUniform u next)) = do
                                     , "."
                                     ]
         Just _ -> fmap (prefixRender $ GLU.setUniform s uname udata) $ compileShaderCommand s next
+compileShaderCommand s (Free (WithVertexBuffer vb cmd next)) = do
+    sub <- compileShaderCommand s $ fromF cmd
+    nxt <- compileShaderCommand s next
+    vbs <- compileVertexBufferCommand s $ fromF vb
+    let io = do render vbs
+                render sub
+                bindBuffer ArrayBuffer $= Nothing
+        cu = return ()
+    return $ nxt `mappend` Compiled io cu
 compileShaderCommand s (Free (WithVertices vs cmd next)) = do
     sub <- compileShaderCommand s $ fromF cmd
     nxt <- compileShaderCommand s next

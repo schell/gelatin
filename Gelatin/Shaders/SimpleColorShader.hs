@@ -3,7 +3,6 @@ module Gelatin.Shaders.SimpleColorShader where
 
 import Graphics.Rendering.OpenGL hiding (Color, color)
 import Graphics.GLUtil
-import Linear
 import qualified Data.ByteString.Char8 as BS
 
 colorShaderVertSrc :: BS.ByteString
