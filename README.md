@@ -26,7 +26,6 @@ boxes = do
 
 However, the main focus of the library is wrapping OpenGL calls and simplifying the process of talking to shaders and sending geometry to the GPU:
 
-    haskell code for drawing a cube and a textured cube
 ```haskell
 cube :: ShaderProgram -> M44 Double -> VertexBufferCommand () -> Rendering ()
 cube shader mv addColorComponent = do
