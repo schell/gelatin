@@ -1,6 +1,6 @@
 **gelatin** is a nice OpenGL drawing API inspired by Rasterific and diagrams. It wraps the Haskell OpenGL bindings with a pure declarative interface. It's very experimental and very much in flux, but there's always room for jello.
 
-*gelatin* includes an API for monadically constructing 2d drawings which is influenced by Rasterific. It aims to make drawing shapes with colors and textures pretty easy:
+Included is an API for monadically constructing 2d drawings which is influenced by Rasterific. It aims to make drawing shapes with colors and textures pretty easy:
 
 ```haskell
 boxes :: Rendering2d ()
@@ -22,22 +22,21 @@ boxes = do
                 fill box blue
 ```
 
-    image for boxes
+<img src="https://raw.githubusercontent.com/schell/gelatin/master/img/boxes.png" />
 
-
-However, the main focus of the library is wrapping the OpenGL API and simplifying the process of talking to shaders and sending geometry to the GPU:
+However, the main focus of the library is wrapping OpenGL calls and simplifying the process of talking to shaders and sending geometry to the GPU:
 
     haskell code for drawing a cube and a textured cube
 ```haskell
 cube :: ShaderProgram -> M44 Double -> VertexBufferCommand () -> Rendering ()
-cube shader mv addColor = do
+cube shader mv addColorComponent = do
     usingDepthFunc Less $ usingShader shader $ do
         setProjection pj
         setModelview mv
         withVertices cubeVertices $ drawIndexedTriangles cubeIndices 12
     where pj = perspective (pi/4) 1 0.1 10
           cubeVertices = do addComponent $ position cubePoints
-                            addColor
+                            addColorComponent
 
 cubes :: ShaderProgram -> ShaderProgram -> Rendering ()
 cubes colorShader textureShader = do
@@ -52,13 +51,13 @@ cubes colorShader textureShader = do
                     setWrapMode S Repeated Clamp
                     setWrapMode T Repeated Clamp
     -- Draw the cube with colors, translated left and slightly rotated.
-    cube colorShader leftmv $ addComponent $ color cubeColors
+    cube colorShader leftmv (addComponent $ color cubeColors)
     -- Draw the cube with a texture, translated right and slightly rotated.
     usingTexture Texture2D (Relative "img/quantum-foam.jpg") params $
-        cube textureShader ritemv $ addComponent $ texcoord cubeTexs
+        cube textureShader ritemv (addComponent $ texcoord cubeTexs)
 ```
     
-    image for cubes
+<img src="https://raw.githubusercontent.com/schell/gelatin/master/img/cubes.png" />
 
 For examples on how to set up your shaders and communicate with them see 
 `Gelatin.Shaders.Core`. Currently you have to define your vertex components by 
