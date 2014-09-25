@@ -1,3 +1,7 @@
+*.aux
+*.hs
+*.hp
+*.ps
 *.prof
 .DS_Store
 dist

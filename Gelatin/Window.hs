@@ -15,7 +15,10 @@ module Gelatin.Window (
     ienvWindowSizeLens,
     module GLFW,
     -- * Processing input events
-    foldInput
+    foldInput,
+    clearEvents,
+    -- * Querying input events
+    isLeftMouseDown
 ) where
 
 import Graphics.UI.GLFW as GLFW
@@ -26,11 +29,9 @@ import System.IO
 import qualified Data.Set as S
 
 -- TODO: Use SDL2 as another backend and abstract this stuff out.
-
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
-
 data InputEvent = NoInputEvent
                 | CharEvent Char
                 | WindowSizeEvent Int Int
@@ -58,6 +59,39 @@ makeLensesFor [("ienvEvents", "ienvEventsLens")
               ] ''InputEnv
 
 type WindowRef = IORef ([InputEvent], Window)
+--------------------------------------------------------------------------------
+-- Query input events.
+--------------------------------------------------------------------------------
+isLeftMouseDown :: InputEnv -> Bool
+isLeftMouseDown = S.member MouseButton'1 . ienvMouseButtonsDown
+--------------------------------------------------------------------------------
+-- Processing input events.
+--------------------------------------------------------------------------------
+emptyInputEnv :: InputEnv
+emptyInputEnv = InputEnv [] False (0,0) S.empty S.empty (V2 0 0)
+
+-- | Clear out all input events.
+clearEvents :: InputEnv -> InputEnv
+clearEvents = (& ienvEventsLens .~ [])
+
+-- | Take an input event and fold it into an input environment variable.
+foldInput :: InputEnv -> InputEvent -> InputEnv
+foldInput ienv e@(CursorMoveEvent x y) =
+    ienv & ienvLastCursorPosLens .~ (x,y)
+         & ienvEventsLens %~ (++ [e])
+foldInput ienv e@(CursorEnterEvent cs) =
+    ienv & ienvCursorOnScreenLens .~ (cs == CursorState'InWindow)
+         & ienvEventsLens %~ (++ [e])
+foldInput ienv e@(MouseButtonEvent mb MouseButtonState'Pressed _) =
+    ienv & (ienvMouseButtonsDownLens %~ S.insert mb)
+         & ienvEventsLens %~ (++ [e])
+foldInput ienv e@(MouseButtonEvent mb MouseButtonState'Released _) =
+    ienv & (ienvMouseButtonsDownLens %~ S.delete mb)
+         & ienvEventsLens %~ (++ [e])
+foldInput ienv e@(WindowSizeEvent w h) =
+    ienv & (ienvWindowSizeLens .~ V2 w h)
+         & ienvEventsLens %~ (++ [e])
+foldInput ienv e = ienv & ienvEventsLens %~ (++ [e])
 --------------------------------------------------------------------------------
 -- Creating a window.
 --------------------------------------------------------------------------------
@@ -118,27 +152,3 @@ input ref e@(WindowSizeEvent _ _) = do
 input ref e = do
     (es, w) <- readIORef ref
     writeIORef ref (es ++ [e], w)
---------------------------------------------------------------------------------
--- Processing input events.
---------------------------------------------------------------------------------
-emptyInputEnv :: InputEnv
-emptyInputEnv = InputEnv [] False (0,0) S.empty S.empty (V2 0 0)
-
--- | Take an input event and fold it into an input environment variable.
-foldInput :: InputEnv -> InputEvent -> InputEnv
-foldInput ienv e@(CursorMoveEvent x y) =
-    ienv & ienvLastCursorPosLens .~ (x,y)
-         & ienvEventsLens %~ (++ [e])
-foldInput ienv e@(CursorEnterEvent cs) =
-    ienv & ienvCursorOnScreenLens .~ (cs == CursorState'InWindow)
-         & ienvEventsLens %~ (++ [e])
-foldInput ienv e@(MouseButtonEvent mb MouseButtonState'Pressed _) =
-    ienv & (ienvMouseButtonsDownLens %~ S.insert mb)
-         & ienvEventsLens %~ (++ [e])
-foldInput ienv e@(MouseButtonEvent mb MouseButtonState'Released _) =
-    ienv & (ienvMouseButtonsDownLens %~ S.delete mb)
-         & ienvEventsLens %~ (++ [e])
-foldInput ienv e@(WindowSizeEvent w h) =
-    ienv & (ienvWindowSizeLens .~ V2 w h)
-         & ienvEventsLens %~ (++ [e])
-foldInput ienv e = ienv & ienvEventsLens %~ (++ [e])

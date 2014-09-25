@@ -2,6 +2,7 @@
 module Gelatin.Rendering.Two (
     Rendering2d,
     renderOnce2d,
+    clear,
     fill,
     gradient,
     fillTex,
@@ -22,11 +23,12 @@ import Gelatin.Rendering
 import Gelatin.Shaders
 import Gelatin.ShaderCommands
 import Gelatin.Compiling
+import Gelatin.Color
 import Control.Monad
 import Control.Monad.Free
 import Control.Monad.Free.Church
 import Graphics.GLUtil hiding (setUniform)
-import Graphics.Rendering.OpenGL hiding (Fill, translate, scale, rotate, ortho, position, color, drawArrays)
+import Graphics.Rendering.OpenGL hiding (Fill, translate, scale, rotate, ortho, position, color, drawArrays, Clear, clear)
 import Linear hiding (rotate)
 
 renderOnce2d :: Int -> Int -> Rendering2d () -> IO ()
@@ -41,6 +43,10 @@ renderOnce2d w h r = do
 --    withTexture (Relative "img/quantum-foam.jpg") $ fill (rectangle 0 0 100 100)
 -- What that does I'm not sure of yet.
 -- http://hackage.haskell.org/package/Rasterific-0.3/docs/Graphics-Rasterific-Texture.html
+
+clear :: Rendering2d ()
+clear = liftF $ Clear ()
+
 fill :: (Embedable v, Real a) => [v] -> V4 a -> Rendering2d ()
 fill vs c = liftF $ Fill vs c ()
 
@@ -91,6 +97,9 @@ mkRenderer2d (V2 w h) = do
 
 render2 :: Renderer2d -> Free TwoCommand () -> Rendering ()
 render2 _ (Pure ()) = return ()
+render2 r (Free (Clear n)) = do
+    clearColorWith (black :: V4 Float)
+    render2 r n
 render2 r (Free (WithTransform t d n)) = do
     let mv' = (twoModelview r) !*! (fmap (fmap realToFrac) $ mkM44 t)
     render2 (r{twoModelview = mv'}) $ fromF d
@@ -122,6 +131,7 @@ render2 r (Free (TexTris src vs uvs n)) = do
 -- Instances
 --------------------------------------------------------------------------------
 instance Functor TwoCommand where
+    fmap f (Clear n) = Clear $ f n
     fmap f (WithTransform t d n) = WithTransform t d $ f n
     fmap f (Fill c vs n) = Fill c vs $ f n
     fmap f (Gradient cs vs n) = Gradient cs vs $ f n
@@ -130,6 +140,7 @@ instance Functor TwoCommand where
 -- Types
 --------------------------------------------------------------------------------
 data TwoCommand next where
+    Clear :: next -> TwoCommand next
     WithTransform :: Transformation () -> Rendering2d () -> next -> TwoCommand next
     Fill :: (Embedable v, Real a) => [v] -> V4 a -> next -> TwoCommand next
     Gradient :: (Embedable v, Real a) => [v] -> [V4 a] -> next -> TwoCommand next

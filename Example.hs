@@ -4,22 +4,32 @@ import Gelatin
 import Control.Monad
 import Data.IORef
 import System.Exit
-import Data.Monoid
-
--- | TODO: Add a main renderer type that will hold textures loaded.
 
 cubePoints :: [V3 Double]
-cubePoints =
-    [ V3 (-0.5) ( 0.5) ( 0.5)
-    , V3 ( 0.5) ( 0.5) ( 0.5)
-    , V3 (-0.5) (-0.5) ( 0.5)
-    , V3 ( 0.5) (-0.5) ( 0.5)
+cubePoints = [ V3 (-0.5) ( 0.5) ( 0.5)
+             , V3 ( 0.5) ( 0.5) ( 0.5)
+             , V3 (-0.5) (-0.5) ( 0.5)
+             , V3 ( 0.5) (-0.5) ( 0.5)
+             , V3 (-0.5) ( 0.5) (-0.5)
+             , V3 ( 0.5) ( 0.5) (-0.5)
+             , V3 (-0.5) (-0.5) (-0.5)
+             , V3 ( 0.5) (-0.5) (-0.5)
+             ]
 
-    , V3 (-0.5) ( 0.5) (-0.5)
-    , V3 ( 0.5) ( 0.5) (-0.5)
-    , V3 (-0.5) (-0.5) (-0.5)
-    , V3 ( 0.5) (-0.5) (-0.5)
-    ]
+cubeIndices :: [Int]
+cubeIndices = [ 0, 2, 3 -- front
+              , 0, 1, 3
+              , 4, 0, 1 -- top
+              , 4, 5, 1
+              , 4, 6, 7 -- bock
+              , 4, 5, 7
+              , 6, 2, 3 -- bottom
+              , 6, 7, 3
+              , 0, 2, 6 -- left
+              , 0, 4, 6
+              , 1, 3, 7 -- right
+              , 1, 5, 7
+              ]
 
 cubeTexs :: [V2 Double]
 cubeTexs = face ++ face
@@ -33,20 +43,6 @@ cubeColors :: [V4 Double]
 cubeColors = map (up . fmap (+0.5)) cubePoints
     where up (V3 x y z) = V4 x y z 1
 
-cubeIndices :: [Int]
-cubeIndices = [ 0, 1, 3
-              , 0, 2, 3 -- front
-              , 4, 0, 1 -- top
-              , 4, 5, 1
-              , 4, 6, 7 -- bock
-              , 4, 5, 7
-              , 6, 2, 3 -- bottom
-              , 6, 7, 3
-              , 0, 2, 6 -- left
-              , 0, 4, 6
-              , 1, 3, 7 -- right
-              , 1, 5, 7
-              ]
 
 cube :: ShaderProgram -> M44 Double -> VertexBufferCommand () -> Rendering ()
 cube shader mv addColor = do
@@ -60,64 +56,72 @@ cube shader mv addColor = do
 
 boxes :: Rendering2d ()
 boxes = do
+    -- Clear the stage.
+    clear
+    -- Draw a rectangle with a texture as a background.
+    fillTex (Relative "img/quantum-foam.jpg")
+            -- 2d geometry
+            (rectangle (V2 0 0) (V2 600 480))
+            -- uv mapping
+            (rectangle (V2 0 0) (V2 1 1))
+    -- Draw a gradient box using red, green and blue.
+    -- The color definitions come from Gelatin.Color, which includes all
+    -- the familiar named colors from CSS :)
+    let box  = rectangle (V2 0 0) (V2 100 100)
+        grad = take 6 $ cycle [red, green, blue]
     gradient box grad
+    -- Translate (100,100) and draw a yellow box
     withPosition (V2 100 100) $ do
         fill box yellow
+        -- Translate again, scale down and draw some more.
         withPosition (V2 100 (-50)) $ withScale (V2 0.5 0.5) $ do
             fill box red
+            -- Scale down again and rotate and draw again.
             withScale (V2 0.5 0.5) $ withRotation (pi/4) $ do
                 fill box blue
-    where box  = rectangle (V2 0 0) (V2 100 100)
-          tbx  = rectangle (V2 0 0) (V2 1 1)
-          grad = take 6 $ cycle [red, green, blue]
 
-sceneRendering :: ShaderProgram -> ShaderProgram -> Rendering ()
-sceneRendering colorShader textureShader = do
+
+cubes :: ShaderProgram -> ShaderProgram -> Rendering ()
+cubes colorShader textureShader = do
     -- Clear the stage.
     clearDepth
     clearColorWith black
-    -- Draw a background using a texture.
-    usingTexture Texture2D (Relative "img/quantum-foam.jpg") params $
-        usingShader textureShader $ do
-            setProjection pj
-            setModelview eye4
-            setSampler 0
-            let vb = do addComponent $ position tr
-                        addComponent $ texcoord t
-            withVertices vb $ drawArrays Triangles $ length tr
-    clearDepth
+    let leftmv = mkM44 $ do translate $ V3 (-1) 0 (-5)
+                            rotate (pi/8) $ V3 1 0 0
+        ritemv = mkM44 $ do translate $ V3 1 0 (-5)
+                            rotate (pi/8) $ V3 1 0 0
+        params = do setFilter (Nearest, Nothing) Nearest
+                    setWrapMode S Repeated Clamp
+                    setWrapMode T Repeated Clamp
+    -- Draw the cube with colors, translated left and slightly rotated.
     cube colorShader leftmv $ addComponent $ color cubeColors
+    -- Draw the cube with a texture, translated right and slightly rotated.
     usingTexture Texture2D (Relative "img/quantum-foam.jpg") params $
         cube textureShader ritemv $ addComponent $ texcoord cubeTexs
-    where pj = ortho 0 600 0 600 0 1
-          t  = rectangle (V2 0 0) (V2 1 1)
-          tr = map embed (rectangle (V2 0 0) (V2 640 480) :: [V2 Double])
-          leftmv = mkM44 $ do translate $ V3 (-1) 0 (-5)
-                              rotate (pi/8) $ V3 1 0 0
-          ritemv = mkM44 $ do translate $ V3 1 0 (-5)
-                              rotate (pi/8) $ V3 1 0 0
-          params = do setFilter (Nearest, Nothing) Nearest
-                      setWrapMode S Repeated Clamp
-                      setWrapMode T Repeated Clamp
 
 main :: IO ()
 main = do
     wref  <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
     scs   <- simpleColorShader
     sts   <- simpleTextureShader
-    r1    <- compileRendering $ sceneRendering scs sts
+    r1    <- compileRendering $ cubes scs sts
     r2    <- compileRendering2d 600 600 boxes
 
-    let scene = r1 `mappend` r2
+    loop r1 r2 wref emptyInputEnv
 
-    forever $ do
-        pollEvents
-        (_, window) <- readIORef wref
-        writeIORef wref ([], window)
-        makeContextCurrent $ Just window
+loop :: CompiledRendering -> CompiledRendering -> WindowRef -> InputEnv -> IO ()
+loop r1 r2 wref env = do
+    pollEvents
+    (events, window) <- readIORef wref
+    let env' = foldl foldInput env events
+    writeIORef wref ([], window)
+    makeContextCurrent $ Just window
 
-        render scene
+    if isLeftMouseDown env'
+    then render r1
+    else render r2
 
-        swapBuffers window
-        shouldClose <- windowShouldClose window
-        when shouldClose exitSuccess
+    swapBuffers window
+    shouldClose <- windowShouldClose window
+    when shouldClose exitSuccess
+    loop r1 r2 wref $ clearEvents env'
