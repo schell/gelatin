@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 module Gelatin.Rendering.Two (
     Rendering2d,
+    renderOnce2d,
     fill,
     gradient,
     fillTex,
@@ -8,7 +9,7 @@ module Gelatin.Rendering.Two (
     withPosition,
     withScale,
     withRotation,
-    compileTwo,
+    compileRendering2d,
     mk2dRendering,
     mkRenderer2d,
     Renderer2d(..)
@@ -28,24 +29,11 @@ import Graphics.GLUtil hiding (setUniform)
 import Graphics.Rendering.OpenGL hiding (Fill, translate, scale, rotate, ortho, position, color, drawArrays)
 import Linear hiding (rotate)
 
---------------------------------------------------------------------------------
--- Types
---------------------------------------------------------------------------------
-data TwoCommand next where
-    WithTransform :: Transformation () -> Rendering2d () -> next -> TwoCommand next
-    Fill :: (Embedable v, Real a) => [v] -> V4 a -> next -> TwoCommand next
-    Gradient :: (Embedable v, Real a) => [v] -> [V4 a] -> next -> TwoCommand next
-    TexTris :: (Embedable v, Real a) => TextureSrc -> [v] -> [V2 a] -> next -> TwoCommand next
-
-type Rendering2d = F TwoCommand
---------------------------------------------------------------------------------
--- Instances
---------------------------------------------------------------------------------
-instance Functor TwoCommand where
-    fmap f (WithTransform t d n) = WithTransform t d $ f n
-    fmap f (Fill c vs n) = Fill c vs $ f n
-    fmap f (Gradient cs vs n) = Gradient cs vs $ f n
-    fmap f (TexTris t vs ts n) = TexTris t vs ts $ f n
+renderOnce2d :: Int -> Int -> Rendering2d () -> IO ()
+renderOnce2d w h r = do
+    r' <- compileRendering2d w h r
+    render r'
+    cleanup r'
 --------------------------------------------------------------------------------
 -- Building a Rendering2d
 --------------------------------------------------------------------------------
@@ -82,9 +70,9 @@ data Renderer2d = Renderer2d { twoColorShader :: ShaderProgram
                                , twoModelview :: M44 GLfloat
                                }
 
-compileTwo :: Integral i => V2 i -> Rendering2d () -> IO CompiledRendering
-compileTwo v two = do
-    r <- mkRenderer2d v
+compileRendering2d :: Integral i => i -> i -> Rendering2d () -> IO CompiledRendering
+compileRendering2d w h two = do
+    r <- mkRenderer2d $ V2 w h
     compileRendering $ mk2dRendering r two
 
 mk2dRendering :: Renderer2d -> Rendering2d () -> Rendering ()
@@ -130,3 +118,21 @@ render2 r (Free (TexTris src vs uvs n)) = do
             withVertices (addComponent vs' >> addComponent uvs') $
                 drawArrays Triangles $ length vs
     render2 r n
+--------------------------------------------------------------------------------
+-- Instances
+--------------------------------------------------------------------------------
+instance Functor TwoCommand where
+    fmap f (WithTransform t d n) = WithTransform t d $ f n
+    fmap f (Fill c vs n) = Fill c vs $ f n
+    fmap f (Gradient cs vs n) = Gradient cs vs $ f n
+    fmap f (TexTris t vs ts n) = TexTris t vs ts $ f n
+--------------------------------------------------------------------------------
+-- Types
+--------------------------------------------------------------------------------
+data TwoCommand next where
+    WithTransform :: Transformation () -> Rendering2d () -> next -> TwoCommand next
+    Fill :: (Embedable v, Real a) => [v] -> V4 a -> next -> TwoCommand next
+    Gradient :: (Embedable v, Real a) => [v] -> [V4 a] -> next -> TwoCommand next
+    TexTris :: (Embedable v, Real a) => TextureSrc -> [v] -> [V2 a] -> next -> TwoCommand next
+
+type Rendering2d = F TwoCommand

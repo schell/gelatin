@@ -12,10 +12,6 @@ module Gelatin.Rendering (
     clearColorWith,
     -- * For compiling
     Render(..),
-    CompiledRendering(..),
-    setRender,
-    setCleanup,
-    prefixRender,
 ) where
 
 import Gelatin.ShaderCommands
@@ -24,40 +20,7 @@ import Graphics.GLUtil
 import qualified Graphics.Rendering.OpenGL as GL
 import Control.Monad.Free.Church
 import Linear as L hiding (rotate)
-import Data.Monoid
 
---------------------------------------------------------------------------------
--- Types
---------------------------------------------------------------------------------
-data Render next where
-    SetViewport :: Integral a => a -> a -> a -> a -> next -> Render next
-    SetDepthFunc :: Maybe GL.ComparisonFunction -> next -> Render next
-    ClearDepth :: next -> Render next
-    ClearColorWith :: (Real a, Fractional a) => (V4 a) -> next -> Render next
-    UsingShader :: ShaderProgram -> (ShaderCommand ()) -> next -> Render next
-    UsingTextures :: ( GL.ParameterizedTextureTarget t
-                     , GL.BindableTextureTarget t
-                     )
-                  => t -> [TextureSrc] -> (TextureCommand ()) -> (Rendering ()) -> next -> Render next
-
-type Rendering = F Render
-data CompiledRendering = Compiled { render :: IO ()
-                                  , cleanup :: IO ()
-                                  }
---------------------------------------------------------------------------------
--- Instances
---------------------------------------------------------------------------------
-instance Functor Render where
-    fmap f (SetViewport l t w h next) = SetViewport l t w h $ f next
-    fmap f (SetDepthFunc mcf next) = SetDepthFunc mcf $ f next
-    fmap f (UsingShader p sc next) = UsingShader p sc $ f next
-    fmap f (UsingTextures t ts ccmd rcmd next) = UsingTextures t ts ccmd rcmd $ f next
-    fmap f (ClearColorWith c next) = ClearColorWith c $ f next
-    fmap f (ClearDepth next) = ClearDepth $ f next
-
-instance Monoid CompiledRendering where
-    mempty = Compiled (return ()) (return ())
-    (Compiled a b) `mappend` (Compiled c d) = Compiled (c >> a) (d >> b)
 --------------------------------------------------------------------------------
 -- User API
 --------------------------------------------------------------------------------
@@ -88,14 +51,39 @@ clearDepth = liftF $ ClearDepth ()
 
 clearColorWith :: (Real a, Fractional a) => V4 a -> Rendering ()
 clearColorWith v = liftF $ ClearColorWith v ()
---------------------------------------------------------------------------------
--- Help with compiling
---------------------------------------------------------------------------------
-setRender :: CompiledRendering -> IO () -> CompiledRendering
-setRender c io = c { render = io }
 
-setCleanup :: CompiledRendering -> IO () -> CompiledRendering
-setCleanup c io = c { cleanup = io }
 
-prefixRender :: IO () -> CompiledRendering -> CompiledRendering
-prefixRender io (Compiled io' c)  = Compiled (io >> io') c
+
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+-- Instances
+--------------------------------------------------------------------------------
+instance Functor Render where
+    fmap f (SetViewport l t w h next) = SetViewport l t w h $ f next
+    fmap f (SetDepthFunc mcf next) = SetDepthFunc mcf $ f next
+    fmap f (UsingShader p sc next) = UsingShader p sc $ f next
+    fmap f (UsingTextures t ts ccmd rcmd next) = UsingTextures t ts ccmd rcmd $ f next
+    fmap f (ClearColorWith c next) = ClearColorWith c $ f next
+    fmap f (ClearDepth next) = ClearDepth $ f next
+--------------------------------------------------------------------------------
+-- Types
+--------------------------------------------------------------------------------
+data Render next where
+    SetViewport :: Integral a => a -> a -> a -> a -> next -> Render next
+    SetDepthFunc :: Maybe GL.ComparisonFunction -> next -> Render next
+    ClearDepth :: next -> Render next
+    ClearColorWith :: (Real a, Fractional a) => (V4 a) -> next -> Render next
+    UsingShader :: ShaderProgram -> (ShaderCommand ()) -> next -> Render next
+    UsingTextures :: ( GL.ParameterizedTextureTarget t
+                     , GL.BindableTextureTarget t
+                     )
+                  => t -> [TextureSrc] -> (TextureCommand ()) -> (Rendering ()) -> next -> Render next
+
+type Rendering = F Render
