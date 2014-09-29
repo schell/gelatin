@@ -55,7 +55,7 @@ cube shader mv addColor = do
                             addColor
 
 boxes :: Rendering2d ()
-boxes = do
+boxes = withSize 600 600 $ do
     -- Clear the stage.
     clear
     -- Draw a rectangle with a texture as a background.
@@ -105,7 +105,7 @@ main = do
     scs   <- simpleColorShader
     sts   <- simpleTextureShader
     r1    <- compileRendering $ cubes scs sts
-    r2    <- compileRendering2d 600 600 boxes
+    r2    <- compileRendering2d boxes
 
     loop r1 r2 wref emptyInputEnv
 

@@ -78,20 +78,20 @@ clearEvents = (& ienvEventsLens .~ [])
 foldInput :: InputEnv -> InputEvent -> InputEnv
 foldInput ienv e@(CursorMoveEvent x y) =
     ienv & ienvLastCursorPosLens .~ (x,y)
-         & ienvEventsLens %~ (++ [e])
+         & ienvEventsLens %~ (e:)
 foldInput ienv e@(CursorEnterEvent cs) =
     ienv & ienvCursorOnScreenLens .~ (cs == CursorState'InWindow)
-         & ienvEventsLens %~ (++ [e])
+         & ienvEventsLens %~ (e:)
 foldInput ienv e@(MouseButtonEvent mb MouseButtonState'Pressed _) =
     ienv & (ienvMouseButtonsDownLens %~ S.insert mb)
-         & ienvEventsLens %~ (++ [e])
+         & ienvEventsLens %~ (e:)
 foldInput ienv e@(MouseButtonEvent mb MouseButtonState'Released _) =
     ienv & (ienvMouseButtonsDownLens %~ S.delete mb)
-         & ienvEventsLens %~ (++ [e])
+         & ienvEventsLens %~ (e:)
 foldInput ienv e@(WindowSizeEvent w h) =
     ienv & (ienvWindowSizeLens .~ V2 w h)
-         & ienvEventsLens %~ (++ [e])
-foldInput ienv e = ienv & ienvEventsLens %~ (++ [e])
+         & ienvEventsLens %~ (e:)
+foldInput ienv e = ienv & ienvEventsLens %~ (e:)
 --------------------------------------------------------------------------------
 -- Creating a window.
 --------------------------------------------------------------------------------
@@ -143,12 +143,4 @@ makeNewWindow pos size title = do
 
 -- | Inject some input into a WindowRef.
 input :: WindowRef -> InputEvent -> IO ()
-input ref e@(WindowSizeEvent _ _) = do
-    (es, w) <- readIORef ref
-    let es' = filter noWindowEvs es
-        noWindowEvs (WindowSizeEvent _ _) = False
-        noWindowEvs _                     = True
-    writeIORef ref (es' ++ [e], w)
-input ref e = do
-    (es, w) <- readIORef ref
-    writeIORef ref (es ++ [e], w)
+input ref e = modifyIORef' ref (\(es,w) -> (e:es,w))
