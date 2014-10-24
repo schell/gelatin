@@ -4,25 +4,17 @@ import Linear
 import Control.Lens
 import Gelatin.Geometry.Types
 
+-- | The dirtiest O(n^3) ear clipping I could write.
 clipEars :: (Ord a, Fractional a) => [V2 a] -> [Triangle a]
 clipEars = clipEars' []
-
-clipEars' :: (Ord a, Fractional a) => [Triangle a] -> [V2 a] -> [Triangle a]
-clipEars' ts ps'
-    | (p1:p2:p3:[]) <- ps' = (p1,p2,p3):ts
-    | (p1:p2:p3:ps) <- ps' =
-        if any (pathHasPoint [p1,p2,p3]) ps
-          -- Cycle through and check the next triangle
-          then clipEars' ts $ p2:p3:ps ++ [p1]
-          else clipEars' ((p1,p2,p3):ts) $ p1:p3:ps
-    | otherwise = ts
-
--- | Takes a triangle and tries to clip it from the given polygon.
--- If the triangle can be clipped it is returned in a list for convenience.
-clipTriangle :: (Ord a, Fractional a) => Triangle a -> [V2 a] -> [Triangle a]
-clipTriangle (a,b,c) ps = if any (pathHasPoint [a,b,c]) ps
-                          then []
-                          else [(a,b,c)]
+    where clipEars' ts ps'
+              | (p1:p2:p3:[]) <- ps' = (p1,p2,p3):ts
+              | (p1:p2:p3:ps) <- ps' =
+                  if any (pathHasPoint [p1,p2,p3]) ps
+                    -- Cycle through and check the next triangle
+                    then clipEars' ts $ p2:p3:ps ++ [p1]
+                    else clipEars' ((p1,p2,p3):ts) $ p1:p3:ps
+              | otherwise = ts
 
 -- | Determine if a point lies within a polygon path using the even/odd
 -- rule.
