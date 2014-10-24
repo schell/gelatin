@@ -59,10 +59,10 @@ gradient vs cs = liftF $ Gradient vs cs ()
 fillTex :: (Embedable v, Real a) => TextureSrc -> [v] -> [V2 a] -> Rendering2d ()
 fillTex t vs ts = liftF $ TexTris t vs ts ()
 
-fillPrimitives :: Real a => V4 a -> [Primitive a] -> Rendering2d ()
+fillPrimitives :: (Real a, Fractional a) => V4 a -> [Primitive a] -> Rendering2d ()
 fillPrimitives c ts = liftF $ FillPrimitives c ts ()
 
-outlinePrimitives :: Real a => V4 a -> [Primitive a] -> Rendering2d ()
+outlinePrimitives :: (Real a, Fractional a) => V4 a -> [Primitive a] -> Rendering2d ()
 outlinePrimitives c ps = liftF $ OutlinePrimitives c ps ()
 
 withSize :: Int -> Int -> Rendering2d () -> Rendering2d ()
@@ -142,38 +142,39 @@ render2 r (Free (TexTris src vs uvs n)) = do
                 drawArrays Triangles $ length vs
     render2 r n
 
-render2 r (Free (FillPrimitives clr ps n)) = do
-    let pgs  = collatePrimitives ps
-        tris = map embed $ concatMap (\(a,b,c) -> [a,b,c]) $ pgsTriangles pgs
-        tcs  = color $ replicate (length tris) clr
-        lns  = map embed $ concatMap (\(a,b) -> [a,b]) $ pgsLines pgs
-        lcs  = color $ replicate (length lns) clr
-    usingShader (twoColorShader r) $ do
-        setModelview $ twoModelview r
-        withVertices (addComponent (position tris) >> addComponent tcs) $
-            drawArrays Triangles $ length tris
-        withVertices (addComponent (position lns) >> addComponent lcs) $
-            drawArrays Lines $ length lns
+render2 r (Free (FillPrimitives clr ps n)) = forM_ ps $ \prim -> do
+    case prim of
+        PrimPoly p -> fills r clr $ clipEars p
+        PrimTri t  -> fills r clr [t]
+        -- Filling a line is the same as outlining a line, since a line has
+        -- no width.
+        PrimLine l -> outlines r clr [l]
     render2 r n
 
 render2 r (Free (OutlinePrimitives clr ps n)) = do
-    let lns  = concatMap primitiveToLines ps
-        lns' = map embed $ concatMap (\(a,b) -> [a,b]) $ lns
-        lcs  = color $ replicate (length lns) clr
-    usingShader (twoColorShader r) $ do
-        setModelview $ twoModelview r
-        withVertices (addComponent (position lns') >> addComponent lcs) $
-            drawArrays Lines $ length lns
+    mapM_ (outlines r clr . primitiveToLines) ps
     render2 r n
-
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
--- | Separates primitives by type.
-collatePrimitives :: [Primitive a] -> PrimitiveGroups a
-collatePrimitives = foldl addPrim (PrimitiveGroups [] [])
-    where addPrim (PrimitiveGroups ts ls) (PrimTri t) = PrimitiveGroups (t:ts) ls
-          addPrim (PrimitiveGroups ts ls) (PrimLine l) = PrimitiveGroups ts (l:ls)
+-- | Outline a list of lines.
+outlines :: Real a => Renderer2d -> V4 a -> [Line a] -> Rendering ()
+outlines r clr lns = do
+    let lns' = map embed $ concatMap (\(a,b) -> [a,b]) lns
+        cs   = color $ replicate (length lns') clr
+    usingShader (twoColorShader r) $ do
+        setModelview $ twoModelview r
+        withVertices (addComponent (position lns') >> addComponent cs) $
+            drawArrays Lines $ length lns'
+-- | Fill a bunch of triangles.
+fills :: Real a => Renderer2d -> V4 a -> [Triangle a] -> Rendering ()
+fills r clr tris = do
+    let tris' = map embed $ concatMap (\(a,b,c) -> [a,b,c]) tris
+        cs   = color $ replicate (length tris') clr
+    usingShader (twoColorShader r) $ do
+       setModelview $ twoModelview r
+       withVertices (addComponent (position tris') >> addComponent cs) $
+           drawArrays Triangles $ length tris'
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
@@ -196,8 +197,8 @@ data TwoCommand next where
     Fill :: (Embedable v, Real a) => [v] -> V4 a -> next -> TwoCommand next
     Gradient :: (Embedable v, Real a) => [v] -> [V4 a] -> next -> TwoCommand next
     TexTris :: (Embedable v, Real a) => TextureSrc -> [v] -> [V2 a] -> next -> TwoCommand next
-    FillPrimitives :: Real a => V4 a -> [Primitive a] -> next -> TwoCommand next
-    OutlinePrimitives :: Real a => V4 a -> [Primitive a] -> next -> TwoCommand next
+    FillPrimitives :: (Real a, Fractional a) => V4 a -> [Primitive a] -> next -> TwoCommand next
+    OutlinePrimitives :: (Real a, Fractional a) => V4 a -> [Primitive a] -> next -> TwoCommand next
 
 type Rendering2d = F TwoCommand
 

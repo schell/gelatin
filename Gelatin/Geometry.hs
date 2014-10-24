@@ -1,15 +1,19 @@
 {-# LANGUAGE GADTs #-}
 module Gelatin.Geometry (
-    Primitive(..),
+
     Embedable,
-    toLines,
-    toTriangles,
-    triangleToLines,
-    primitiveToLines,
     embed,
     embedWith,
+
+    Primitive(..),
+    toLines,
+    triangleToLines,
+    primitiveToLines,
     rectangle,
+    polygon,
+
     deCasteljau,
+
     module G
 ) where
 
@@ -36,8 +40,9 @@ instance Real a => Embedable (V3 a) where
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
-data Primitive a = PrimTri (Triangle a)
-                 | PrimLine (Line a)
+data Primitive a = PrimLine { primLine :: Line a }
+                 | PrimTri { primTri :: Triangle a }
+                 | PrimPoly { primPoly :: Polygon a }
                  deriving (Show)
 --------------------------------------------------------------------------------
 -- API
@@ -59,23 +64,30 @@ rectangle (V2 x y) w h = [ tl, tr, br, bl ]
           bl = V2 x (y+h)
           br = V2 (x+w) (y+h)
 
--- | Turns a polygon into a list of line primitives.
-toLines :: Polygon a -> [Primitive a]
-toLines [] = []
-toLines [_] = []
-toLines (p1:p2:ps) = PrimLine (p1,p2) : toLines (p2:ps)
+-- | Checks whether the last point is a duplicate of the first and removes it
+-- if so.
+polygon :: Eq a => [V2 a] -> [V2 a]
+polygon [] = []
+polygon ps'@(p':_) = poly [] ps'
+    where poly ps [] = ps
+          poly ps (p:[]) = if p' == p then ps else ps ++ [p]
+          poly ps (p:ns) = poly (ps ++ [p]) ns
 
--- | Turns a polygon into a list of triangle primitives.
--- Uses a dirty ear-clipping triangulation.
-toTriangles :: (Ord a, Fractional a) => Polygon a -> [Primitive a]
-toTriangles = map PrimTri . clipEars
+-- | Turns a polygon into a list of line primitives.
+toLines :: Eq a => Polygon a -> [Line a]
+toLines [] = []
+toLines ps'@(p':_) = toLines' $ polygon ps'
+    where toLines' [] = []
+          toLines' [p] = (p,p'):[]
+          toLines' (p1:p2:ps) = (p1,p2) : toLines' (p2:ps)
 
 -- | Turns a list of triangles into a list of lines.
 triangleToLines :: Triangle a -> [Line a]
 triangleToLines (a,b,c) = [(a,b), (b,c), (c,a)]
 
 -- | Converts any primitive to a list of lines.
-primitiveToLines :: Primitive a -> [Line a]
+primitiveToLines :: Eq a => Primitive a -> [Line a]
+primitiveToLines (PrimPoly p) = toLines p
 primitiveToLines (PrimLine l) = [l]
 primitiveToLines (PrimTri t) = triangleToLines t
 --------------------------------------------------------------------------------

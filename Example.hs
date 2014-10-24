@@ -106,14 +106,14 @@ main = do
     rdr   <- mkRenderer2d
     r1    <- compileRendering $ cubes (twoColorShader rdr) (twoTextureShader rdr)
     r2    <- compileRendering $ mk2dRendering rdr $ withSize 600 600 $ withPosition (V2 100 100) $ do
-                 let poly = [ V2 0 0, V2 400 10, V2 250 300, V2 200 100, V2 25 25]
-                     tris = toTriangles poly :: [Primitive Double]
-                     lins = toLines poly
+                 let ps   = [ V2 0 0, V2 400 10, V2 250 300, V2 200 100, V2 25 45]
+                     poly = PrimPoly ps
+                     tris = map PrimTri $ clipEars ps
                  clear
-                 fillPrimitives (hex 0x333333FF) tris
+                 fillPrimitives (hex 0x333333FF) [poly]
                  withPosition (V2 10 10) $ do
-                     outlinePrimitives skyBlue lins
-                     withPosition (V2 10 10) $ outlinePrimitives white tris
+                     outlinePrimitives white tris
+                     withPosition (V2 10 10) $ outlinePrimitives skyBlue [poly]
 
 --    r2    <- compileRendering2d boxes
 
