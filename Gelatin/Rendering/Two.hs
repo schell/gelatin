@@ -6,6 +6,8 @@ module Gelatin.Rendering.Two (
     fill,
     gradient,
     fillTex,
+    fillPrimitives,
+    outlinePrimitives,
     withSize,
     withTransform,
     withPosition,
@@ -29,7 +31,7 @@ import Control.Monad
 import Control.Monad.Free
 import Control.Monad.Free.Church
 import Graphics.GLUtil hiding (setUniform)
-import Graphics.Rendering.OpenGL hiding (Fill, translate, scale, rotate, ortho, position, color, drawArrays, Clear, clear)
+import Graphics.Rendering.OpenGL hiding (Triangle, Primitive, Fill, translate, scale, rotate, ortho, position, color, drawArrays, Clear, clear)
 import Linear hiding (rotate)
 
 renderOnce2d :: Rendering2d () -> IO ()
@@ -56,6 +58,12 @@ gradient vs cs = liftF $ Gradient vs cs ()
 
 fillTex :: (Embedable v, Real a) => TextureSrc -> [v] -> [V2 a] -> Rendering2d ()
 fillTex t vs ts = liftF $ TexTris t vs ts ()
+
+fillPrimitives :: Real a => V4 a -> [Primitive a] -> Rendering2d ()
+fillPrimitives c ts = liftF $ FillPrimitives c ts ()
+
+outlinePrimitives :: Real a => V4 a -> [Primitive a] -> Rendering2d ()
+outlinePrimitives c ps = liftF $ OutlinePrimitives c ps ()
 
 withSize :: Int -> Int -> Rendering2d () -> Rendering2d ()
 withSize w h r = liftF $ Size2d w h r ()
@@ -133,6 +141,39 @@ render2 r (Free (TexTris src vs uvs n)) = do
             withVertices (addComponent vs' >> addComponent uvs') $
                 drawArrays Triangles $ length vs
     render2 r n
+
+render2 r (Free (FillPrimitives clr ps n)) = do
+    let pgs  = collatePrimitives ps
+        tris = map embed $ concatMap (\(a,b,c) -> [a,b,c]) $ pgsTriangles pgs
+        tcs  = color $ replicate (length tris) clr
+        lns  = map embed $ concatMap (\(a,b) -> [a,b]) $ pgsLines pgs
+        lcs  = color $ replicate (length lns) clr
+    usingShader (twoColorShader r) $ do
+        setModelview $ twoModelview r
+        withVertices (addComponent (position tris) >> addComponent tcs) $
+            drawArrays Triangles $ length tris
+        withVertices (addComponent (position lns) >> addComponent lcs) $
+            drawArrays Lines $ length lns
+    render2 r n
+
+render2 r (Free (OutlinePrimitives clr ps n)) = do
+    let lns  = concatMap primitiveToLines ps
+        lns' = map embed $ concatMap (\(a,b) -> [a,b]) $ lns
+        lcs  = color $ replicate (length lns) clr
+    usingShader (twoColorShader r) $ do
+        setModelview $ twoModelview r
+        withVertices (addComponent (position lns') >> addComponent lcs) $
+            drawArrays Lines $ length lns
+    render2 r n
+
+--------------------------------------------------------------------------------
+-- Helpers
+--------------------------------------------------------------------------------
+-- | Separates primitives by type.
+collatePrimitives :: [Primitive a] -> PrimitiveGroups a
+collatePrimitives = foldl addPrim (PrimitiveGroups [] [])
+    where addPrim (PrimitiveGroups ts ls) (PrimTri t) = PrimitiveGroups (t:ts) ls
+          addPrim (PrimitiveGroups ts ls) (PrimLine l) = PrimitiveGroups ts (l:ls)
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
@@ -143,6 +184,8 @@ instance Functor TwoCommand where
     fmap f (Fill c vs n) = Fill c vs $ f n
     fmap f (Gradient cs vs n) = Gradient cs vs $ f n
     fmap f (TexTris t vs ts n) = TexTris t vs ts $ f n
+    fmap f (FillPrimitives c ps n) = FillPrimitives c ps $ f n
+    fmap f (OutlinePrimitives c ps n) = OutlinePrimitives c ps $ f n
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
@@ -153,5 +196,11 @@ data TwoCommand next where
     Fill :: (Embedable v, Real a) => [v] -> V4 a -> next -> TwoCommand next
     Gradient :: (Embedable v, Real a) => [v] -> [V4 a] -> next -> TwoCommand next
     TexTris :: (Embedable v, Real a) => TextureSrc -> [v] -> [V2 a] -> next -> TwoCommand next
+    FillPrimitives :: Real a => V4 a -> [Primitive a] -> next -> TwoCommand next
+    OutlinePrimitives :: Real a => V4 a -> [Primitive a] -> next -> TwoCommand next
 
 type Rendering2d = F TwoCommand
+
+data PrimitiveGroups a = PrimitiveGroups { pgsTriangles :: [Triangle a]
+                                         , pgsLines :: [Line a]
+                                         }

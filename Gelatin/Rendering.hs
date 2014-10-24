@@ -2,6 +2,7 @@
 module Gelatin.Rendering (
     -- * User API
     Rendering,
+    traceLn,
     setViewport,
     setDepthFunc,
     usingDepthFunc,
@@ -52,20 +53,13 @@ clearDepth = liftF $ ClearDepth ()
 clearColorWith :: (Real a, Fractional a) => V4 a -> Rendering ()
 clearColorWith v = liftF $ ClearColorWith v ()
 
-
-
-
-
-
-
-
-
-
-
+traceLn :: String -> Rendering ()
+traceLn str = liftF $ TraceLn str ()
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
 instance Functor Render where
+    fmap f (TraceLn s n) = TraceLn s $ f n
     fmap f (SetViewport l t w h next) = SetViewport l t w h $ f next
     fmap f (SetDepthFunc mcf next) = SetDepthFunc mcf $ f next
     fmap f (UsingShader p sc next) = UsingShader p sc $ f next
@@ -76,6 +70,7 @@ instance Functor Render where
 -- Types
 --------------------------------------------------------------------------------
 data Render next where
+    TraceLn :: String -> next -> Render next
     SetViewport :: Integral a => a -> a -> a -> a -> next -> Render next
     SetDepthFunc :: Maybe GL.ComparisonFunction -> next -> Render next
     ClearDepth :: next -> Render next

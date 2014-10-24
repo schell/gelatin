@@ -1,6 +1,8 @@
 module Gelatin.Color where
 
 import Linear
+import Data.Bits
+import Data.Word
 
 maroon :: (Num a, Fractional a) => V4 a
 maroon = V4 (128/255) (0/255) (0/255) 1
@@ -430,3 +432,10 @@ transparent = V4 0 0 0 0
 
 alpha :: (Num a, Fractional a) => V4 a -> a -> V4 a
 alpha (V4 r g b _) a = V4 r g b a
+
+hex :: (Num b, Fractional b) => Int -> V4 b
+hex n = fmap ((/255) . fromIntegral) $ V4 r g b a
+    where r = n `shiftR` 24
+          g = n `shiftR` 16 .&. 0xFF
+          b = n `shiftR` 8 .&. 0xFF
+          a = n .&. 0xFF

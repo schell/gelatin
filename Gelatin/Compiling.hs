@@ -120,6 +120,9 @@ compileTextureCommand t (Free (SetWrapMode c rp clamp n)) = do
 
 compileRenderCommand :: Free Render () -> IO CompiledRendering
 compileRenderCommand (Pure ()) = return mempty
+compileRenderCommand (Free (TraceLn s n)) = do
+    putStrLn s
+    compileRenderCommand n
 compileRenderCommand (Free (SetViewport x y w h n)) = do
     let [x', y', w', h'] = map fromIntegral [x, y, w, h]
     nxt <- compileRenderCommand n

@@ -17,8 +17,30 @@ import Gelatin.ShaderCommands as G
 import Gelatin.TextureCommands as G
 import Gelatin.Compiling as G
 
-import Graphics.Rendering.OpenGL as OpenGL hiding (normalize, clearDepth, VertexComponent, Fill, translate, scale, rotate, ortho, perspective, position, color, drawArrays, drawElements, ShaderType, Error, uniform, clear, Clear)
+import Graphics.Rendering.OpenGL as OpenGL hiding (
+    Primitive,
+    normalize,
+    clearDepth,
+    VertexComponent,
+    Fill,
+    translate,
+    scale,
+    rotate,
+    ortho,
+    perspective,
+    position,
+    color,
+    drawArrays,
+    drawElements,
+    ShaderType,
+    Error,
+    uniform,
+    clear,
+    Clear,
+    Polygon,
+    Triangle,
+    Point)
 
-import Linear as Linear hiding (rotate)
+import Linear as Linear hiding (rotate, trace)
 
 import Graphics.GLUtil as GLUtil hiding (setUniform)

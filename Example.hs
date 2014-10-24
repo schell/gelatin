@@ -4,6 +4,7 @@ import Gelatin
 import Control.Monad
 import Data.IORef
 import System.Exit
+import Debug.Trace
 
 cubePoints :: [V3 Double]
 cubePoints = [ V3 (-0.5) ( 0.5) ( 0.5)
@@ -54,31 +55,31 @@ cube shader mv addColor = do
           cubeVertices = do addComponent $ position cubePoints
                             addColor
 
-boxes :: Rendering2d ()
-boxes = withSize 600 600 $ do
-    -- Clear the stage.
-    clear
-    -- Draw a rectangle with a texture as a background.
-    fillTex (Relative "img/quantum-foam.jpg")
-            -- 2d geometry
-            (rectangle (V2 0 0) (V2 600 480))
-            -- uv mapping
-            (rectangle (V2 0 0) (V2 1 1))
-    -- Draw a gradient box using red, green and blue.
-    -- The color definitions come from Gelatin.Color, which includes all
-    -- the familiar named colors from CSS :)
-    let box  = rectangle (V2 0 0) (V2 100 100)
-        grad = take 6 $ cycle [red, green, blue]
-    gradient box grad
-    -- Translate (100,100) and draw a yellow box
-    withPosition (V2 100 100) $ do
-        fill box yellow
-        -- Translate again, scale down and draw some more.
-        withPosition (V2 100 (-50)) $ withScale (V2 0.5 0.5) $ do
-            fill box red
-            -- Scale down again and rotate and draw again.
-            withScale (V2 0.5 0.5) $ withRotation (pi/4) $ do
-                fill box blue
+--boxes :: Rendering2d ()
+--boxes = withSize 600 600 $ do
+--    -- Clear the stage.
+--    clear
+--    -- Draw a rectangle with a texture as a background.
+--    fillTex (Relative "img/quantum-foam.jpg")
+--            -- 2d geometry
+--            (rectangle (V2 0 0) (V2 600 480))
+--            -- uv mapping
+--            (rectangle (V2 0 0) (V2 1 1))
+--    -- Draw a gradient box using red, green and blue.
+--    -- The color definitions come from Gelatin.Color, which includes all
+--    -- the familiar named colors from CSS :)
+--    let box  = rectangle (V2 0 0) (V2 100 100)
+--        grad = take 6 $ cycle [red, green, blue]
+--    gradient box grad
+--    -- Translate (100,100) and draw a yellow box
+--    withPosition (V2 100 100) $ do
+--        fill box yellow
+--        -- Translate again, scale down and draw some more.
+--        withPosition (V2 100 (-50)) $ withScale (V2 0.5 0.5) $ do
+--            fill box red
+--            -- Scale down again and rotate and draw again.
+--            withScale (V2 0.5 0.5) $ withRotation (pi/4) $ do
+--                fill box blue
 
 
 cubes :: ShaderProgram -> ShaderProgram -> Rendering ()
@@ -102,12 +103,27 @@ cubes colorShader textureShader = do
 main :: IO ()
 main = do
     wref  <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
-    scs   <- simpleColorShader
-    sts   <- simpleTextureShader
-    r1    <- compileRendering $ cubes scs sts
-    r2    <- compileRendering2d boxes
+    rdr   <- mkRenderer2d
+    r1    <- compileRendering $ cubes (twoColorShader rdr) (twoTextureShader rdr)
+    r2    <- compileRendering $ mk2dRendering rdr $ withSize 600 600 $ withPosition (V2 100 100) $ do
+                 let poly = [ V2 0 0, V2 400 10, V2 250 300, V2 200 100, V2 25 25]
+                     tris = toTriangles poly :: [Primitive Double]
+                     lins = toLines poly
+                 clear
+                 fillPrimitives (hex 0x333333FF) tris
+                 withPosition (V2 10 10) $ do
+                     outlinePrimitives skyBlue lins
+                     withPosition (V2 10 10) $ outlinePrimitives white tris
+
+--    r2    <- compileRendering2d boxes
 
     loop r1 r2 wref emptyInputEnv
+
+beziers = [ [V3 0 0 0, V3 100 0 0, V3 100 100 0]
+          , [V3 100 100 0, V3 0 100 0, V3 0 0 0]
+          ]
+paths = map (\bz -> [ deCasteljau t bz | t <- [0,0.5,1] ]) beziers
+path = concat paths
 
 loop :: CompiledRendering -> CompiledRendering -> WindowRef -> InputEnv -> IO ()
 loop r1 r2 wref env = do

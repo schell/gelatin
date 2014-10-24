@@ -34,6 +34,7 @@ data ShaderOp next where
 type VertexBufferCommand = F VertexBufferOp
 type DrawElementsCommand = F DrawElements
 type ShaderCommand = F ShaderOp
+
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
