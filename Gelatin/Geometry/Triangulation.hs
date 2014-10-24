@@ -24,14 +24,6 @@ clipTriangle (a,b,c) ps = if any (pathHasPoint [a,b,c]) ps
                           then []
                           else [(a,b,c)]
 
-safeHead :: [a] -> [a]
-safeHead [] = []
-safeHead (a:_) = [a]
-
-safeTail :: [a] -> [a]
-safeTail [] = []
-safeTail (_:as) = as
-
 -- | Determine if a point lies within a polygon path using the even/odd
 -- rule.
 pathHasPoint :: (Ord a, Fractional a) => [V2 a] -> V2 a -> Bool
