@@ -108,21 +108,23 @@ main = do
     r2    <- compileRendering $ mk2dRendering rdr $ withSize 600 600 $ withPosition (V2 100 100) $ do
                  let ps   = [ V2 0 0, V2 400 10, V2 250 300, V2 200 100, V2 25 45]
                      poly = PrimPoly ps
-                     tris = map PrimTri $ clipEars ps
                  clear
-                 fillPrimitives (hex 0x333333FF) [poly]
-                 withPosition (V2 10 10) $ do
-                     outlinePrimitives white tris
-                     withPosition (V2 10 10) $ outlinePrimitives skyBlue [poly]
+                 -- Polygon with triangulation shown
+                 fillPrimitives (hex 0x319456FF) [poly]
+                 outlinePrimitives black $ map PrimTri $ clipEars ps
+                 -- Beziers with triangulation shown
+                 withPosition (V2 0 100) $ do
+                     fillPrimitives (hex 0x2E6980FF) $ [PrimPoly path]
+                     outlinePrimitives black $ map PrimTri $ clipEars path
 
 --    r2    <- compileRendering2d boxes
 
     loop r1 r2 wref emptyInputEnv
 
-beziers = [ [V3 0 0 0, V3 100 0 0, V3 100 100 0]
-          , [V3 100 100 0, V3 0 100 0, V3 0 0 0]
+beziers = [ [V2 0 0, V2 100 0, V2 100 100]
+          , [V2 100 100, V2 0 100, V2 0 0]
           ]
-paths = map (\bz -> [ deCasteljau t bz | t <- [0,0.5,1] ]) beziers
+paths = map (\bz -> [ deCasteljau t bz | t <- [0,0.1 .. 1] ]) beziers
 path = concat paths
 
 loop :: CompiledRendering -> CompiledRendering -> WindowRef -> InputEnv -> IO ()

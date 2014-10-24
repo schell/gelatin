@@ -94,7 +94,7 @@ primitiveToLines (PrimTri t) = triangleToLines t
 -- Helpers
 --------------------------------------------------------------------------------
 -- | Compute the point at `t` along an N-bezier curve.
-deCasteljau :: (Fractional a, Num a) => a -> [V3 a] -> V3 a
+deCasteljau :: (Fractional a, Num a) => a -> [V2 a] -> V2 a
 deCasteljau _ [b] = b
 deCasteljau t coefs = deCasteljau t reduced
   where
