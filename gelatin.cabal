@@ -23,17 +23,20 @@ source-repository head
 
 library
   exposed-modules:
-                       Gelatin.Rendering.Two,
+                       Gelatin.Core.ShaderCommands,
+                       Gelatin.Core.Texture,
+                       Gelatin.Core.TextureCommands,
+                       Gelatin.Core.Types,
+                       Gelatin.Core,
+                       Gelatin.Geometry,
                        Gelatin.Shaders.Core,
                        Gelatin.Shaders.SimpleColorShader,
                        Gelatin.Shaders.SimpleTextureShader,
-                       Gelatin.Color,
-                       Gelatin.Compiling,
-                       Gelatin.Geometry,
-                       Gelatin.Rendering,
-                       Gelatin.ShaderCommands,
                        Gelatin.Shaders,
-                       Gelatin.TextureCommands,
+                       Gelatin.Color,
+                       Gelatin.Two.Compiling,
+                       Gelatin.Two.Types,
+                       Gelatin.Two,
                        Gelatin.Transform,
                        Gelatin.Window,
                        Gelatin
@@ -42,6 +45,7 @@ library
 
   build-depends:       base >=4.7 && <4.8,
                        containers -any,
+                       semigroups -any,
                        lens -any,
                        directory -any,
                        filepath -any,
@@ -63,6 +67,7 @@ executable example
   main-is:             Example.hs
   build-depends:       base >=4.6 && <5.0,
                        gelatin -any,
+                       semigroups -any,
                        mtl -any,
                        directory -any,
                        filepath -any,

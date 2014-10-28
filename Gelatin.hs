@@ -5,24 +5,19 @@ module Gelatin (
     module GLUtil
 ) where
 
+import Gelatin.Core as G
 import Gelatin.Transform as G
-import Gelatin.Rendering.Two as G
+import Gelatin.Two as G
 import Gelatin.Shaders.Parser as G
 import Gelatin.Color as G
 import Gelatin.Geometry as G
-import Gelatin.Rendering as G
 import Gelatin.Shaders as G
 import Gelatin.Window as G
-import Gelatin.ShaderCommands as G
-import Gelatin.TextureCommands as G
-import Gelatin.Compiling as G
+import Gelatin.Core.ShaderCommands as G
+import Gelatin.Core.TextureCommands as G
+import Gelatin.Core.Compiling as G
 
 import Graphics.Rendering.OpenGL as OpenGL hiding (
-    Primitive,
-    normalize,
-    clearDepth,
-    VertexComponent,
-    Fill,
     translate,
     scale,
     rotate,
@@ -32,14 +27,23 @@ import Graphics.Rendering.OpenGL as OpenGL hiding (
     color,
     drawArrays,
     drawElements,
-    ShaderType,
-    Error,
     uniform,
     clear,
+    normalize,
+    clearDepth,
+    texture,
+
+    Primitive,
+    Color,
+    VertexComponent,
+    Fill,
+    ShaderType,
+    Error,
     Clear,
     Polygon,
     Triangle,
-    Point)
+    Point,
+    Line)
 
 import Linear as Linear hiding (rotate, trace)
 

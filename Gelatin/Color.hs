@@ -2,7 +2,6 @@ module Gelatin.Color where
 
 import Linear
 import Data.Bits
-import Data.Word
 
 maroon :: (Num a, Fractional a) => V4 a
 maroon = V4 (128/255) (0/255) (0/255) 1

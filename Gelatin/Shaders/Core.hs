@@ -1,6 +1,6 @@
 module Gelatin.Shaders.Core where
 
-import Gelatin.ShaderCommands
+import Gelatin.Core.ShaderCommands
 import Foreign
 import Linear
 import Graphics.Rendering.OpenGL hiding (VertexComponent)
@@ -8,8 +8,11 @@ import Graphics.Rendering.OpenGL hiding (VertexComponent)
 --------------------------------------------------------------------------------
 -- Included Vertex Attributes & Uniforms
 --------------------------------------------------------------------------------
-position :: Real a => [V3 a] -> VertexComponent (V3 GLfloat) [Float]
-position = avecfv "position" 3
+position3 :: Real a => [V3 a] -> VertexComponent (V3 GLfloat) [Float]
+position3 = avecfv "position" 3
+
+position2 :: Real a => [V2 a] -> VertexComponent (V2 GLfloat) [Float]
+position2 = avecfv "position" 2
 
 color :: Real a => [V4 a] -> VertexComponent (V4 GLfloat) [Float]
 color = avecfv "color" 4
@@ -32,8 +35,15 @@ setSampler = setUniform . uniformi "sampler"
 uniformM4f :: Real a => String -> M44 a -> ShaderUniform (M44 GLfloat)
 uniformM4f s = ShaderUniform s . fmap (fmap realToFrac)
 
+uniformV4f :: Real a => String -> V4 a -> ShaderUniform (V4 GLfloat)
+uniformV4f s = ShaderUniform s . fmap realToFrac
+
 uniformi :: Integral a => String -> a -> ShaderUniform GLint
 uniformi s = ShaderUniform s . fromIntegral
+
+uniformb :: String -> Bool -> ShaderUniform GLint
+uniformb s b = ShaderUniform s i
+    where i = if b then 1 else 0
 --------------------------------------------------------------------------------
 -- Vertex Attribute Helpers
 --------------------------------------------------------------------------------

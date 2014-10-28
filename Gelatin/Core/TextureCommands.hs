@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs #-}
-module Gelatin.TextureCommands where
+module Gelatin.Core.TextureCommands where
 
 import Control.Monad.Free.Church
 import Graphics.Rendering.OpenGL
@@ -19,11 +19,14 @@ setWrapMode c rep clamp = liftF $ SetWrapMode c rep clamp ()
 -- Loading textures.
 --------------------------------------------------------------------------------
 loadTextureSrc :: TextureSrc -> IO (Either String TextureObject)
-loadTextureSrc (Local fp) = readTexture fp
+loadTextureSrc (Loaded obj) = return $ Right obj
+loadTextureSrc (Local fp) = do
+    putStrLn $ "Loading texture " ++ fp
+    readTexture fp
 loadTextureSrc (Relative fp) = do
     fp' <- fmap (</> fp) getCurrentDirectory
+    putStrLn $ "Loading texture " ++ fp'
     readTexture fp'
-loadTextureSrc (Loaded obj) = return $ Right obj
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------

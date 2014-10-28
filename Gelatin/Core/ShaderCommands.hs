@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs #-}
-module Gelatin.ShaderCommands where
+module Gelatin.Core.ShaderCommands where
 
 import Graphics.GLUtil hiding (Elem, setUniform)
 import Graphics.Rendering.OpenGL hiding (position, color, VertexComponent, drawElements)
@@ -26,6 +26,7 @@ data VertexBufferOp next where
 data DrawElements next = DrawElements GLint PrimitiveMode next
 
 data ShaderOp next where
+    ShaderM :: IO () -> next -> ShaderOp next
     SetUniform :: AsUniform u => ShaderUniform u -> next -> ShaderOp next
     WithVertices :: VertexBufferCommand () -> ShaderCommand () -> next -> ShaderOp next
     WithIndices :: Integral i => [i] -> DrawElementsCommand () -> next -> ShaderOp next
@@ -48,6 +49,7 @@ instance Functor DrawElements where
     fmap f (DrawElements n mode next) = DrawElements n mode $ f next
 
 instance Functor ShaderOp where
+    fmap f (ShaderM m next) = ShaderM m $ f next
     fmap f (SetUniform u next) = SetUniform u $ f next
     fmap f (WithVertices vb cmd next) = WithVertices vb cmd $ f next
     fmap f (WithIndices ns cmd next) = WithIndices ns cmd $ f next
@@ -55,6 +57,9 @@ instance Functor ShaderOp where
 --------------------------------------------------------------------------------
 -- User API
 --------------------------------------------------------------------------------
+shaderM :: IO () -> ShaderCommand ()
+shaderM io = liftF $ ShaderM io ()
+
 addComponent :: Storable v => VertexComponent v a -> VertexBufferCommand ()
 addComponent c = liftF $ AddComponent c ()
 

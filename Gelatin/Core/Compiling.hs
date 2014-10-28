@@ -1,50 +1,51 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module Gelatin.Compiling where
+module Gelatin.Core.Compiling where
 
-import Gelatin.Rendering
-import Gelatin.ShaderCommands
-import Gelatin.TextureCommands
+import Gelatin.Core.Types
+import Gelatin.Core.ShaderCommands
+import Gelatin.Core.TextureCommands
 import Graphics.GLUtil hiding (Elem, setUniform)
 import qualified Graphics.GLUtil as GLU
 import Graphics.Rendering.OpenGL as GL
 import Control.Monad
 import Control.Monad.Free
 import Control.Monad.Free.Church
-import Data.Monoid
+import Data.Monoid hiding ((<>))
 import Data.Either
 import Data.List (intercalate)
 import qualified Data.Map as M
 import Foreign
 import Linear
+import Data.Semigroup
+
+-- | TODO: Return a renderer that contains a texture atlas. That way we can
+-- reuse textures (and renderers). This will come in handy for fonts.
 
 -- | Compiles a Rendering. The resulting type can be used to render
 -- a frame and clean up and contains resources used that frame.
-compileRendering :: Rendering () -> IO CompiledRendering
-compileRendering = compileRenderCommand . fromF
-
--- | Renders a Rendering once and cleans up after.
-renderOnce :: Rendering () -> IO ()
-renderOnce r = do
-    r' <- compileRendering r
-    render r'
-    cleanup r'
+runRendering :: Rendering () -> IO (CompiledRendering ())
+runRendering = compileRenderCommand . fromF
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
-data CompiledRendering = Compiled { render  :: IO ()
-                                  , cleanup :: IO ()
-                                  }
+data CompiledRendering a = Compiled { render   :: IO ()
+                                    , cleanup  :: IO ()
+                                    , renderer :: a
+                                    }
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
-instance Monoid CompiledRendering where
-    mempty = Compiled (return ()) (return ())
-    (Compiled r1 c1) `mappend` (Compiled r2 c2) = Compiled (r1 >> r2) (c1 >> c2)
+instance Semigroup a => Semigroup (CompiledRendering a) where
+    (Compiled a1 b1 c1) <> (Compiled a2 b2 c2) = Compiled (a1 >> a2) (b1 >> b2) (c1 <> c2)
+
+instance (Monoid a, Semigroup a) => Monoid (CompiledRendering a) where
+    mempty = Compiled (return ()) (return ()) mempty
+    a `mappend` b = a <> b
 --------------------------------------------------------------------------------
 -- Compiling/Running
 --------------------------------------------------------------------------------
 compileVertexBufferCommand :: ShaderProgram -> Free VertexBufferOp ()
-                           -> IO CompiledRendering
+                           -> IO (CompiledRendering ())
 compileVertexBufferCommand _ (Pure ()) = return mempty
 compileVertexBufferCommand s (Free (AddComponent v n)) = do
     nxt <- compileVertexBufferCommand s n
@@ -64,16 +65,19 @@ compileVertexBufferCommand s (Free (AddComponent v n)) = do
                 vertexAttribPointer aloc $= (vinth, vdesc)
                 vertexAttribArray aloc $= Enabled
         cu = deleteObjectName b
-    return $ Compiled io cu `mappend` nxt
+    return $ Compiled io cu () `mappend` nxt
 
-compileDrawElementsCommand :: Free DrawElements () -> IO CompiledRendering
+compileDrawElementsCommand :: Free DrawElements () -> IO (CompiledRendering ())
 compileDrawElementsCommand (Pure ()) = return mempty
 compileDrawElementsCommand (Free (DrawElements n mode next)) = do
     nxt <- compileDrawElementsCommand next
     return $ mappend (onlyRender $ GL.drawElements mode n UnsignedInt nullPtr)
                      nxt
-compileShaderCommand :: ShaderProgram -> Free ShaderOp () -> IO CompiledRendering
+compileShaderCommand :: ShaderProgram -> Free ShaderOp () -> IO (CompiledRendering ())
 compileShaderCommand _ (Pure ()) = return mempty
+compileShaderCommand s (Free (ShaderM m next)) = do
+    nxt <- compileShaderCommand s next
+    return $ onlyRender m `mappend` nxt
 compileShaderCommand s (Free (SetUniform u next)) = do
     let uname = uniformName u
         udata = uniformData u
@@ -94,7 +98,7 @@ compileShaderCommand s (Free (WithVertices vb cmd next)) = do
                 render sub
                 bindBuffer ArrayBuffer $= Nothing
         cu = return ()
-    return $ Compiled io cu `mappend` nxt
+    return $ Compiled io cu () `mappend` nxt
 compileShaderCommand s (Free (WithIndices ns cmd next)) = do
     sub <- compileDrawElementsCommand $ fromF cmd
     nxt <- compileShaderCommand s next
@@ -103,13 +107,13 @@ compileShaderCommand s (Free (WithIndices ns cmd next)) = do
                 render sub
         cu = do cleanup sub
                 bindBuffer ElementArrayBuffer $= Nothing
-    return $ Compiled io cu `mappend` nxt
+    return $ Compiled io cu () `mappend` nxt
 compileShaderCommand s (Free (DrawArrays mode i next)) = do
     nxt <- compileShaderCommand s next
     return $ mappend (onlyRender $ GL.drawArrays mode 0 $ fromIntegral i) nxt
 
 compileTextureCommand :: ParameterizedTextureTarget t
-                      => t -> Free TextureOp () -> IO CompiledRendering
+                      => t -> Free TextureOp () -> IO (CompiledRendering ())
 compileTextureCommand _ (Pure ()) = return mempty
 compileTextureCommand t (Free (SetFilter mn mg n)) = do
     nxt <- compileTextureCommand t n
@@ -118,11 +122,11 @@ compileTextureCommand t (Free (SetWrapMode c rp clamp n)) = do
     nxt <- compileTextureCommand t n
     return $ mappend (onlyRender $ textureWrapMode t c $= (rp, clamp)) nxt
 
-compileRenderCommand :: Free Render () -> IO CompiledRendering
+compileRenderCommand :: Free Render () -> IO (CompiledRendering ())
 compileRenderCommand (Pure ()) = return mempty
-compileRenderCommand (Free (TraceLn s n)) = do
-    putStrLn s
-    compileRenderCommand n
+compileRenderCommand (Free (RenderM io n)) = do
+    nxt <- compileRenderCommand n
+    return $ onlyRender io `mappend` nxt
 compileRenderCommand (Free (SetViewport x y w h n)) = do
     let [x', y', w', h'] = map fromIntegral [x, y, w, h]
     nxt <- compileRenderCommand n
@@ -137,7 +141,7 @@ compileRenderCommand (Free (UsingShader s sc next)) = do
                 render sub
         cu = do cleanup sub
                 currentProgram $= Nothing
-    return $ mappend (Compiled io cu) nxt
+    return $ mappend (Compiled io cu ()) nxt
 compileRenderCommand (Free (ClearDepth next)) = do
     nxt <- compileRenderCommand next
     return $ mappend (onlyRender $ clear [DepthBuffer]) nxt
@@ -145,13 +149,13 @@ compileRenderCommand (Free (ClearColorWith c next)) = do
     nxt <- compileRenderCommand next
     return $ mappend (onlyRender $ clearColor $= (toColor4 c) >> clear [ColorBuffer]) nxt
 compileRenderCommand (Free (UsingTextures t ts cmd r n)) = do
-    ts' <- putStrLn "Loading textures..." >> loadTextures t (fromF cmd) ts
+    ts' <- loadTextures t (fromF cmd) ts
     sub <- compileRenderCommand $ fromF r
     nxt <- compileRenderCommand n
     let io  = withTextures t ts' $ render sub
         cu  = do cleanup sub
                  deleteObjectNames ts'
-    return $ Compiled io cu `mappend` nxt
+    return $ Compiled io cu () `mappend` nxt
 
 loadTextures :: ( BindableTextureTarget t
                 , ParameterizedTextureTarget t
@@ -174,5 +178,5 @@ toColor4 v = Color4 r g b a
 sizeOfList :: forall a. Storable a => [a] -> GLsizeiptr
 sizeOfList vs = fromIntegral $ (length vs) * sizeOf (undefined :: a)
 
-onlyRender :: IO () -> CompiledRendering
-onlyRender r = Compiled r (return ())
+onlyRender :: IO () -> CompiledRendering ()
+onlyRender r = Compiled r (return ()) ()

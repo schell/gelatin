@@ -10,9 +10,9 @@ import Graphics.GLUtil.Camera3D (projectionMatrix)
 -- Types
 --------------------------------------------------------------------------------
 data TransformationDef next where
-    Translate :: V3 Double -> next -> TransformationDef next
-    Scale :: V3 Double -> next -> TransformationDef next
-    Rotate :: Double -> V3 Double -> next -> TransformationDef next
+    Translate :: (Real a, Fractional a) => V3 a -> next -> TransformationDef next
+    Scale :: (Real a, Fractional a) => V3 a -> next -> TransformationDef next
+    Rotate :: (Real a , Fractional a) => a -> V3 a -> next -> TransformationDef next
 
 instance Functor TransformationDef where
     fmap f (Translate v n) = Translate v $ f n
@@ -23,16 +23,16 @@ type Transformation = F TransformationDef
 --------------------------------------------------------------------------------
 -- Building transformations.
 --------------------------------------------------------------------------------
-translate :: V3 Double -> Transformation ()
+translate :: (Real a, Fractional a) => V3 a -> Transformation ()
 translate v = liftF $ Translate v ()
 
-scale :: V3 Double -> Transformation ()
+scale :: (Real a, Fractional a) => V3 a -> Transformation ()
 scale v = liftF $ Scale v ()
 
-rotate :: Double -> V3 Double -> Transformation ()
+rotate :: (Real a, Fractional a) => a -> V3 a -> Transformation ()
 rotate phi v = liftF $ Rotate phi v ()
 
-compileMatrix :: Transformation () -> M44 Double
+compileMatrix :: (Epsilon a, Floating a) => Transformation () -> M44 a
 compileMatrix = compile . fromF
     where compile (Pure ()) = eye4
           compile (Free (Translate v n)) = let v' = fmap realToFrac v in
@@ -46,21 +46,21 @@ compileMatrix = compile . fromF
                  (V4 0 0 z 0)
                  (V4 0 0 0 1) !*! compile n
 
-mkM44 :: Transformation () -> M44 Double
+mkM44 :: (Epsilon a, Floating a) => Transformation () -> M44 a
 mkM44 = compileMatrix
 --------------------------------------------------------------------------------
 -- Matrix Helpers
 --------------------------------------------------------------------------------
-rotateX :: Double -> Quaternion Double
+rotateX :: (Epsilon a, Floating a) => a -> Quaternion a
 rotateX = axisAngle (V3 1 0 0)
 
-rotateY :: Double -> Quaternion Double
+rotateY :: (Epsilon a, Floating a) => a -> Quaternion a
 rotateY = axisAngle (V3 0 1 0)
 
-rotateZ :: Double -> Quaternion Double
+rotateZ :: (Epsilon a, Floating a) => a -> Quaternion a
 rotateZ = axisAngle (V3 0 0 1)
 
-perspective :: Double -> Double -> Double -> Double -> M44 Double
+perspective :: (Epsilon a, RealFloat a, Conjugate a) => a -> a -> a -> a -> M44 a
 perspective = projectionMatrix
 
 ortho :: (Num a, Fractional a) => a -> a -> a -> a -> a -> a -> M44 a
