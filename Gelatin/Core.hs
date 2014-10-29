@@ -47,7 +47,7 @@ textureRenderer shdr = do
         let [x',y',w',h'] = map fromIntegral [x,y,w,h]
             m44           = mkM44 $ do scale $ (V3 w' h' 1 :: V3 GLfloat)
                                        translate $ V3 x' y' 0
-        f <- runRendering $ usingTexture Texture2D (Loaded tex) r_ $ usingShader shdr $ do
+        f <- runRendering $ usingTexture Texture2D (Loaded "" tex) r_ $ usingShader shdr $ do
             setSampler (0 :: Int)
             setModelview (m44 :: M44 GLfloat)
             shaderM $ render g

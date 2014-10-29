@@ -15,6 +15,7 @@ import Control.Monad.Free.Church
 import Graphics.GLUtil hiding (setUniform)
 import Graphics.Rendering.OpenGL hiding (Color, Line, Polygon, Triangle, Primitive, Fill, translate, scale, rotate, ortho, position, color, drawArrays, Clear, clear)
 import Linear hiding (rotate, trace)
+import Data.Monoid
 
 renderOnce2d :: Rendering2d () -> IO ()
 renderOnce2d r = do
@@ -22,7 +23,7 @@ renderOnce2d r = do
     render r'
     cleanup r'
 
-runRendering2d :: Rendering2d () -> IO (CompiledRendering Renderer2d)
+runRendering2d :: Rendering2d () -> IO CompiledRendering
 runRendering2d two = do
     r <- mkRenderer2d
     runRendering $ mk2dRendering r two
@@ -34,7 +35,7 @@ mkRenderer2d :: IO Renderer2d
 mkRenderer2d = do
     clr <- simple2dColorShader
     tex <- simple2dTextureShader
-    return $ Renderer2d clr tex eye4 eye4
+    return $ Renderer2d clr tex eye4 eye4 mempty
 
 render2 :: Renderer2d -> Free TwoCommand () -> Rendering ()
 render2 _ (Pure ()) = return ()
@@ -118,8 +119,9 @@ textureRender r vs src mode n = do
         setSampler (0 :: Int)
         withVertices vs $ drawArrays mode n
 
-data Renderer2d = Renderer2d { twoColorShader :: ShaderProgram
+data Renderer2d = Renderer2d { twoColorShader   :: ShaderProgram
                              , twoTextureShader :: ShaderProgram
-                             , twoProjection :: M44 GLfloat
-                             , twoModelview :: M44 GLfloat
+                             , twoProjection    :: M44 GLfloat
+                             , twoModelview     :: M44 GLfloat
+                             , twoTextureAtlas  :: TextureAtlas
                              }

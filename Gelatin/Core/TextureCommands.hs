@@ -6,6 +6,7 @@ import Graphics.Rendering.OpenGL
 import Graphics.GLUtil
 import System.FilePath
 import System.Directory
+import qualified Data.Map.Strict as M
 
 --------------------------------------------------------------------------------
 -- User API
@@ -18,15 +19,27 @@ setWrapMode c rep clamp = liftF $ SetWrapMode c rep clamp ()
 --------------------------------------------------------------------------------
 -- Loading textures.
 --------------------------------------------------------------------------------
-loadTextureSrc :: TextureSrc -> IO (Either String TextureObject)
-loadTextureSrc (Loaded obj) = return $ Right obj
+loadTextureSrc :: TextureSrc -> IO (M.Map FilePath TextureObject)
+loadTextureSrc (Loaded str obj) = return $ M.insert str obj M.empty
 loadTextureSrc (Local fp) = do
     putStrLn $ "Loading texture " ++ fp
-    readTexture fp
+    wrapTexture fp
 loadTextureSrc (Relative fp) = do
     fp' <- fmap (</> fp) getCurrentDirectory
     putStrLn $ "Loading texture " ++ fp'
-    readTexture fp'
+    wrapTexture fp
+
+wrapTexture :: FilePath -> IO (M.Map FilePath TextureObject)
+wrapTexture k = do
+    eT <- readTexture k
+    case eT of
+        Left s  -> putStrLn s >> return M.empty
+        Right v -> return $ M.insert k v M.empty
+
+textureKey :: TextureSrc -> String
+textureKey (Loaded k _) = k
+textureKey (Local k) = k
+textureKey (Relative k) = k
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
@@ -46,5 +59,5 @@ type TextureCommand = F TextureOp
 -- | TODO: Enable loading from the network?
 data TextureSrc = Local FilePath
                 | Relative FilePath
-                | Loaded TextureObject
+                | Loaded String TextureObject
                 deriving (Show, Eq, Ord)
