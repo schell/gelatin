@@ -13,7 +13,7 @@ import Control.Monad
 import Control.Monad.Free
 import Control.Monad.Free.Church
 import Graphics.GLUtil hiding (setUniform)
-import Graphics.Rendering.OpenGL hiding (Color, Line, Polygon, Triangle, Primitive, Fill, translate, scale, rotate, ortho, position, color, drawArrays, Clear, clear)
+import Graphics.Rendering.OpenGL hiding (triangulate, Color, Line, Polygon, Triangle, Primitive, Fill, translate, scale, rotate, ortho, position, color, drawArrays, Clear, clear)
 import Linear hiding (rotate, trace)
 import Data.Monoid
 
@@ -42,7 +42,7 @@ render2 _ (Pure ()) = return ()
 render2 r (Free (Clear n)) = do
     clearColorWith (black :: V4 Float)
     render2 r n
-render2 r (Free (Size2d w h cmd n)) = do
+render2 r (Free (WithSize w h cmd n)) = do
     let pj = ortho 0 (fromIntegral w) 0 (fromIntegral h) 0 1
         r' = r{ twoProjection = pj }
     forM_ [twoColorShader r, twoTextureShader r] $ \shader ->
@@ -59,19 +59,19 @@ render2 r (Free (WithTransform t d n)) = do
 -- Filling
 --------------------------------------------------------------------------------
 render2 r (Free (Fill (Color c) ps n)) = do
-    let vs  = concatMap primitiveToList $ concatMap clipEars ps
+    let vs  = concatMap primitiveToList $ concatMap triangulate ps
         cs  = replicate (length vs) c
         vs' = addComponent (position2 vs) >> addComponent (color cs)
     gradientRender r vs' Triangles $ length vs
     render2 r n
 render2 r (Free (Fill (ColorMapping g) ps n)) = do
-    let vs  = concatMap primitiveToList $ concatMap clipEars ps
+    let vs  = concatMap primitiveToList $ concatMap triangulate ps
         cs  = map g vs
         vs' = addComponent (position2 vs) >> addComponent (color cs)
     gradientRender r vs' Triangles $ length vs
     render2 r n
 render2 r (Free (Fill (TextureMapping s g) ps n)) = do
-    let vs  = concatMap primitiveToList $ concatMap clipEars ps
+    let vs  = concatMap primitiveToList $ concatMap triangulate ps
         cs  = map g vs
         vs' = addComponent (position2 vs) >> addComponent (texcoord cs)
     textureRender r vs' s Triangles $ length vs

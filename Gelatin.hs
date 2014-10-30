@@ -32,6 +32,7 @@ import Graphics.Rendering.OpenGL as OpenGL hiding (
     normalize,
     clearDepth,
     texture,
+    triangulate,
 
     Primitive,
     Color,

@@ -106,29 +106,22 @@ cubes colorShader textureShader = do
     usingTexture Texture2D (Relative "img/quantum-foam.jpg") params $
         cube textureShader ritemv $ addComponent $ texcoord cubeTexs
 
+circles :: Rendering2d ()
+circles = withSize 300 300 $ do
+    clear
+    fill (solid white) $ [rectangle (V2 0 0) 300 300]
+    let canary = hex 0xFFFF00FF
+        c1 = circle (V2 50 50) 10
+        c2 = circle (V2 150 150) 75
+    fill (solid canary) [c1, c2]
+    withPosition (V2 5 5) $
+        outline (solid $ hex 0xFF00FFFF) $ concatMap triangulate [c1, c2]
+
 main :: IO ()
 main = do
-    wref  <- initWindow (V2 0 0) (V2 600 600) "Gelatin"
-    --scs   <- simpleColorShader
-    --sts   <- simpleTextureShader
-    --r1    <- runRendering $ cubes scs sts
+    wref  <- initWindow (V2 0 0) (V2 300 300) "Gelatin"
     r1    <- runRendering2d boxes
-    r2    <- runRendering2d $
-        withSize 600 600 $ withPosition (V2 100 100) $ do
-            let ps   = [ V2 0 0, V2 400 10, V2 250 300, V2 200 100, V2 25 45]
-            clear
-            -- Polygon with triangulation shown
-            fill (solid $ hex 0x319456FF) [polygon ps]
-            outline (solid black) $ triangles ps
-            -- Beziers with triangulation shown
-            let beziers = [ [V2 0 0, V2 100 0, V2 100 100]
-                          , [V2 100 100, V2 0 100, V2 0 0]
-                          ]
-                paths = map (\bz -> [ deCasteljau t bz | t <- [0,0.1 .. 1] ]) beziers
-                path = concat paths
-            withPosition (V2 0 100) $ do
-                fill (solid $ hex 0x2E6980FF) [polygon path]
-                outline (solid black) $ triangles path
+    r2    <- runRendering2d circles
 
     --r2    <- runRendering2d boxes
     loop r2 r1 wref emptyInputEnv
@@ -142,8 +135,8 @@ loop r1 r2 wref env = do
     makeContextCurrent $ Just window
 
     if isLeftMouseDown env'
-    then render r1
-    else render r2
+    then render r2
+    else render r1
 
     swapBuffers window
     shouldClose <- windowShouldClose window

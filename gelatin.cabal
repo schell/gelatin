@@ -45,7 +45,6 @@ library
 
   build-depends:       base >=4.7 && <4.8,
                        containers -any,
-                       semigroups -any,
                        lens -any,
                        directory -any,
                        filepath -any,
@@ -67,7 +66,6 @@ executable example
   main-is:             Example.hs
   build-depends:       base >=4.6 && <5.0,
                        gelatin -any,
-                       semigroups -any,
                        mtl -any,
                        directory -any,
                        filepath -any,

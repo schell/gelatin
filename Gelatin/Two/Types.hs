@@ -33,10 +33,10 @@ import Linear hiding (rotate)
 clear :: Rendering2d ()
 clear = liftF $ Clear ()
 
-fill :: (Real a, Fractional a) => ColorMapping a -> [Primitive (V2 a)] -> Rendering2d ()
+fill :: (Real a, Fractional a, Floating a) => ColorMapping a -> [Primitive V2 a] -> Rendering2d ()
 fill c ts = liftF $ Fill c ts ()
 
-outline :: (Real a, Fractional a) => ColorMapping a -> [Primitive (V2 a)] -> Rendering2d ()
+outline :: (Real a, Fractional a, Floating a) => ColorMapping a -> [Primitive V2 a] -> Rendering2d ()
 outline c ps = liftF $ Outline c ps ()
 
 solid :: V4 a -> ColorMapping a
@@ -49,7 +49,7 @@ texture :: TextureSrc -> (V2 a -> V2 a) -> ColorMapping a
 texture = TextureMapping
 
 withSize :: Int -> Int -> Rendering2d () -> Rendering2d ()
-withSize w h r = liftF $ Size2d w h r ()
+withSize w h r = liftF $ WithSize w h r ()
 
 withTransform :: Transformation () -> Rendering2d () -> Rendering2d ()
 withTransform t d = liftF $ WithTransform t d ()
@@ -65,15 +65,20 @@ withRotation r t = withTransform (rotate r $ V3 0 0 1) t
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
+-- | TODO: Add ColorMapping gradient functions for convenience.
+-- linear
+-- radial
+-- colorAtPoint
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
 instance Functor TwoCommand where
     fmap f (Clear n) = Clear $ f n
-    fmap f (Size2d w h r n) = Size2d w h r $ f n
+    fmap f (WithSize w h r n) = WithSize w h r $ f n
     fmap f (WithTransform t d n) = WithTransform t d $ f n
     fmap f (Fill c ps n) = Fill c ps $ f n
     fmap f (Outline c ps n) = Outline c ps $ f n
+    --fmap f (Stroke c ps n) = Stroke c ps $ f n
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
@@ -83,9 +88,10 @@ data ColorMapping a = Color (V4 a)
 
 data TwoCommand next where
     Clear :: next -> TwoCommand next
-    Size2d :: Int -> Int -> Rendering2d () -> next -> TwoCommand next
+    WithSize :: Int -> Int -> Rendering2d () -> next -> TwoCommand next
     WithTransform :: Transformation () -> Rendering2d () -> next -> TwoCommand next
-    Fill :: (Real a, Fractional a) => ColorMapping a -> [Primitive (V2 a)] -> next -> TwoCommand next
-    Outline :: (Real a, Fractional a) => ColorMapping a -> [Primitive (V2 a)] -> next -> TwoCommand next
+    Fill :: (Real a, Fractional a, Floating a) => ColorMapping a -> [Primitive V2 a] -> next -> TwoCommand next
+    Outline :: (Real a, Fractional a, Floating a) => ColorMapping a -> [Primitive V2 a] -> next -> TwoCommand next
+    --Stroke :: (Real a, Fractional a) => ColorMapping a -> [Primitive (V2 a)] -> next -> TwoCommand next
 
 type Rendering2d = F TwoCommand
