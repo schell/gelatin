@@ -12,7 +12,7 @@ circles = withSize 300 300 $ do
     clear
     fill (solid white) $ [rectangle (V2 0 0) 300 300]
     let solidWhite = solid white         -- using css style colors 
-        canary' = solid $ hex 0xFFFF00FF -- using RGBA hex colors
+        canary = solid $ hex 0xFFFF00FF  -- using RGBA hex colors
         c1 = circle (V2 50 50) 10
         c2 = circle (V2 150 150) 75
     fill (solid canary) [c1, c2]
