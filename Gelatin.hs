@@ -41,7 +41,7 @@ import Graphics.Rendering.OpenGL as OpenGL hiding (
     ShaderType,
     Error,
     Clear,
-    Polygon,
+    Path,
     Triangle,
     Point,
     Line)

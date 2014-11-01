@@ -13,23 +13,9 @@ import Control.Monad
 import Control.Monad.Free
 import Control.Monad.Free.Church
 import Graphics.GLUtil hiding (setUniform)
-import Graphics.Rendering.OpenGL hiding (triangulate, Color, Line, Polygon, Triangle, Primitive, Fill, translate, scale, rotate, ortho, position, color, drawArrays, Clear, clear)
+import Graphics.Rendering.OpenGL hiding (triangulate, Color, Line, Triangle, Primitive, Fill, translate, scale, rotate, ortho, position, color, drawArrays, Clear, clear)
 import Linear hiding (rotate, trace)
 import Data.Monoid
-
-renderOnce2d :: Rendering2d () -> IO ()
-renderOnce2d r = do
-    r' <- runRendering2d r
-    render r'
-    cleanup r'
-
-runRendering2d :: Rendering2d () -> IO CompiledRendering
-runRendering2d two = do
-    r <- mkRenderer2d
-    runRendering $ mk2dRendering r two
-
-mk2dRendering :: Renderer2d -> Rendering2d () -> Rendering ()
-mk2dRendering r t = render2 r $ fromF $ withPosition (V2 0 0 :: V2 Float) t
 
 mkRenderer2d :: IO Renderer2d
 mkRenderer2d = do
@@ -39,8 +25,12 @@ mkRenderer2d = do
 
 render2 :: Renderer2d -> Free TwoCommand () -> Rendering ()
 render2 _ (Pure ()) = return ()
+render2 r (Free (Render2d io n)) = do
+    renderIO io
+    render2 r n
 render2 r (Free (Clear n)) = do
-    clearColorWith (black :: V4 Float)
+    clearColorWith (white :: V4 Float)
+
     render2 r n
 render2 r (Free (WithSize w h cmd n)) = do
     let pj = ortho 0 (fromIntegral w) 0 (fromIntegral h) 0 1

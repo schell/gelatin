@@ -11,7 +11,7 @@ import Linear as L hiding (rotate)
 -- Instances
 --------------------------------------------------------------------------------
 instance Functor Render where
-    fmap f (RenderM m n) = RenderM m $ f n
+    fmap f (RenderIO m n) = RenderIO m $ f n
     fmap f (SetViewport l t w h next) = SetViewport l t w h $ f next
     fmap f (SetDepthFunc mcf next) = SetDepthFunc mcf $ f next
     fmap f (UsingShader p sc next) = UsingShader p sc $ f next
@@ -22,7 +22,7 @@ instance Functor Render where
 -- Types
 --------------------------------------------------------------------------------
 data Render next where
-    RenderM :: IO () -> next -> Render next
+    RenderIO :: IO () -> next -> Render next
     SetViewport :: Integral a => a -> a -> a -> a -> next -> Render next
     SetDepthFunc :: Maybe GL.ComparisonFunction -> next -> Render next
     ClearDepth :: next -> Render next

@@ -23,6 +23,7 @@ source-repository head
 
 library
   exposed-modules:
+                       Gelatin.Core.Compiling,
                        Gelatin.Core.ShaderCommands,
                        Gelatin.Core.Texture,
                        Gelatin.Core.TextureCommands,
@@ -32,6 +33,8 @@ library
                        Gelatin.Shaders.Core,
                        Gelatin.Shaders.SimpleColorShader,
                        Gelatin.Shaders.SimpleTextureShader,
+                       Gelatin.Shaders.Simple2dColorShader,
+                       Gelatin.Shaders.Simple2dTextureShader,
                        Gelatin.Shaders,
                        Gelatin.Color,
                        Gelatin.Two.Compiling,
@@ -40,7 +43,7 @@ library
                        Gelatin.Transform,
                        Gelatin.Window,
                        Gelatin
-  -- other-modules:
+
   other-extensions:    GADTs
 
   build-depends:       base >=4.7 && <4.8,
@@ -57,7 +60,6 @@ library
                        bytestring >=0.10 && <0.11,
                        attoparsec -any
 
-  -- hs-source-dirs:
   default-language:    Haskell2010
 
 executable example

@@ -17,10 +17,6 @@ import qualified Data.Map.Strict as M
 import Foreign
 import Linear
 
--- | Compiles a Rendering. The resulting type can be used to render
--- a frame and clean up and contains resources used that frame.
-runRendering :: Rendering () -> IO CompiledRendering
-runRendering = compileRenderCommand . fromF
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
@@ -118,7 +114,7 @@ compileTextureCommand t (Free (SetWrapMode c rp clamp n)) = do
 
 compileRenderCommand :: Free Render () -> IO CompiledRendering
 compileRenderCommand (Pure ()) = return mempty
-compileRenderCommand (Free (RenderM io n)) = do
+compileRenderCommand (Free (RenderIO io n)) = do
     nxt <- compileRenderCommand n
     return $ onlyRender io <> nxt
 compileRenderCommand (Free (SetViewport x y w h n)) = do

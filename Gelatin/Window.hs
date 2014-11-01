@@ -18,7 +18,8 @@ module Gelatin.Window (
     foldInput,
     clearEvents,
     -- * Querying input events
-    isLeftMouseDown
+    isLeftMouseDown,
+    isLeftMouseUp
 ) where
 
 import Graphics.UI.GLFW as GLFW
@@ -64,6 +65,11 @@ type WindowRef = IORef ([InputEvent], Window)
 --------------------------------------------------------------------------------
 isLeftMouseDown :: InputEnv -> Bool
 isLeftMouseDown = S.member MouseButton'1 . ienvMouseButtonsDown
+
+isLeftMouseUp :: InputEnv -> Bool
+isLeftMouseUp = not . null . filter hasMouseUp . ienvEvents
+    where hasMouseUp (MouseButtonEvent MouseButton'1 MouseButtonState'Released _) = True
+          hasMouseUp _ = False
 --------------------------------------------------------------------------------
 -- Processing input events.
 --------------------------------------------------------------------------------
