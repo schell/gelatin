@@ -64,7 +64,7 @@ library
 
 executable example
   buildable:           True
-  ghc-prof-options:    -Wall -rtsopts -fprof-auto -fprof-cafs
+  ghc-prof-options:    -Wall -rtsopts -fprof-auto -fprof-cafs -fdefer-type-errors
   main-is:             Example.hs
   build-depends:       base >=4.6 && <5.0,
                        gelatin -any,

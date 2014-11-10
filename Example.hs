@@ -5,7 +5,9 @@ import Control.Monad
 import Control.Applicative
 import Control.Concurrent
 import Data.IORef
+import Data.Maybe
 import System.Exit
+import Debug.Trace
 
 cubePoints :: [V3 Double]
 cubePoints = [ V3 (-0.5) ( 0.5) ( 0.5)
@@ -114,7 +116,7 @@ circles = withSize 300 300 $ do
         c1 = circle (V2 50 50) 10
         c2 = circle (V2 150 150) 75
     fill (solid canary) [c1, c2]
-    outline (solid black) $ arrows $ polygon $ circlePath (V2 50 200) 20 20
+    outline (solid black) $ arrows 5 $ polygon $ circlePath (V2 50 200) 20 20
     withPosition (V2 5 5) $
         outline (solid $ hex 0xFF00FFFF) $ concatMap triangulate [c1, c2]
 
@@ -129,42 +131,74 @@ strokes = withSize 300 300 $ do
 strokeTest :: Rendering2d ()
 strokeTest = withSize 300 300 $ do
     clear
-    fill (solid white) [ rectangle (V2 0 0) 300 300 ]
-    let ps = bezierToList 10 [ V2 0 0, V2 10 0, V2 10 20, V2 20 20 ]
-        stk = minkowskiConvolution c ps
-        c  = circlePath (V2 0 0) 1 8 :: [V2 Float]
-        ptop = rectangle (head stk - V2 0.25 0.25) 0.5 0.5
-        tris = triangulate $ polygon stk
-        s  = 250/20
-        t  = do translate $ V3 15 15 0
-                scale $ V3 s s 1
-    withTransform t $ do outline (solid orange) [ Path ps ]
-                         outline (solid blue) $ ptop : (arrows $ path stk)
-                         forM_ (zip tris $ map hex $ cycle [0xFFFF00FF,0x00FFFFFF,0xFF00FFFF]) $ \(p, a) -> do
-                             fill (solid $ alpha a 0.2) [p]
-                             outline (solid $ alpha gray 0.3) [p]
-                         withPosition (V2 10 10) $ outline (solid $ hex 0x00ccccff) [ Path c ]
+    let ps = concatMap (bezierToList 20) [ [V2 20 280, V2 150 280, V2 150 20] , [V2 150 20, V2 150 280, V2 280 280] ]
+        stk = minkowskiConvolution c $ reverse ps
+        --tris = triangulate $ polygon stk
+        c  = circlePath (V2 0 0) 5 8
+        --troublePoints = [stk !! 9, stk !! 10, stk !! 11]
+        --point = stk !! 17
+    --lift2d $ print troublePoints
+    --forM_ (zip tris $ map hex $ cycle [0xFFFF00FF,0x00FFFFFF,0xFF00FFFF]) $
+    --     \(p, a) -> do fill (solid $ alpha a 0.2) [p]
+    --                   outline (solid $ alpha gray 0.3) [p]
+    forM_ c $ \p -> outline (solid orange) [Path $ map (p+) ps]
+    outline (solid gray) $ concatMap (arrows 2) [Path stk]
+    outline (solid blue) $ concatMap (arrows 2) [Path ps]
 
-arrows :: (Floating a, Ord a) => Primitive V2 a -> [Primitive V2 a]
-arrows (Line a b) = [ path [a, b]
-                    , path [b - u*l + n * w, b]
-                    , path [b - u*l + n * (-w), b]
-                    ]
+drawElbow :: (RealFloat a, Enum a) => Join a -> Rendering2d ()
+drawElbow e = do
+    let asect = fromJust $ acuteIntersection 5 e
+        osect = fromJust $ obtuseIntersection 5 e
+        ps    = unJoin e
+    outline (solid gray) $ concatMap (arrows 1) [Path ps]
+    outline (solid blue) [circle asect 1]
+    outline (solid green) [circle osect 1]
+
+elbowTest :: Rendering2d ()
+elbowTest = withSize 300 300 $ do
+    clear
+    let es = [ elbow (V2 0 0) (V2 25 0) (V2 25 25)
+             , elbow (V2 25 25) (V2 25 0) (V2 0 0)
+
+             , elbow (V2 12.5 25) (V2 0 12.5) (V2 12.5 0)
+             , elbow (V2 12.5 0) (V2 0 12.5) (V2 12.5 25)
+
+             , elbow (V2 0 25) (V2 25 25) (V2 25 0)
+             , elbow (V2 25 0) (V2 12.5 12.5) (V2 0 0)
+             ]
+        zipWithM_' xs ys f = zipWithM_ f xs ys
+    withPosition (V2 20 20) $ zipWithM_' es [0 ..] $ \e i ->
+        withPosition (V2 (i*40) (i*40)) $ drawElbow e
+
+
+allAngles :: (Metric f, R1 f, R2 f, Eq (f a), Num a, Ord a, RealFloat a)
+          => [f a] -> [a]
+allAngles ps = map signedAt ndxs
+    where ndxs = [0 .. len - 1]
+          len = length ps
+          signedAt i = triangleArea (ps !! (mod (i - 1) len))
+                                    (ps !! (mod (i    ) len))
+                                    (ps !! (mod (i + 1) len))
+
+arrows :: (Floating a, Ord a) => a -> Primitive V2 a -> [Primitive V2 a]
+arrows w (Line a b) = [ path [a, b]
+                      , path [b - u ^* w + n ^* w, b]
+                      , path [b - u ^* w + n ^* (-w), b]
+                      ]
     where n = signorm $ perp $ b - a
           u = signorm $ b - a
-          l = 0.3 -- head length
-          w = 0.3  -- head width
-arrows p = concatMap arrows $ primitiveToLines p
+arrows w p = concatMap (arrows w) $ primitiveToLines p
 
 main :: IO ()
 main = do
-    wref  <- initWindow (V2 0 0) (V2 300 300) "Gelatin"
+    wref  <- initWindow (V2 600 600) (V2 600 600) "Gelatin"
     r1    <- runRendering2d boxes
     r2    <- runRendering2d circles
     r3    <- runRendering2d strokeTest
+    r4    <- runRendering2d elbowTest
 
     --r2    <- runRendering2d boxes
-    loop [r3, r2, r1] wref emptyInputEnv
+    loop [r4, r3, r2, r1] wref emptyInputEnv
 
 loop :: [CompiledRendering] -> WindowRef -> InputEnv -> IO ()
 loop [] _ _ = return ()

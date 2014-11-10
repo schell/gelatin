@@ -37,8 +37,8 @@ data TwoCommand next where
     Render2d :: IO () -> next -> TwoCommand next
     WithSize :: Int -> Int -> Rendering2d () -> next -> TwoCommand next
     WithTransform :: Transformation () -> Rendering2d () -> next -> TwoCommand next
-    Fill :: (Real a, Fractional a, Floating a) => ColorMapping a -> [Primitive V2 a] -> next -> TwoCommand next
-    Outline :: (Real a, Fractional a, Floating a) => ColorMapping a -> [Primitive V2 a] -> next -> TwoCommand next
+    Fill :: RealFloat a => ColorMapping a -> [Primitive V2 a] -> next -> TwoCommand next
+    Outline :: RealFloat a => ColorMapping a -> [Primitive V2 a] -> next -> TwoCommand next
     --Stroke :: (Real a, Fractional a) => ColorMapping a -> [Primitive (V2 a)] -> next -> TwoCommand next
 
 type Rendering2d = F TwoCommand

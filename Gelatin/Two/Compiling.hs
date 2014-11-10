@@ -40,10 +40,15 @@ render2 r (Free (WithSize w h cmd n)) = do
     render2 r' $ fromF cmd
     render2 r n
 render2 r (Free (WithTransform t d n)) = do
-    let mv' = (twoModelview r) !*! mkM44 t
+    let mv' = mv !*! mkM44 t
+        mv  = twoModelview r
+    -- Set the transform for sub commands.
     forM_ [twoColorShader r, twoTextureShader r] $ \shader ->
         usingShader shader $ setModelview mv'
     render2 (r{twoModelview = mv'}) $ fromF d
+    -- Set back to previous for next commands.
+    forM_ [twoColorShader r, twoTextureShader r] $ \shader ->
+        usingShader shader $ setModelview mv
     render2 r n
 --------------------------------------------------------------------------------
 -- Filling

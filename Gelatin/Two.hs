@@ -69,16 +69,16 @@ clear :: Rendering2d ()
 clear = liftF $ Clear ()
 
 -- | Fill some geometry with some color.
-fill :: (Real a, Fractional a, Floating a) => ColorMapping a -> [Primitive V2 a] -> Rendering2d ()
+fill :: RealFloat a => ColorMapping a -> [Primitive V2 a] -> Rendering2d ()
 fill c ts = liftF $ Fill c ts ()
 
 -- | Stroke some geometry with some color using width.
-stroke :: (Real a, Fractional a, Floating a)
+stroke :: RealFloat a
        => a -> ColorMapping a -> [Primitive V2 a] -> Rendering2d ()
 stroke width color geom = liftF $ Fill color (strokePrimitives width geom) ()
 
 -- | Outline some geometry with some color.
-outline :: (Real a, Fractional a, Floating a) => ColorMapping a -> [Primitive V2 a] -> Rendering2d ()
+outline :: RealFloat a => ColorMapping a -> [Primitive V2 a] -> Rendering2d ()
 outline c ps = liftF $ Outline c ps ()
 
 -- | Create a solid color.

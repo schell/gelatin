@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 module Gelatin.Geometry (
-    -- * Primitive types
-    Primitive(..),
+    -- * Primitive types and triangulation
+    module T,
 
     -- * Decomposing primitives
     triangleToLines,
@@ -18,11 +18,15 @@ module Gelatin.Geometry (
     -- * Decomposition helpers
     deCasteljau,
     pathHasPoint,
+    signedAngle,
+    Sign(..),
+    triangleArea,
 
     -- * Composing geometry
     path,
     closePath,
     rectangle,
+    rectanglePath,
     circle,
     circlePath,
     polygon,
@@ -33,6 +37,8 @@ module Gelatin.Geometry (
     lines',
 ) where
 
+import Gelatin.Geometry.Types as T
+import Gelatin.Geometry.Triangulation as T
 import Linear hiding (trace)
 import Control.Lens hiding (pre)
 import Debug.Trace
@@ -46,23 +52,30 @@ rectangle :: (R1 f, R2 f, Num a)
           -> a    -- ^ The width of the rectangle
           -> a    -- ^ The height of the rectangle
           -> Primitive f a
-rectangle p w h = Path [ tl, tr, br, bl, tl ]
+rectangle p w h = Path $ rectanglePath p w h
+
+rectanglePath :: (R1 f, R2 f, Num a)
+              => f a -- ^ The top left of the rectangle
+              -> a    -- ^ The width of the rectangle
+              -> a    -- ^ The height of the rectangle
+              -> [f a]
+rectanglePath p w h = [ tl, tr, br, bl, tl ]
     where tl = p
           tr = p & _x %~ (+w)
           bl = p & _y %~ (+h)
           br = p & _x %~ (+w) & _y %~ (+h)
 
-circle :: (R1 f, R2 f, Additive f, Metric f, Fractional a, Floating a, Num a, Ord a, Enum a)
+circle :: (R1 f, R2 f, Additive f, Metric f, Eq (f a), RealFloat a, Enum a)
        => f a -> a -> Primitive f a
-circle p r = Path $ circlePath p r n
-    where n = c / flatness
+circle p r = polygon $ circlePath p r n
+    where n = max (c / flatness) 8
           c  = 2 * pi * r
           flatness = max (logBase 10 c) 1
 
-circlePath :: (R1 f, R2 f, Additive f, Metric f, Fractional a, Floating a, Num a, Ord a, Enum a)
+circlePath :: (R1 f, R2 f, Additive f, Metric f, RealFloat a, Num a, Ord a, Enum a)
            => f a -> a -> a -> [f a]
 circlePath p r n = bs
-    where bs = [ mk (cos t) (sin t) | t <- [0.0,(2*pi/n') .. 2*pi] ]
+    where bs = take (floor n') [ mk (cos t) (sin t) | t <- [0.0,(2*pi/n') .. ] ]
           n' = max 3 n
           mk x y = mv $ zero & _x .~ x & _y .~ y
           mv v = (v ^* r) ^+^ p
@@ -98,7 +111,7 @@ bezier n ps
 
 -- | Turns a list of points representing a polygon into a list of
 -- triangle primitives by performing ear clipping.
-triangles :: (Metric f, R1 f, R2 f, Ord a, Fractional a, Floating a)
+triangles :: (Metric f, R1 f, R2 f, Ord a, RealFloat a)
           => [f a] -> [Primitive f a]
 triangles = triangulate . Path
 
@@ -123,21 +136,33 @@ strokeLine w (Line a b) = [Triangle p1 p2 p3, Triangle p2 p3 p4]
           _hw = (-hw)
           {- p1 -- p2 -}
           {- p3 -- p4 -}
-          [p1, p2, p3, p4] = [hw *^ u ^+^ a, hw *^ u ^+^ b, _hw *^ u ^+^ a, _hw *^ u ^+^ b]
+          [p1, p2, p3, p4] = [ hw *^ u ^+^ a, hw *^ u ^+^ b
+                             , _hw *^ u ^+^ a, _hw *^ u ^+^ b]
 strokeLine _ _ = []
+
+strokePoints :: (Metric f, R1 f, R2 f, Num (f a), Floating a) => a -> f a -> f a -> [f a]
+strokePoints w a b = [hw *^ u ^+^ b, (-hw) *^ u ^+^ b]
+    where v  = b - a
+          s  = signorm $ perp $ V2 (v ^. _x) (v ^. _y)
+          u  = zero & _x .~ (s ^. _x) & _y .~ (s ^. _y)
+          hw = w * 0.5
 
 -- | https://www.dropbox.com/s/iifje9obdvs1bcd/siggraph_realistic2d.pdf?dl=0
 type Pen a = [V2 a]
 type Shape a = [V2 a]
 type Convolution a = [V2 a]
 
-minkowskiConvolution :: (Floating a, Ord a) => Pen a -> Shape a -> Convolution a
-minkowskiConvolution pen shape = conv pen $ shape ++ (drop 1 $ reverse shape)
-    -- Convolve there and back again
-    where cap  = map (last shape +) $ drop hpen pen
-          hpen = floor $ (fromIntegral (length pen)) / 2
-          conv ps ss@(s1:s2:_) = convolve (cycleToActivePen ps s1 s2) ss []
-          conv ps _ = ps
+minkowskiConvolution :: (RealFloat a, Ord a)
+                     => Pen a -> Shape a -> Convolution a
+minkowskiConvolution pen shape = conv pen $ shape ++ (drop 1 $ reverse $ shape)
+        -- Convolve there and back again
+        where conv ps ss@(s1:s2:_) = convolve (cycleToActivePen ps s1 s2) ss []
+              conv ps _ = ps
+
+pointsOnPen :: (Additive f, Num a) => f a -> [f a] -> (f a, f a)
+pointsOnPen v [] = (v, v)
+pointsOnPen v ps = (v ^+^ head ps, v ^+^ (ps !! halfNdx))
+    where halfNdx = floor $ ((fromIntegral $ length ps) :: Float) / 2 :: Int
 
 cycleToActivePen :: (Ord a, Floating a) => Pen a -> V2 a -> V2 a -> Pen a
 cycleToActivePen ps@(p:p':p'':_) v v' = npen
@@ -158,14 +183,12 @@ cycleToActivePen ps@(p:p':p'':_) v v' = npen
                      CN  -> ps
 cycleToActivePen ps _ _ = ps
 
-convolve :: (Floating a, Ord a)
+convolve :: (RealFloat a, Ord a)
           => Pen a   -- ^ The pen polygon/path.
           -> Shape a -- ^ The shape path.
           -> Convolution a -- ^ The accumulated convolution.
           -> Convolution a
 convolve ps ss cv
-    | length ps < 3 = trace "pen limit" cv
-    | length ss < 2 = trace "shape limit" cv
     | (p:p':p'':_) <- ps
     , (v:v':shape) <- ss =
     let -- The exit tangent
@@ -175,20 +198,26 @@ convolve ps ss cv
         -- The next pen tangent
         ntPen = signorm $ p'' - p'
         -- The active region
-        a = (180/pi) * (acos $ dot ntPen tPen)
-        t = (180/pi) * (acos $ dot tExit tPen)
-        c = clk a t
-        plen = length ps
-        npen = case c of
-                   CW  -> take plen $ drop 1 $ cycle ps
-                   CCW -> take plen $ drop (plen - 1) $ cycle ps
+        ar  = mkSafe $ (180/pi) * (ntPen `angleTo` tPen)
+        tr  = mkSafe $ (180/pi) * (tExit `angleTo` tPen)
+        mkSafe n = if isInfinite n then 0 else n
+        ck = clk ar tr
+        left xs = take (length xs) $ drop 1 $ cycle xs
+        right xs = take (length xs) $ drop ((length xs) - 1) $ cycle ps
+        npen = case ck of
+                   CW  -> left ps
+                   CCW -> right ps
                    CN  -> ps
-        nshape = if c == CN then v':shape else ss
+        nshape = if ck == CN then v':shape else ss
 
-    in trace "convolve" $ convolve npen nshape $ cv ++ [v + p']
-    | otherwise = trace "otherwise" cv
+    in  convolve npen nshape $ cv ++ [v + p']
+    | otherwise = cv ++ capFor cv ps ss
 
-data Clk = CW | CCW | CN deriving Eq
+capFor :: (Eq a, Num a) => [a] -> [a] -> [a] -> [a]
+capFor (c:_) ps (s:_) = takeWhile (/= c) $ map (+ s) ps
+capFor _ ps _ = ps
+
+data Clk = CW | CCW | CN deriving (Show, Eq)
 
 clk :: (Num a, Ord a, Fractional a) => a -> a -> Clk
 clk ba ca = if ca < ba
@@ -236,11 +265,13 @@ primitiveToList (Line a b) = [a,b]
 -- maximum distance between points along the curve. Another way to say this
 -- is that `n` is the "flatness" rating. A larger `n` means bigger line
 -- segments.
-bezierToList :: (Metric f, R1 f, R2 f, Num a, Floating a, Ord a) => a -> [f a] -> [f a]
+bezierToList :: (Metric f, R1 f, R2 f, Num a, Floating a, Ord a)
+             => a -> [f a] -> [f a]
 bezierToList n bs = [deCasteljau 0 bs] ++ subs ++ [deCasteljau 1 bs]
     where subs = subdivideBezier n 0 1 bs
 
-subdivideBezier :: (Metric f, R1 f, R2 f, Num a, Floating a, Ord a) => a -> a -> a -> [f a] -> [f a]
+subdivideBezier :: (Metric f, R1 f, R2 f, Num a, Floating a, Ord a)
+                => a -> a -> a -> [f a] -> [f a]
 subdivideBezier n start end bs =
     let p1  = deCasteljau start bs
         p2  = deCasteljau end bs
@@ -261,26 +292,27 @@ subdivideBezier n start end bs =
 deCasteljau :: (Additive f, R1 f, R2 f, Num a) => a -> [f a] -> f a
 deCasteljau _ [b] = b
 deCasteljau t coefs = deCasteljau t reduced
-  where
-    reduced = zipWith (flip (lerp t)) coefs (tail coefs)
-    --lerpP t' (V3 x0 y0 z0) (V3 x1 y1 z1) = V3 (lerp t' x0 x1) (lerp t' y0 y1) (lerp t' z0 z1)
-    --lerp t' a b = t' * b + (1 - t') * a
+  where reduced = zipWith (flip (lerp t)) coefs (tail coefs)
 
 -- | The dirtiest O(n^3) ear clipping I could write.
-triangulate :: (Metric f, R1 f, R2 f, Ord a, Fractional a, Floating a)
+data Sign = Pos | Neg deriving (Show, Eq)
+
+triangulate :: (Metric f, R1 f, R2 f, Ord a, Fractional a, RealFloat a)
          => Primitive f a -> [Primitive f a]
 triangulate (Path ps) = triangulate' [] ps
     where triangulate' ts ps'
               | (p1:p2:p3:[]) <- ps' = Triangle p1 p2 p3 :ts
               | (p1:p2:p3:rest) <- ps' =
-                  if any (pathHasPoint [p1,p2,p3]) rest
-                    -- Cycle through and check the next triangle
-                    then triangulate' ts $ p2:p3:rest ++ [p1]
-                    else triangulate' (Triangle p1 p2 p3 :ts) $ p1:p3:rest
+                  let isReflex = triangleArea p1 p2 p3 >= 0
+                  in if isReflex && (not $ any (pathHasPoint [p1,p2,p3]) rest)
+                     then triangulate' (ts ++ [Triangle p1 p2 p3]) $ p1:p3:rest
+                     -- Cycle through and check the next triangle
+                     else triangulate' ts $ p2:p3:rest ++ [p1]
               | otherwise = ts
 triangulate t@(Triangle _ _ _) = [t]
 triangulate (Curve n bs) = triangulate $ Path $ bezierToList n bs
 triangulate _ = []
+
 
 -- | Determine if a point lies within a polygon path using the even/odd
 -- rule.
@@ -299,20 +331,3 @@ pathHasPoint poly@(p1':_) p' = pointInPath' False p' (poly ++ [p1'])
           t2 p p1 p2 = x p < (x p1 - x p2) * (y p - y p2) / (y p1 - y p2) + x p2
           x v = v ^. _x
           y v = v ^. _y
---------------------------------------------------------------------------------
--- Types
---------------------------------------------------------------------------------
-data Primitive f a = Line (f a) (f a)
-                   -- ^ A straight line from one point to another.
-                   | Curve a [f a]
-                   -- ^ A n-bezier curve with a maximum segment distance.
-                   -- This distance is used during rasterization as the
-                   -- moximum tolerable distance between resolved points on
-                   -- the curve. A smaller number will result in a higher
-                   -- curve resolution. (So if your curve doesn't look
-                   -- smooth, make this number smaller.)
-                   | Triangle (f a) (f a) (f a)
-                   -- ^ A flat triangle of three points.
-                   | Path [f a]
-                   -- ^ A list of points defining a path .
-                   deriving (Show)
