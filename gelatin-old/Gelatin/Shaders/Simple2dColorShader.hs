@@ -14,6 +14,7 @@ colorShader2dVertSrc = BS.pack $ unlines
     , "attribute vec2 position;"
     , "attribute vec4 color;"
     , "varying vec4 fcolor;"
+    , "varying vec2 fposition;"
     , "void main(void) {"
     , " fcolor = color;"
     , " gl_Position = projection * modelview * vec4(position, 0.0, 1.0);"

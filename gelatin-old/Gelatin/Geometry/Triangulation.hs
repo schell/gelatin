@@ -3,33 +3,75 @@ module Gelatin.Geometry.Triangulation where
 import Gelatin.Geometry.Types
 import Linear
 import Control.Lens
-
-strokePath :: [V2 a] -> [Primitive V2 a]
-strokePath = undefined
-
-strokePathWith :: (Ord a, Fractional a, Floating a)
-               => a -> StrokeFold a -> [V2 a ] -> [Primitive V2 a]
-strokePathWith w f (p1:p2:ps) = strokedGeom $ foldl (f w) i $ toJoins ps
-    where i = (t,b, [])
-          (t,b,_,_) = perpPoints w p1 p2
-strokePathWith _ _ _ = [];
-
-toJoins :: (Ord a, Fractional a) => [V2 a] -> [Join a]
-toJoins ps@(a:b:_) = Cap a b : joins ps
-    where joins (a':b':c':ps') = elbow a' b' c' : joins (b':c':ps')
-          joins (a':b':[]) = [Cap b' a']
-          joins _ = []
-toJoins _ = []
+import Data.Maybe
 
 --------------------------------------------------------------------------------
--- Ways to stroke, names assume a clockwise ordering. Always start with the
--- interior.
+-- Stroking
 --------------------------------------------------------------------------------
-squareStroke :: (Ord a, Fractional a) => StrokeFold a
-squareStroke w (i,e,prims) (CWElbow p1 p2 p3) = undefined
-    where -- The acute lines
+strokeWith :: (Num a, Ord a, Fractional a)
+           => CapFunc a -> JoinFunc a -> a -> [V2 a] -> [Primitive V2 a]
+strokeWith cf jf w ps = joinStrokes $ start ++ middle ++ end
+    where start  = startCapWith cf w elbows
+          middle = concatMap (jf w) elbows
+          end    = endCapWith cf w elbows
+          elbows = toElbows ps
 
+toElbows :: (Ord a, Fractional a) => [V2 a] -> [Elbow a]
+toElbows (a':b':c':ps') = elbow a' b' c' : toElbows (b':c':ps')
+toElbows (_:[_]) = []
+toElbows _ = []
+--------------------------------------------------------------------------------
+-- Joining and capping.
+--------------------------------------------------------------------------------
+joinStrokes :: Stroke a -> [Primitive V2 a]
+joinStrokes [] = []
+joinStrokes [_] = []
+joinStrokes ((a,b):(c,d):xs) = [Triangle a b c, Triangle b c d] ++ joinStrokes ((c,d):xs)
 
+--        :: a -> Elbow a -> ([Primitive V2 a], V2 a, V2 a)
+bevelJoin :: (Ord a, Num a, Fractional a, Floating a) => JoinFunc a
+bevelJoin w e = [l1,l2]
+    where ((_,o2),(o3,_)) = obtuseLines w e
+          iscw  = isCW e
+          l1 = if iscw then (i, o2) else (o2, i)
+          l2 = if iscw then (i, o3) else (o3, i)
+          i = fromJust $ acuteIntersection w e
+
+startCapWith :: Num a => CapFunc a -> a -> [Elbow a] -> Stroke a
+startCapWith _ _ [] = []
+startCapWith _ _ [_] = []
+startCapWith f w (a:_) = f w $ reverseElbow a
+
+endCapWith :: CapFunc a -> a -> [Elbow a] -> Stroke a
+endCapWith _ _ [] = []
+endCapWith f w [a] = f w a
+endCapWith f w (_:ps) = endCapWith f w ps
+
+-- | Adds a flat cap of width `w` at line ab. Assumes that ab points to the
+-- cap.
+flatCap :: Floating a => CapFunc a
+flatCap w e = [(acute, obtuse)]
+    where acute = a4
+          obtuse = o4
+          ((_,_),(_,o4)) = obtuseLines w e
+          ((_,_),(_,a4)) = acuteLines w e
+
+squareCap :: Floating a => CapFunc a
+squareCap w e = [(acute, obtuse)]
+    where acute = a4 ^+^ w *^ (signorm $ a4 - a3)
+          obtuse = o4 ^+^ w *^ (signorm $ o4 - o3)
+          ((_,_),(o3,o4)) = obtuseLines w e
+          ((_,_),(a3,a4)) = acuteLines w e
+
+triangleCap :: Floating a => CapFunc a
+triangleCap w e = [(a, b),(a, c)]
+    where [_, p2, p3] = unElbow e
+          a = a4
+          (b,c) = if isCW e then (obtuse, apex) else (apex, obtuse)
+          apex = p3 ^+^ w *^ (signorm $ p3 - p2)
+          obtuse = o4
+          ((_,_),(_,o4)) = obtuseLines w e
+          ((_,_),(_,a4)) = acuteLines w e
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
@@ -37,8 +79,8 @@ squareStroke w (i,e,prims) (CWElbow p1 p2 p3) = undefined
 -- perpendicular vector that point towards the outside of the elbow.
 -- This assumes that the area is negative for a CCWElbow.
 obtuseIntersection :: (Num a, Ord a, Fractional a, Floating a)
-                   => a -> Join a -> Maybe (V2 a)
-obtuseIntersection _ (Cap _ _) = Nothing
+                   => a -> Elbow a -> Maybe (V2 a)
+--obtuseIntersection _ (Cap _ _) = Nothing
 obtuseIntersection w (CCWElbow a b c) = acuteIntersection w $ CWElbow a b c
 obtuseIntersection w (CWElbow a b c) = acuteIntersection w $ CWElbow c b a
 
@@ -46,24 +88,28 @@ obtuseIntersection w (CWElbow a b c) = acuteIntersection w $ CWElbow c b a
 -- along their perpendicular vector. This assumes that the area of elbow is
 -- negative for a CCWElbow.
 acuteIntersection :: (Num a, Ord a, Fractional a, Floating a)
-                  => a -> Join a -> Maybe (V2 a)
-acuteIntersection _ (Cap _ _) = Nothing
+                  => a -> Elbow a -> Maybe (V2 a)
+--acuteIntersection _ (Cap _ _) = Nothing
 acuteIntersection w (CCWElbow a b c) = acuteIntersection w $ CWElbow c b a
-acuteIntersection w (CWElbow a b c) =
-    lineIntersection (intaba, intabb) (intbcb, intbcc)
-      where perpab = w *^ (signorm $ perp $ b - a)
-            perpbc = w *^ (signorm $ perp $ c - b)
-            intaba = a ^+^ perpab
-            intabb = b ^+^ perpab
-            intbcb = b ^+^ perpbc
-            intbcc = c ^+^ perpbc
+acuteIntersection w e = lineIntersection la lb
+      where (la,lb) = acuteLines w e
+
+reverseLines :: ((a,a),(a,a)) -> ((a,a),(a,a))
+reverseLines ((la,lb),(lc,ld)) = ((ld,lc),(lb,la))
+
+-- | The elbow lines `w` units displaced from the elbow along their
+-- perpendicular vector that points outward. This assumes that the area of
+-- elbow is negative for a CCWElbow.
+obtuseLines :: (Floating a) => a -> Elbow a -> (Segment a, Segment a)
+obtuseLines w (CCWElbow a b c) = acuteLines w $ CWElbow a b c
+obtuseLines w (CWElbow a b c) = reverseLines $ acuteLines w $ CWElbow c b a
 
 -- | The elbow lines `w` units displaced from the elbow along their
 -- perpendicular vector. This assumes that the area of elbow is negative for a
 -- CCWElbow.
-acuteLines :: (Floating a) => a -> Join a -> (Segment a, Segment a)
-acuteLines _ (Cap a b) = ((a,b), (b,a))
-acuteLines w (CCWElbow a b c) = acuteLines w $ CWElbow c b a
+acuteLines :: (Floating a) => a -> Elbow a -> (Segment a, Segment a)
+--acuteLines _ (Cap a b) = ((a,b),(b,a))
+acuteLines w (CCWElbow a b c) = reverseLines $ acuteLines w $ CWElbow c b a
 acuteLines w (CWElbow a b c) = ((intaba, intabb), (intbcb, intbcc))
     where perpab = w *^ (signorm $ perp $ b - a)
           perpbc = w *^ (signorm $ perp $ c - b)
@@ -72,13 +118,19 @@ acuteLines w (CWElbow a b c) = ((intaba, intabb), (intbcb, intbcc))
           intbcb = b ^+^ perpbc
           intbcc = c ^+^ perpbc
 
+isCW :: Elbow a -> Bool
+isCW (CWElbow _ _ _) = True
+isCW _ = False
 
-unJoin :: Join a -> [V2 a]
-unJoin (CWElbow a b c) = [a, b, c]
-unJoin (CCWElbow a b c) = [a, b, c]
-unJoin (Cap a b) = [a, b]
+reverseElbow :: Elbow a -> Elbow a
+reverseElbow (CCWElbow a b c) = CWElbow c b a
+reverseElbow (CWElbow a b c) = CCWElbow c b a
 
-elbow :: (Ord a, Fractional a) => V2 a -> V2 a -> V2 a -> Join a
+unElbow :: Elbow a -> [V2 a]
+unElbow (CWElbow a b c) = [a, b, c]
+unElbow (CCWElbow a b c) = [a, b, c]
+
+elbow :: (Ord a, Fractional a) => V2 a -> V2 a -> V2 a -> Elbow a
 elbow a b c =
     if triangleArea a b c >= 0
     then CWElbow a b c
@@ -144,16 +196,17 @@ embedWith v a = V3 (v ^. _x) (v ^. _y) a
 --------------------------------------------------------------------------------
 -- Types
 --------------------------------------------------------------------------------
-type StrokeFold a = a -> Stroke a -> Join a -> Stroke a
+type StrokeFunc a = a -> Stroke a -> Elbow a -> Stroke a
 
-strokedGeom :: Stroke a -> [Primitive V2 a]
-strokedGeom (_,_,ps) = ps
+type JoinFunc a = a -> Elbow a -> Stroke a
 
-type Stroke a = (V2 a, V2 a, [Primitive V2 a])
+type CapFunc a = a -> Elbow a -> Stroke a
 
-data Join a = Cap (V2 a) (V2 a)
-            | CWElbow (V2 a) (V2 a) (V2 a)
-            | CCWElbow (V2 a) (V2 a) (V2 a)
-            deriving (Show)
+type Stroke a = [(V2 a, V2 a)]
+--type Stroke a = (V2 a, V2 a, [Primitive V2 a])
+
+data Elbow a = CWElbow (V2 a) (V2 a) (V2 a)
+             | CCWElbow (V2 a) (V2 a) (V2 a)
+             deriving (Show)
 
 type Segment a = (V2 a, V2 a)

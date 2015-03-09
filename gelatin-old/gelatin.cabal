@@ -30,6 +30,8 @@ library
                        Gelatin.Core.Types,
                        Gelatin.Core,
                        Gelatin.Geometry,
+                       Gelatin.Geometry.Types,
+                       Gelatin.Geometry.Triangulation,
                        Gelatin.Shaders.Core,
                        Gelatin.Shaders.SimpleColorShader,
                        Gelatin.Shaders.SimpleTextureShader,
@@ -47,23 +49,23 @@ library
   other-extensions:    GADTs
 
   build-depends:       base >=4.7 && <4.8,
-                       containers -any,
-                       lens -any,
-                       directory -any,
-                       filepath -any,
-                       mtl -any,
-                       OpenGL >=2.9 && <2.10,
-                       GLFW-b >=1.4 && <1.5,
-                       linear >=1.10 && <1.11,
-                       free >=4.9 && <4.10,
-                       GLUtil >=0.8 && <0.9,
-                       bytestring >=0.10 && <0.11,
-                       attoparsec -any
+                       containers,
+                       lens,
+                       directory,
+                       filepath,
+                       mtl,
+                       OpenGL >=2.9,
+                       GLFW-b -any,
+                       linear >=1.10,
+                       free >=4.9,
+                       GLUtil >=0.8,
+                       bytestring,
+                       attoparsec
 
   default-language:    Haskell2010
 
 executable example
-  buildable:           True
+  buildable:           False
   ghc-prof-options:    -Wall -rtsopts -fprof-auto -fprof-cafs -fdefer-type-errors
   main-is:             Example.hs
   build-depends:       base >=4.6 && <5.0,

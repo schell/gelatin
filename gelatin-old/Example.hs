@@ -131,28 +131,28 @@ strokes = withSize 300 300 $ do
 strokeTest :: Rendering2d ()
 strokeTest = withSize 300 300 $ do
     clear
-    let ps = concatMap (bezierToList 20) [ [V2 20 280, V2 150 280, V2 150 20] , [V2 150 20, V2 150 280, V2 280 280] ]
+    let ps = concatMap (bezierToList 50) [ [V2 20 280, V2 150 280, V2 150 20] , [V2 150 20, V2 150 280, V2 280 280] ]
+        stk' = strokeWith squareCap bevelJoin 5 ps
         stk = minkowskiConvolution c $ reverse ps
-        --tris = triangulate $ polygon stk
         c  = circlePath (V2 0 0) 5 8
-        --troublePoints = [stk !! 9, stk !! 10, stk !! 11]
-        --point = stk !! 17
-    --lift2d $ print troublePoints
-    --forM_ (zip tris $ map hex $ cycle [0xFFFF00FF,0x00FFFFFF,0xFF00FFFF]) $
-    --     \(p, a) -> do fill (solid $ alpha a 0.2) [p]
-    --                   outline (solid $ alpha gray 0.3) [p]
-    forM_ c $ \p -> outline (solid orange) [Path $ map (p+) ps]
-    outline (solid gray) $ concatMap (arrows 2) [Path stk]
-    outline (solid blue) $ concatMap (arrows 2) [Path ps]
+    --forM_ c $ \p -> outline (solid orange) [Path $ map (p+) ps]
+    --outline (solid gray) $ concatMap (arrows 2) [Path stk]
+    --outline (solid blue) $ concatMap (arrows 2) [Path ps]
+    forM_ (toElbows ps) (drawElbow 5)
+    fill (solid $ alpha pink 0.3) stk'
 
-drawElbow :: (RealFloat a, Enum a) => Join a -> Rendering2d ()
-drawElbow e = do
-    let asect = fromJust $ acuteIntersection 5 e
-        osect = fromJust $ obtuseIntersection 5 e
-        ps    = unJoin e
-    outline (solid gray) $ concatMap (arrows 1) [Path ps]
-    outline (solid blue) [circle asect 1]
-    outline (solid green) [circle osect 1]
+drawElbow :: (RealFloat a, Enum a) => a -> Elbow a -> Rendering2d ()
+drawElbow w e = do
+    let asect = fromJust $ acuteIntersection w e
+        osect = fromJust $ obtuseIntersection w e
+        ((aa,ab),(ac,ad)) = acuteLines w e
+        ((oa,ob),(oc,od)) = obtuseLines w e
+        ps    = unElbow e
+        clr (CCWElbow _ _ _) = solid orange
+        clr (CWElbow _ _ _) = solid gray
+    outline (clr e) $ concatMap (arrows 1) [Path ps]
+    outline (solid blue) $ circle asect 1 : (arrows 1 $ Path [aa, ab, ac, ad])
+    outline (solid green) $ circle osect 1 : (arrows 1 $  Path [oa, ob, oc, od])
 
 elbowTest :: Rendering2d ()
 elbowTest = withSize 300 300 $ do
@@ -166,9 +166,15 @@ elbowTest = withSize 300 300 $ do
              , elbow (V2 0 25) (V2 25 25) (V2 25 0)
              , elbow (V2 25 0) (V2 12.5 12.5) (V2 0 0)
              ]
+        ps = [V2 (-50) 50, V2 (-50) (-50), V2 (-45) 50, V2 50 (-50), V2 50 50, V2 (-50) 75] :: [V2 Float]
+        st = strokeWith squareCap bevelJoin 5 ps
         zipWithM_' xs ys f = zipWithM_ f xs ys
     withPosition (V2 20 20) $ zipWithM_' es [0 ..] $ \e i ->
-        withPosition (V2 (i*40) (i*40)) $ drawElbow e
+        withPosition (V2 (i*40) (i*40)) $ drawElbow 5 e
+    withPosition (V2 20 150) $ drawElbow 5 $ elbow (V2 0 0) (V2 0 100) (V2 100 100)
+    withPosition (V2 220 70) $ do
+        forM_ (toElbows ps) (drawElbow 5)
+        fill (solid $ alpha orange 0.5) st
 
 
 allAngles :: (Metric f, R1 f, R2 f, Eq (f a), Num a, Ord a, RealFloat a)
@@ -179,6 +185,14 @@ allAngles ps = map signedAt ndxs
           signedAt i = triangleArea (ps !! (mod (i - 1) len))
                                     (ps !! (mod (i    ) len))
                                     (ps !! (mod (i + 1) len))
+
+lineTest :: Rendering2d ()
+lineTest = withSize 300 300 $ do
+    clear
+    let ps = concatMap (bezierToList 1) [ [V2 20 280, V2 150 280, V2 150 20] , [V2 150 20, V2 150 280, V2 280 280] ]
+    lift2d $ lineWidth $= 10
+    outline (solid $ alpha orange 0.5) [path ps]
+    lift2d $ lineWidth $= 1
 
 arrows :: (Floating a, Ord a) => a -> Primitive V2 a -> [Primitive V2 a]
 arrows w (Line a b) = [ path [a, b]
@@ -191,14 +205,9 @@ arrows w p = concatMap (arrows w) $ primitiveToLines p
 
 main :: IO ()
 main = do
-    wref  <- initWindow (V2 600 600) (V2 600 600) "Gelatin"
-    r1    <- runRendering2d boxes
-    r2    <- runRendering2d circles
-    r3    <- runRendering2d strokeTest
-    r4    <- runRendering2d elbowTest
-
-    --r2    <- runRendering2d boxes
-    loop [r4, r3, r2, r1] wref emptyInputEnv
+    wref  <- initWindow (V2 100 300) (V2 800 800) "Gelatin"
+    renderings <- mapM runRendering2d [boxes, circles, strokeTest, elbowTest, lineTest]
+    loop renderings wref emptyInputEnv
 
 loop :: [CompiledRendering] -> WindowRef -> InputEnv -> IO ()
 loop [] _ _ = return ()

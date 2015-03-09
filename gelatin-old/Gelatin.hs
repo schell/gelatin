@@ -18,6 +18,8 @@ import Gelatin.Core.TextureCommands as G
 import Gelatin.Core.Compiling as G
 
 import Graphics.Rendering.OpenGL as OpenGL hiding (
+    project,
+    lookAt,
     translate,
     scale,
     rotate,

@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards #-}
 module Gelatin.Core.Compiling where
 
 import Gelatin.Core.Types
@@ -6,7 +7,7 @@ import Gelatin.Core.ShaderCommands
 import Gelatin.Core.TextureCommands
 import Graphics.GLUtil hiding (Elem, setUniform)
 import qualified Graphics.GLUtil as GLU
-import Graphics.Rendering.OpenGL as GL
+import Graphics.Rendering.OpenGL as GL hiding (VertexComponent)
 import Control.Monad
 import Control.Monad.Free
 import Control.Monad.Free.Church
@@ -23,6 +24,10 @@ import Linear
 data CompiledRendering = Compiled { render  :: IO ()
                                   , cleanup :: IO ()
                                   }
+
+data VBO v a = VBO { vboComponent  :: VertexComponent v a
+                   , vboBuffer     :: BufferObject
+                   }
 
 type TextureAtlas = M.Map String TextureObject
 --------------------------------------------------------------------------------
@@ -69,17 +74,8 @@ compileShaderCommand s (Free (ShaderM m next)) = do
     nxt <- compileShaderCommand s next
     return $ onlyRender m <> nxt
 compileShaderCommand s (Free (SetUniform u next)) = do
-    let uname = uniformName u
-        udata = uniformData u
-        muLoc = fmap fst $ M.lookup uname $ uniforms s
-    case muLoc of
-        Nothing  -> error $ unwords [ "Could not find uniform '" ++ uname ++ "'."
-                                    , " Available uniforms include "
-                                    , intercalate ", " $ M.keys $ uniforms s
-                                    , "."
-                                    ]
-        Just _ -> do nxt <- compileShaderCommand s next
-                     return $ mappend (onlyRender $ GLU.setUniform s uname udata) nxt
+    nxt <- compileShaderCommand s next
+    return $ mappend (onlyRender $ updateUniform s u) nxt
 compileShaderCommand s (Free (WithVertices vb cmd next)) = do
     sub <- compileShaderCommand s $ fromF cmd
     nxt <- compileShaderCommand s next
@@ -152,6 +148,54 @@ compileRenderCommand (Free (UsingTextures t ts cmd r n)) = do
         cu  = do cleanup sub
                  deleteObjectNames ts'
     return $ Compiled io cu <> nxt
+--------------------------------------------------------------------------------
+-- Helpers
+--------------------------------------------------------------------------------
+usingShader :: ShaderProgram -> IO () -> IO ()
+usingShader s io = do
+    currentProgram $= (Just $ program s)
+    io
+    currentProgram $= Nothing
+
+updateUniform :: forall a. AsUniform a => ShaderProgram -> ShaderUniform a -> IO ()
+updateUniform s u =
+    let uname = uniformName u
+        udata = uniformData u
+        muLoc = fmap fst $ M.lookup uname $ uniforms s
+    in case muLoc of
+           Nothing  -> error $ unwords [ "Could not find uniform '" ++ uname ++ "'."
+                                       , " Available uniforms include "
+                                       , intercalate ", " $ M.keys $ uniforms s
+                                       , "."
+                                       ]
+           Just _ -> GLU.setUniform s uname udata
+
+bufferVBO :: forall v a t. Storable t => ShaderProgram -> VertexComponent t a -> IO (VBO v a)
+bufferVBO s v@VertexComponent{..} = do
+    let aloc = getAttrib s vertexName
+        size = sizeOfList vertexData
+    b <- genObjectName
+    bindBuffer ArrayBuffer $= Just b
+    vertexAttribPointer aloc $= (vertexHandling, vertexDescriptor)
+    vertexAttribArray aloc $= Enabled
+    withArray vertexData $ \ptr ->
+        bufferData ArrayBuffer $= (size, ptr, StaticDraw)
+    bindBuffer ArrayBuffer $= Nothing
+    return $ VBO v{ vertexData = [] } b
+
+withVBO :: forall t a. ShaderProgram -> VBO t a -> IO () -> IO ()
+withVBO s vbo io = withVBOs s [vbo] io
+
+withVBOs :: forall t a. ShaderProgram -> [VBO t a] -> IO () -> IO ()
+withVBOs s vbos io = do
+    forM_ vbos $ \VBO{..} -> do
+        let aloc = getAttrib s $ vertexName
+            VertexComponent{..} = vboComponent
+        bindBuffer ArrayBuffer $= Just vboBuffer
+        vertexAttribPointer aloc $= (vertexHandling, vertexDescriptor)
+        vertexAttribArray aloc $= Enabled
+    io
+    bindBuffer ArrayBuffer $= Nothing
 
 loadTextures :: ( BindableTextureTarget t
                 , ParameterizedTextureTarget t

@@ -1,7 +1,12 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TupleSections #-}
 module Gelatin.Window (
     -- * Creating a window
     WindowRef,
+    getWindow,
+    getNewEvents,
+    unWindowRef,
     initWindow,
     -- * Input
     emptyInputEnv,
@@ -13,6 +18,9 @@ module Gelatin.Window (
     ienvKeysDownLens,
     ienvMouseButtonsDownLens,
     ienvWindowSizeLens,
+    JoystickInput(..),
+    getJoysticks,
+    getJoystickInput,
     module GLFW,
     -- * Processing input events
     foldInput,
@@ -24,10 +32,15 @@ module Gelatin.Window (
 
 import Graphics.UI.GLFW as GLFW
 import Data.IORef
+import Data.Typeable
+import Data.Maybe
 import Linear
+import Control.Monad
 import Control.Lens
+import Control.Applicative
 import System.IO
 import qualified Data.Set as S
+import qualified Data.Map.Strict as M
 
 -- TODO: Use SDL2 as another backend and abstract this stuff out.
 --------------------------------------------------------------------------------
@@ -44,13 +57,19 @@ data InputEvent = NoInputEvent
                 | ScrollEvent Double Double
                 deriving (Show, Eq, Ord)
 
+data JoystickInput = JoystickInput { jiJoystick :: Joystick
+                                   , jiName     :: String
+                                   , jiButtons  :: [JoystickButtonState]
+                                   , jiAxes     :: [Double]
+                                   } deriving (Show, Typeable)
+
 data InputEnv = InputEnv { ienvEvents           :: [InputEvent]
                          , ienvCursorOnScreen   :: Bool
                          , ienvLastCursorPos    :: (Double, Double)
                          , ienvKeysDown         :: S.Set Key
                          , ienvMouseButtonsDown :: S.Set MouseButton
                          , ienvWindowSize       :: V2 Int
-                         } deriving (Show)
+                         } deriving (Show, Typeable)
 makeLensesFor [("ienvEvents", "ienvEventsLens")
               ,("ienvCursorOnScreen", "ienvCursorOnScreenLens")
               ,("ienvLastCursorPos", "ienvLastCursorPosLens")
@@ -59,7 +78,52 @@ makeLensesFor [("ienvEvents", "ienvEventsLens")
               ,("ienvWindowSize", "ienvWindowSizeLens")
               ] ''InputEnv
 
-type WindowRef = IORef ([InputEvent], Window)
+newtype WindowRef = WindowRef (IORef ([InputEvent], Window)) deriving (Typeable)
+--------------------------------------------------------------------------------
+-- Getting things from the window.
+--------------------------------------------------------------------------------
+unWindowRef :: WindowRef -> IORef ([InputEvent], Window)
+unWindowRef (WindowRef ioref) = ioref
+
+getWindow :: WindowRef -> IO Window
+getWindow wref = fmap snd $ readIORef $ unWindowRef wref
+
+getNewEvents :: WindowRef -> IO [InputEvent]
+getNewEvents (WindowRef ioref) = do
+    (events, window) <- readIORef ioref
+    writeIORef ioref ([], window)
+    return events
+
+getJoysticks :: IO (M.Map Joystick JoystickInput)
+getJoysticks = M.fromList . map toTuple . catMaybes <$> forM allJoysticks getJoystickInput
+    where toTuple ji = (jiJoystick ji, ji)
+
+getJoystickInput :: Joystick -> IO (Maybe JoystickInput)
+getJoystickInput js = do
+    mname    <- getJoystickName' js
+    mbuttons <- getJoystickButtons js
+    maxes    <- getJoystickAxes js
+    return $ do name    <- mname
+                buttons <- mbuttons
+                axes    <- maxes
+                return $ JoystickInput js name buttons axes
+
+allJoysticks :: [Joystick]
+allJoysticks = [Joystick'1 .. Joystick'16]
+
+getJoystickName' :: Joystick -> IO (Maybe String)
+getJoystickName' js = f <$> getJoystickName js
+    where f mn = case mn of
+                     Just "" -> Nothing
+                     _       -> mn
+
+
+getAllJoystickNames :: IO [(Joystick, String)]
+getAllJoystickNames = do
+    let
+    mNames <- forM allJoysticks $ \js -> ((js,) <$>) <$> getJoystickName' js
+    return $ catMaybes mNames
+
 --------------------------------------------------------------------------------
 -- Query input events.
 --------------------------------------------------------------------------------
@@ -82,6 +146,12 @@ clearEvents = (& ienvEventsLens .~ [])
 
 -- | Take an input event and fold it into an input environment variable.
 foldInput :: InputEnv -> InputEvent -> InputEnv
+foldInput ienv e@(KeyEvent k _ KeyState'Pressed _) =
+    ienv & ienvKeysDownLens %~ S.insert k
+         & ienvEventsLens %~ (e:)
+foldInput ienv e@(KeyEvent k _ KeyState'Released _) =
+    ienv & ienvKeysDownLens %~ S.delete k
+         & ienvEventsLens %~ (e:)
 foldInput ienv e@(CursorMoveEvent x y) =
     ienv & ienvLastCursorPosLens .~ (x,y)
          & ienvEventsLens %~ (e:)
@@ -122,7 +192,7 @@ makeNewWindow pos size title = do
     (uncurry $ setWindowPos win) pos
 
     let (w, h) = over both fromIntegral size
-    ref <- newIORef ([WindowSizeEvent w h, WindowSizeEvent w h], win)
+    ref <- newIORef $ ([WindowSizeEvent w h, WindowSizeEvent w h], win)
 
     setCharCallback win $ Just $ \_ c ->
         input ref $ CharEvent c
@@ -145,8 +215,8 @@ makeNewWindow pos size title = do
     setScrollCallback win $ Just $ \_ x y ->
         input ref $ ScrollEvent x y
 
-    return ref
+    return $ WindowRef ref
 
 -- | Inject some input into a WindowRef.
-input :: WindowRef -> InputEvent -> IO ()
+input :: IORef ([InputEvent], Window) -> InputEvent -> IO ()
 input ref e = modifyIORef' ref (\(es,w) -> (e:es,w))

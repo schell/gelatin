@@ -38,6 +38,9 @@ uniformM4f s = ShaderUniform s . fmap (fmap realToFrac)
 uniformV4f :: Real a => String -> V4 a -> ShaderUniform (V4 GLfloat)
 uniformV4f s = ShaderUniform s . fmap realToFrac
 
+uniformV4fv :: Real a => String -> [V4 a] -> ShaderUniform [V4 GLfloat]
+uniformV4fv s = ShaderUniform s . fmap (fmap realToFrac)
+
 uniformi :: Integral a => String -> a -> ShaderUniform GLint
 uniformi s = ShaderUniform s . fromIntegral
 

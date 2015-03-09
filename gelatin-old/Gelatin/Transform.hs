@@ -3,7 +3,7 @@ module Gelatin.Transform where
 
 import Control.Monad.Free
 import Control.Monad.Free.Church
-import Linear
+import Linear hiding (perspective)
 import Graphics.GLUtil.Camera3D (projectionMatrix)
 
 --------------------------------------------------------------------------------
@@ -60,8 +60,8 @@ rotateY = axisAngle (V3 0 1 0)
 rotateZ :: (Epsilon a, Floating a) => a -> Quaternion a
 rotateZ = axisAngle (V3 0 0 1)
 
-perspective :: (Epsilon a, RealFloat a, Conjugate a) => a -> a -> a -> a -> M44 a
-perspective = projectionMatrix
+--perspective :: (Epsilon a, RealFloat a, Conjugate a) => a -> a -> a -> a -> M44 a
+--perspective = projectionMatrix
 
 ortho :: (Num a, Fractional a) => a -> a -> a -> a -> a -> a -> M44 a
 ortho left right top bottom near far =
