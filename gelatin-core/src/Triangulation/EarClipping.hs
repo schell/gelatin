@@ -1,6 +1,6 @@
 module Triangulation.EarClipping where
 
-import Types
+import Render.Types
 import Triangulation.Common
 import Linear hiding (trace)
 

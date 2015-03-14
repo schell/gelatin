@@ -13,7 +13,7 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Triangulation.KET (triangulate) where
 
-import Renderer.Types
+import Render.Types
 import Linear
 import Data.Vector (Vector)
 import qualified Data.Vector as V

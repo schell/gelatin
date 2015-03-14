@@ -1,6 +1,15 @@
-module Shader where
+{-# LANGUAGE OverloadedStrings #-}
+module Shader (
+    module S,
+    positionLoc,
+    colorLoc,
+    uvLoc,
+    compileShader,
+    compileProgram
+) where
 
 import Prelude hiding (init)
+import Prelude as P
 import Graphics.GL.Core33
 import Graphics.GL.Types
 import Control.Monad
@@ -10,6 +19,9 @@ import Foreign.C.String
 import Foreign.Marshal.Array
 import Foreign.Marshal.Utils
 import Foreign.Storable
+import Data.ByteString.Char8 as B
+
+import Shader.Internal as S
 
 positionLoc :: GLuint
 positionLoc = 0
@@ -20,14 +32,14 @@ colorLoc = 1
 uvLoc :: GLuint
 uvLoc = 2
 
-compileShader :: String -> GLuint -> IO GLuint
+compileShader :: ByteString -> GLuint -> IO GLuint
 compileShader src sh = do
     shader <- glCreateShader sh
     when (shader == 0) $ do
-        putStrLn "could not create shader"
+        B.putStrLn "could not create shader"
         exitFailure
 
-    withCString src $ \ptr ->
+    withCString (B.unpack src) $ \ptr ->
        with ptr $ \ptrptr -> glShaderSource shader 1 ptrptr nullPtr
 
     glCompileShader shader
@@ -36,15 +48,15 @@ compileShader src sh = do
         peek ptr
 
     when (success == GL_FALSE) $ do
-        putStrLn "could not compile shader:\n"
-        putStrLn src
+        B.putStrLn "could not compile shader:\n"
+        B.putStrLn src
         infoLog <- with (0 :: GLint) $ \ptr -> do
             glGetShaderiv shader GL_INFO_LOG_LENGTH ptr
             logsize <- peek ptr
             allocaArray (fromIntegral logsize) $ \logptr -> do
                 glGetShaderInfoLog shader logsize nullPtr logptr
                 peekArray (fromIntegral logsize) logptr
-        putStrLn $ map (toEnum . fromEnum) infoLog
+        P.putStrLn $ P.map (toEnum . fromEnum) infoLog
         exitFailure
 
     return shader
@@ -61,14 +73,14 @@ compileProgram shaders = do
         peek ptr
 
     when (success == GL_FALSE) $ do
-        putStrLn "could not link program"
+        B.putStrLn "could not link program"
         infoLog <- with (0 :: GLint) $ \ptr -> do
             glGetProgramiv program GL_INFO_LOG_LENGTH ptr
             logsize <- peek ptr
             allocaArray (fromIntegral logsize) $ \logptr -> do
                 glGetProgramInfoLog program logsize nullPtr logptr
                 peekArray (fromIntegral logsize) logptr
-        putStrLn $ map (toEnum . fromEnum) infoLog
+        P.putStrLn $ P.map (toEnum . fromEnum) infoLog
         exitFailure
 
     forM_ shaders glDeleteShader
