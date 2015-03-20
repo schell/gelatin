@@ -13,7 +13,6 @@ import Data.Monoid
 import Data.Typeable
 import Data.ByteString.Char8 (ByteString)
 import Control.Concurrent.Async
---import Control.Lens
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
 
@@ -74,9 +73,6 @@ instance Monoid Renderer where
     mempty = Renderer (const $ return ()) (return ())
     (Renderer ar ac) `mappend` (Renderer br bc) = Renderer (\t -> ar t >> br t) (ac >> bc)
 
-newtype BoxRenderer = Box Renderer
-newtype BezRenderer = Bez Renderer
-
 data Bezier a = Bezier { bezTriArea :: a
                        , bezA :: V2 a
                        , bezB :: V2 a
@@ -88,7 +84,14 @@ bezWoundClockwise = (< 0) . bezTriArea
 
 data Triangle a = Triangle (V2 a) (V2 a) (V2 a) deriving (Show)
 data Line a = Line (V2 a) (V2 a) deriving (Show)
-newtype Color = Color { unColor :: V4 Float } deriving (Typeable)
+
+data Image = LocalImage FilePath
+           | HttpImage String
+           deriving (Typeable, Show)
+data Color = SolidColor (V4 Float)
+           | GradientColor [V4 Float]
+           -- | TextureColor Image [V2 Float]
+           deriving (Typeable)
 
 newtype UniqueId = UniqueId { unId :: Int } deriving (Enum, Ord, Eq, Num, Show)
 newtype Name = Name { unName :: String } deriving (Ord, Eq)

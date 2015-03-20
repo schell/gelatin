@@ -3,7 +3,7 @@ module Shader (
     module S,
     positionLoc,
     colorLoc,
-    uvLoc,
+    bezLoc,
     compileShader,
     compileProgram
 ) where
@@ -31,6 +31,10 @@ colorLoc = 1
 
 uvLoc :: GLuint
 uvLoc = 2
+
+bezLoc :: GLuint
+bezLoc = 3
+
 
 compileShader :: ByteString -> GLuint -> IO GLuint
 compileShader src sh = do

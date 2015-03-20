@@ -4,7 +4,7 @@ module Render (
     module GLFW,
     initResources,
     enableBlending,
-    drawThing,
+    draw,
     drawClear,
     withNewFrame,
     gets
@@ -85,16 +85,16 @@ drawWithCache :: (Member (State Resources) r,
 drawWithCache uid f tfrm = do
     (Resources fs rs ss w dpi t) <- get
     let i = fromEnum uid
-    draw <- case IM.lookup i rs of
-                Just r -> return r
-                Nothing -> do r <- f
-                              put $ Resources fs (IM.insert i r rs) ss w dpi t
-                              return r
-    lift $ render draw tfrm
+    d <- case IM.lookup i rs of
+             Just r -> return r
+             Nothing -> do r <- f
+                           put $ Resources fs (IM.insert i r rs) ss w dpi t
+                           return r
+    lift $ render d tfrm
 
 textDraw :: (Member (State Resources) r,
              SetMember Lift (Lift IO) r)
-         => V4 Float -> Font -> PointSize -> String -> Eff r Renderer
+         => Color -> Font -> PointSize -> String -> Eff r Renderer
 textDraw color font psize txt = do
     dpi <- gets rsrcDpi
     let cs = getStringCurveAtPoint dpi (0,0) [(font, psize, txt)]
@@ -103,24 +103,24 @@ textDraw color font psize txt = do
         ts = concatMap (concatMap (concaveTriangles . onContourPoints)) bs
     newPolyRenderer color bs' ts
 
-drawThing :: (Member (State Resources) r,
-              SetMember Lift (Lift IO) r,
-              Enum i)
-          => i -> V4 Float -> Display -> Transform -> Eff r ()
-drawThing uid color (DisplayTris ts) = drawWithCache uid $
+draw :: (Member (State Resources) r,
+         SetMember Lift (Lift IO) r,
+         Enum i)
+     => i -> Color -> Display -> Transform -> Eff r ()
+draw uid color (DisplayTris ts) = drawWithCache uid $
     newTriRenderer color ts
-drawThing uid color (DisplayPoly vs) = drawWithCache uid $
+draw uid color (DisplayPoly vs) = drawWithCache uid $
     newTriRenderer color $ triangulate vs
-drawThing uid color (DisplayLine vs) = drawWithCache uid $
+draw uid color (DisplayLine vs) = drawWithCache uid $
     newLineRenderer color $ toLines vs
-drawThing uid color (DisplayArrows vs) = drawWithCache uid $
+draw uid color (DisplayArrows vs) = drawWithCache uid $
     newLineRenderer color $ toArrows vs
-drawThing uid color (DisplayText desc px txt) = \t -> do
+draw uid color (DisplayText desc px txt) = \t -> do
     dpi <- gets rsrcDpi
     let psize = pixelSizeInPointAtDpi px dpi
     withFont desc $ \font ->
         drawWithCache uid (textDraw color font psize txt) t
-drawThing uid color (DisplayText' desc px txt) = \t -> do
+draw uid color (DisplayText' desc px txt) = \t -> do
     dpi <- gets rsrcDpi
     let psize = pixelSizeInPointAtDpi px dpi
     withFont desc $ \font ->
@@ -129,8 +129,8 @@ drawThing uid color (DisplayText' desc px txt) = \t -> do
                            bs = beziers cs
                            bs' = concat $ concat bs
                            ts = concatMap (concatMap (concaveTriangles . onContourPoints)) bs
-                       pr <- newPolyRenderer (V4 1 1 1 0.5) [] ts
-                       br <- newPolyRenderer (V4 1 1 1 1) bs' []
+                       pr <- newPolyRenderer (SolidColor $ V4 1 1 1 0.5) [] ts
+                       br <- newPolyRenderer (SolidColor $ V4 1 1 1 1) bs' []
                        return $ pr <> br
             let cs = getStringCurveAtPoint dpi (0,0) [(font, psize, txt)]
                 bs = beziers cs
@@ -168,7 +168,7 @@ colorRenderSource = do
 
 newPolyRenderer :: (Member (State Resources) r,
                     SetMember Lift (Lift IO) r)
-                => V4 Float
+                => Color
                 -> [Bezier Float]
                 -> [Triangle Float]
                 -> Eff r Renderer
@@ -197,7 +197,7 @@ newPolyRenderer color bs ts = do
 
 newBezRenderer :: (Member (State Resources) r,
                    SetMember Lift (Lift IO) r)
-               => V4 Float -> [Bezier Float] -> Eff r Renderer
+               => Color -> [Bezier Float] -> Eff r Renderer
 newBezRenderer color bs = do
     window <- gets rsrcWindow
     -- Create a new rendersource (compiled shader program) or retreive an
@@ -211,8 +211,9 @@ newBezRenderer color bs = do
         Just mvloc = lookup "modelview" locs
 
     lift $ withVAO $ \vao -> withBuffers 3 $ \[pbuf, tbuf, cbuf] -> do
-        let ps = concatMap F.toList $ concatMap (\(Bezier _ a b c) -> [a,b,c]) bs :: [GLfloat]
-            cs = concatMap F.toList $ replicate (length ps) color :: [GLfloat]
+        let ks = concatMap (\(Bezier _ a b c) -> [a,b,c]) bs :: [V2 Float]
+            ps = concatMap F.toList ks :: [GLfloat]
+            cs = color `asColorComponentsFor` ks
             ts = concatMap (\w -> [0, 0, w, 0.5, 0, w, 1, 1, w]) $
                      map (fromBool . bezWoundClockwise) bs :: [GLfloat]
         bufferPositionAttribs pbuf ps
@@ -230,13 +231,14 @@ newBezRenderer color bs = do
 
 newTriRenderer :: (Member (State Resources) r,
                    SetMember Lift (Lift IO) r)
-               => V4 Float -> [Triangle Float] -> Eff r Renderer
+               => Color -> [Triangle Float] -> Eff r Renderer
 newTriRenderer color ts = do
     window <- gets rsrcWindow
     (program, pjloc, mvloc) <- colorRenderSource
     lift $ withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
-        let ps = concatMap F.toList $ concatMap (\(Triangle a b c) -> [a,b,c]) ts :: [GLfloat]
-            cs = concatMap F.toList $ replicate (length ps) color :: [GLfloat]
+        let ks = concatMap (\(Triangle a b c) -> [a,b,c]) ts :: [V2 Float]
+            ps = concatMap F.toList ks :: [GLfloat]
+            cs = color `asColorComponentsFor` ks
         bufferPositionAttribs pbuf ps
         bufferColorAttribs cbuf cs
         let num = fromIntegral $ length ts * 3
@@ -248,13 +250,14 @@ newTriRenderer color ts = do
 
 newLineRenderer :: (Member (State Resources) r,
                     SetMember Lift (Lift IO) r)
-                => V4 Float -> [Line Float] -> Eff r Renderer
+                => Color -> [Line Float] -> Eff r Renderer
 newLineRenderer color ls = do
     window <- gets rsrcWindow
     (program, pjloc, mvloc) <- colorRenderSource
     lift $ withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
-        let ps = concatMap F.toList $ concatMap (\(Line a b) -> [a,b]) ls :: [GLfloat]
-            cs = concatMap F.toList $ replicate (length ps) color :: [GLfloat]
+        let ks = concatMap (\(Line a b) -> [a,b]) ls :: [V2 Float]
+            ps = concatMap F.toList ks :: [GLfloat]
+            cs = color `asColorComponentsFor`  ks
 
         bufferPositionAttribs pbuf ps
         bufferColorAttribs cbuf cs
@@ -381,7 +384,7 @@ bufferColorAttribs :: Storable a => GLuint -> [a] -> IO ()
 bufferColorAttribs = bufferAttrib colorLoc 4
 
 bufferBezAttribs :: Storable a => GLuint -> [a] -> IO ()
-bufferBezAttribs = bufferAttrib uvLoc 3
+bufferBezAttribs = bufferAttrib bezLoc 3
 
 drawBuffer :: Window -> GLuint -> GLint -> GLint -> GLuint -> GLenum -> GLsizei -> Transform -> IO ()
 drawBuffer window program pjloc mvloc vao mode num (Transform txy sxy rot) = do
@@ -394,7 +397,8 @@ drawBuffer window program pjloc mvloc vao mode num (Transform txy sxy rot) = do
     err <- glGetError
     when (err /= 0) $ putStrLn $ "Error: " ++ show err
 
-getPJMV :: Window -> V2 GLfloat -> V2 GLfloat -> GLfloat -> IO (M44 GLfloat, M44 GLfloat)
+getPJMV :: Window -> V2 GLfloat -> V2 GLfloat -> GLfloat
+        -> IO (M44 GLfloat, M44 GLfloat)
 getPJMV window (V2 x y) (V2 w h) r = do
     (ww, wh) <- getWindowSize window
     let (hw,hh) = (fromIntegral ww, fromIntegral wh)
@@ -438,3 +442,11 @@ toArrows = concatMap toArrow . toLines
                   u = signorm $ b - a
                   l = 5 -- head length
                   w = 3 -- head width
+
+asColorComponentsFor :: Eq k => Color -> [k] -> [GLfloat]
+asColorComponentsFor clr ks = concatMap F.toList $ catMaybes $ foldl (\ps p -> ps ++ [lookup p m]) [] ks
+    where m = zip ks $ cycle cs
+          cs = case clr of
+                   SolidColor c -> [c]
+                   GradientColor c -> c
+
