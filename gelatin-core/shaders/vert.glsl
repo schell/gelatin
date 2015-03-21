@@ -9,12 +9,10 @@ uniform bool hasUV;
 uniform sampler2D sampler;
 
 out vec4 fcolor;
+out vec2 fuv;
 
 void main() {
-    if (hasUV) {
-        fcolor = texture(sampler, uv);
-    } else {
-        fcolor = color;
-    }
+    fcolor = color;
+    fuv = uv;
     gl_Position = projection * modelview * vec4(position.xy, 0.0, 1.0);
 }

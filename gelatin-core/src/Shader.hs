@@ -3,6 +3,7 @@ module Shader (
     module S,
     positionLoc,
     colorLoc,
+    uvLoc,
     bezLoc,
     compileShader,
     compileProgram

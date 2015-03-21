@@ -1,7 +1,11 @@
 #version 330 core
 in vec3 fbez;
 in vec4 fcolor;
+in vec2 fuv;
 out vec4 fragColor;
+
+uniform bool hasUV;
+uniform sampler2D sampler;
 
 void main() {
     vec2 p = fbez.xy;
@@ -30,5 +34,11 @@ void main() {
         // We are right on the boundary, interpolate the color intensity.
         a = alpha;
     }
-    fragColor = fcolor * vec4(1.0, 1.0, 1.0, a);
+    vec4 color = vec4(0);
+    if (hasUV) {
+        color = texture(sampler, fuv);
+    } else {
+        color = fcolor;
+    }
+    fragColor = color * vec4(1.0, 1.0, 1.0, a);
 }

@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 module Render (
     module R,
     module GLFW,
@@ -15,6 +16,7 @@ import Render.Types as R
 import Render.Font as R
 import Triangulation.KET
 import Linear
+import Network.HTTP.Client
 import Graphics.GL.Core33
 import Graphics.GL.Types
 import Graphics.UI.GLFW as GLFW
@@ -29,6 +31,9 @@ import Data.Maybe
 import Data.Monoid
 import Data.Time.Clock
 import Data.Typeable
+import Data.Vector.Storable (unsafeWith)
+import Codec.Picture as J
+import Codec.Picture.Types
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
@@ -43,6 +48,7 @@ import qualified Data.Foldable as F
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
 import qualified Data.ByteString.Char8 as B
+--import qualified Data.ByteString.Lazy.Char8 as LB
 
 -- | Starts up the renderer by creating a window and returning some default
 -- values for resources.
@@ -83,12 +89,13 @@ drawWithCache :: (Member (State Resources) r,
               -> Eff r ()
               -- ^ Returns the updated resources
 drawWithCache uid f tfrm = do
-    (Resources fs rs ss w dpi t) <- get
+    rsrcs@Resources{..} <- get
     let i = fromEnum uid
-    d <- case IM.lookup i rs of
+    d <- case IM.lookup i rsrcRenderers of
              Just r -> return r
              Nothing -> do r <- f
-                           put $ Resources fs (IM.insert i r rs) ss w dpi t
+                           let rs = IM.insert i r rsrcRenderers
+                           put $ rsrcs{rsrcRenderers = rs}
                            return r
     lift $ render d tfrm
 
@@ -142,29 +149,39 @@ draw uid color (DisplayText' desc px txt) = \t -> do
 glFloatSize :: Int
 glFloatSize = sizeOf (undefined :: GLfloat)
 
+-- | Create a new rendersource (compiled shader program) or retreive an
+-- existing one out of our RenderSources
 newRenderSource :: (Member (State Resources) r,
                     SetMember Lift (Lift IO) r)
                 => RenderDef -> Eff r RenderSource
 newRenderSource rd = do
-    (Resources fs rs ss w dpi t) <- get
-    case M.lookup rd ss of
+    rsrcs@Resources{..} <- get
+    case M.lookup rd rsrcSources of
         Just r -> return r
         Nothing -> do
             r <- lift $ loadRenderSource rd
-            put $ Resources fs rs (M.insert rd r ss) w dpi t
+            let ss = M.insert rd r rsrcSources
+            put $ rsrcs{ rsrcSources = ss }
             return r
 
-colorRenderSource :: (Member (State Resources) r,
+geomRenderSource :: (Member (State Resources) r,
                       SetMember Lift (Lift IO) r)
-                  => Eff r (GLuint, GLint, GLint)
-colorRenderSource = do
+                  => Eff r RenderSource
+geomRenderSource = do
     let def = RenderDefBS [(vertSourceGeom, GL_VERTEX_SHADER)
-                                ,(fragSourceGeom, GL_FRAGMENT_SHADER)]
-                                ["projection", "modelview"]
-    (RenderSource program locs) <- newRenderSource def
-    let Just pjloc = lookup "projection" locs
-        Just mvloc = lookup "modelview" locs
-    return (program, pjloc, mvloc)
+                          ,(fragSourceGeom, GL_FRAGMENT_SHADER)]
+                          ["projection", "modelview", "sampler", "hasUV"]
+    newRenderSource def
+
+bezRenderSource :: (Member (State Resources) r,
+                    SetMember Lift (Lift IO) r)
+                => Eff r RenderSource
+bezRenderSource = do
+    let def = RenderDefBS [(vertSourceBezier, GL_VERTEX_SHADER)
+                          ,(fragSourceBezier, GL_FRAGMENT_SHADER)
+                          ]
+                          ["projection", "modelview", "sampler", "hasUV"]
+    newRenderSource def
 
 newPolyRenderer :: (Member (State Resources) r,
                     SetMember Lift (Lift IO) r)
@@ -199,16 +216,14 @@ newBezRenderer :: (Member (State Resources) r,
                    SetMember Lift (Lift IO) r)
                => Color -> [Bezier Float] -> Eff r Renderer
 newBezRenderer color bs = do
+    tr <- loadTextureRendererIfNeeded color
     window <- gets rsrcWindow
-    -- Create a new rendersource (compiled shader program) or retreive an
-    -- existing one out of our RenderSources
-    let def = RenderDefBS [(vertSourceBezier, GL_VERTEX_SHADER)
-                                ,(fragSourceBezier, GL_FRAGMENT_SHADER)]
-                                ["projection", "modelview"]
-    (RenderSource program locs) <- newRenderSource def
+    (RenderSource program locs) <- bezRenderSource
 
-    let Just pjloc = lookup "projection" locs
-        Just mvloc = lookup "modelview" locs
+    let Just pjU = lookup "projection" locs
+        Just mvU = lookup "modelview" locs
+        Just smU = lookup "sampler" locs
+        Just uvU = lookup "hasUV" locs
 
     lift $ withVAO $ \vao -> withBuffers 3 $ \[pbuf, tbuf, cbuf] -> do
         let ks = concatMap (\(Bezier _ a b c) -> [a,b,c]) bs :: [V2 Float]
@@ -217,7 +232,10 @@ newBezRenderer color bs = do
             ts = concatMap (\w -> [0, 0, w, 0.5, 0, w, 1, 1, w]) $
                      map (fromBool . bezWoundClockwise) bs :: [GLfloat]
         bufferPositionAttribs pbuf ps
-        bufferColorAttribs cbuf cs
+        hasUV <- configureColorVertexAttribs color
+        if hasUV
+          then bufferAttrib uvLoc 2 cbuf cs
+          else bufferAttrib colorLoc 4 cbuf cs
         bufferBezAttribs tbuf ts
         glBindVertexArray 0
 
@@ -225,52 +243,78 @@ newBezRenderer color bs = do
                 withArray [pbuf, tbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
             num = fromIntegral $ length bs * 3
-            renderFunction = drawBuffer window program pjloc mvloc vao GL_TRIANGLES num
-        return $ Renderer renderFunction cleanupFunction
-
+            huv = if hasUV then 1 else 0
+            uus = UniformUpdates (Just pjU) (Just mvU) (smU,0) (uvU,huv)
+            renderFunction = drawBuffer window program uus vao GL_TRIANGLES num
+        return $ tr <> Renderer renderFunction cleanupFunction
 
 newTriRenderer :: (Member (State Resources) r,
                    SetMember Lift (Lift IO) r)
                => Color -> [Triangle Float] -> Eff r Renderer
 newTriRenderer color ts = do
+    tr <- loadTextureRendererIfNeeded color
     window <- gets rsrcWindow
-    (program, pjloc, mvloc) <- colorRenderSource
+    (RenderSource program locs) <- geomRenderSource
+
+    let Just pjU = lookup "projection" locs
+        Just mvU = lookup "modelview" locs
+        Just smU = lookup "sampler" locs
+        Just uvU = lookup "hasUV" locs
+
     lift $ withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
         let ks = concatMap (\(Triangle a b c) -> [a,b,c]) ts :: [V2 Float]
             ps = concatMap F.toList ks :: [GLfloat]
             cs = color `asColorComponentsFor` ks
         bufferPositionAttribs pbuf ps
-        bufferColorAttribs cbuf cs
+        hasUV <- configureColorVertexAttribs color
+        if hasUV
+          then bufferAttrib uvLoc 2 cbuf cs
+          else bufferAttrib colorLoc 4 cbuf cs
+        glBindVertexArray 0
+
         let num = fromIntegral $ length ts * 3
-            renderFunction = drawBuffer window program pjloc mvloc vao GL_TRIANGLES num
+            huv = if hasUV then 1 else 0
+            uus = UniformUpdates (Just pjU) (Just mvU) (smU,0) (uvU,huv)
+            renderFunction = drawBuffer window program uus vao GL_TRIANGLES num
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
-        return $ Renderer renderFunction cleanupFunction
+        return $ tr <> Renderer renderFunction cleanupFunction
 
 newLineRenderer :: (Member (State Resources) r,
                     SetMember Lift (Lift IO) r)
                 => Color -> [Line Float] -> Eff r Renderer
 newLineRenderer color ls = do
+    tr <- loadTextureRendererIfNeeded color
     window <- gets rsrcWindow
-    (program, pjloc, mvloc) <- colorRenderSource
+    (RenderSource program locs) <- geomRenderSource
+
+    let Just pjU = lookup "projection" locs
+        Just mvU = lookup "modelview" locs
+        Just smU = lookup "sampler" locs
+        Just uvU = lookup "hasUV" locs
+
     lift $ withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
         let ks = concatMap (\(Line a b) -> [a,b]) ls :: [V2 Float]
             ps = concatMap F.toList ks :: [GLfloat]
             cs = color `asColorComponentsFor`  ks
 
         bufferPositionAttribs pbuf ps
-        bufferColorAttribs cbuf cs
-
+        hasUV <- configureColorVertexAttribs color
+        if hasUV
+          then bufferAttrib uvLoc 2 cbuf cs
+          else bufferAttrib colorLoc 4 cbuf cs
         glBindVertexArray 0
 
         let num = fromIntegral $ length ls * 2
-            renderFunction = drawBuffer window program pjloc mvloc vao GL_LINES num
+            huv = if hasUV then 1 else 0
+            uus = UniformUpdates (Just pjU) (Just mvU) (smU,0) (uvU,huv)
+            renderFunction = drawBuffer window program uus vao GL_LINES num
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
 
-        return $ Renderer renderFunction cleanupFunction
+        return $ tr <> Renderer renderFunction cleanupFunction
 
 enableBlending :: SetMember Lift (Lift IO) r => Eff r ()
 enableBlending = lift $ do
@@ -302,6 +346,31 @@ withNewFrame f = do
         if shouldClose
         then exitSuccess
         else threadDelay 100
+
+loadTextureRendererIfNeeded :: (Member (State Resources) r,
+                      SetMember Lift (Lift IO) r)
+                  => Color -> Eff r Renderer
+loadTextureRendererIfNeeded clr
+    | TextureColor (LocalImage fp) _ <- clr = do
+        lift $ putStrLn "Loading image..."
+        esdi <- lift $ readImage fp
+        case esdi of
+            Left s   -> lift $ putStrLn s >> return mempty
+            Right di -> lift $ do
+                t <- loadTexture di
+                let r = const $ glBindTexture GL_TEXTURE_2D t
+                    c = withArray [t] $ glDeleteTextures 1
+                return $ Renderer r c
+
+    -- | TextureColor (HttpImage fp) _ <- clr = do
+    --     m <- gets rsrcManager
+    --     case parseUrl fp of
+    --        Nothing  -> do lift $ putStrLn $ "Error parsing url:" ++ fp
+    --                       return Nothing
+    --        Just req -> do abs' <- lift $ async $ (LB.toStrict . responseBody) <$> httpLbs req m
+    --                       return $ Just abs'
+    | otherwise = return mempty
+
 --------------------------------------------------------------------------------
 -- IO ops
 --------------------------------------------------------------------------------
@@ -330,7 +399,15 @@ resources window = do
         a <- buildCache
         putStrLn "Font cache loaded."
         return a
-    return $ Resources a IM.empty M.empty window dpi t
+    mgr <- newManager defaultManagerSettings
+    return $ Resources { rsrcManager = mgr
+                       , rsrcFonts = a
+                       , rsrcRenderers = IM.empty
+                       , rsrcSources = M.empty
+                       , rsrcWindow = window
+                       , rsrcDpi = dpi
+                       , rsrcUTC = t
+                       }
 
 loadRenderSource :: RenderDef -> IO RenderSource
 loadRenderSource (RenderDefBS ss uniforms) = do
@@ -350,6 +427,56 @@ loadRenderSource (RenderDefFP fps uniforms) = do
         return (src, shaderType)
     loadRenderSource $ RenderDefBS srcs uniforms
 
+loadTexture :: DynamicImage -> IO GLuint
+loadTexture img = do
+    putStrLn "Loading texture"
+    [t] <- allocaArray 1 $ \ptr -> do
+        glGenTextures 1 ptr
+        peekArray 1 ptr
+    glBindTexture GL_TEXTURE_2D t
+    loadJuicy img
+    glGenerateMipmap GL_TEXTURE_2D  -- Generate mipmaps now!!!
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S GL_REPEAT
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T GL_REPEAT
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_LINEAR
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_LINEAR_MIPMAP_LINEAR
+    -- glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST
+    -- glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
+    -- glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S GL_REPEAT
+    -- glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T GL_REPEAT
+    -- glBindTexture GL_TEXTURE_2D 0
+    return t
+
+loadJuicy :: DynamicImage -> IO ()
+loadJuicy (ImageY8 (Image w h d)) = bufferImageData w h d GL_RED GL_UNSIGNED_BYTE
+loadJuicy (ImageY16 (Image w h d)) = bufferImageData w h d GL_RED GL_UNSIGNED_SHORT
+loadJuicy (ImageYF (Image w h d)) = bufferImageData w h d GL_RED GL_FLOAT
+loadJuicy (ImageYA8 i) = loadJuicy $ ImageRGB8 $ promoteImage i
+loadJuicy (ImageYA16 i) = loadJuicy $ ImageRGBA16 $ promoteImage i
+loadJuicy (ImageRGB8 (Image w h d)) = bufferImageData w h d GL_RGB GL_UNSIGNED_BYTE
+loadJuicy (ImageRGB16 (Image w h d)) = bufferImageData w h d GL_RGB GL_UNSIGNED_SHORT
+loadJuicy (ImageRGBF (Image w h d)) = bufferImageData w h d GL_RGB GL_FLOAT
+loadJuicy (ImageRGBA8 (Image w h d)) = bufferImageData w h d GL_RGBA GL_UNSIGNED_BYTE
+loadJuicy (ImageRGBA16 (Image w h d)) = bufferImageData w h d GL_RGBA GL_UNSIGNED_SHORT
+loadJuicy (ImageYCbCr8 i) = loadJuicy $ ImageRGB8 $ convertImage i
+loadJuicy (ImageCMYK8 i) = loadJuicy $ ImageRGB8 $ convertImage i
+loadJuicy (ImageCMYK16 i) = loadJuicy $ ImageRGB16 $ convertImage i
+
+bufferImageData w h dat imgfmt pxfmt = unsafeWith dat $ \ptr -> do
+    --glTexStorage2D GL_TEXTURE_2D 1 GL_RGBA8 (fromIntegral w) (fromIntegral h)
+    --glTexSubImage2D GL_TEXTURE_2D 0 0 0 (fromIntegral w) (fromIntegral h) GL_RGBA GL_UNSIGNED_BYTE (castPtr ptr)
+    glTexImage2D
+        GL_TEXTURE_2D
+        0
+        GL_RGBA
+        (fromIntegral w)
+        (fromIntegral h)
+        0
+        imgfmt
+        pxfmt
+        (castPtr ptr)
+    err <- glGetError
+    when (err /= 0) $ putStrLn $ "glTexImage2D Error: " ++ show err
 
 withVAO :: (GLuint -> IO b) -> IO b
 withVAO f = do
@@ -380,22 +507,37 @@ bufferAttrib loc n buf as = do
 bufferPositionAttribs :: Storable a => GLuint -> [a] -> IO ()
 bufferPositionAttribs = bufferAttrib positionLoc 2
 
-bufferColorAttribs :: Storable a => GLuint -> [a] -> IO ()
-bufferColorAttribs = bufferAttrib colorLoc 4
+--bufferColorAttribs :: Storable a => GLuint -> [a] -> IO ()
+--bufferColorAttribs = bufferAttrib colorLoc 4
 
 bufferBezAttribs :: Storable a => GLuint -> [a] -> IO ()
 bufferBezAttribs = bufferAttrib bezLoc 3
 
-drawBuffer :: Window -> GLuint -> GLint -> GLint -> GLuint -> GLenum -> GLsizei -> Transform -> IO ()
-drawBuffer window program pjloc mvloc vao mode num (Transform txy sxy rot) = do
-    (pj,mv) <- getPJMV window txy sxy rot
+drawBuffer :: Window
+           -> GLuint
+           -> UniformUpdates
+           -> GLuint
+           -> GLenum
+           -> GLsizei
+           -> Transform
+           -> IO ()
+drawBuffer window program UniformUpdates{..} vao mode num (Transform txy sxy rot) = do
     glUseProgram program
-    with pj $ glUniformMatrix4fv pjloc 1 GL_TRUE . castPtr
-    with mv $ glUniformMatrix4fv mvloc 1 GL_TRUE . castPtr
+    case (,) <$> uuProjection <*> uuModelview of
+        Nothing -> return ()
+        Just (pju,mvu) -> do (pj,mv) <- getPJMV window txy sxy rot
+                             with pj $ glUniformMatrix4fv pju 1 GL_TRUE . castPtr
+                             with mv $ glUniformMatrix4fv mvu 1 GL_TRUE . castPtr
+    let (spu,spub) = uuSampler
+        (hvu,hvub) = uuHasUV
+    glUniform1i spu spub
+    glUniform1i hvu hvub
     glBindVertexArray vao
-    glDrawArrays mode 0 num
     err <- glGetError
-    when (err /= 0) $ putStrLn $ "Error: " ++ show err
+    when (err /= 0) $ putStrLn $ "glBindVertex Error: " ++ show err
+    glDrawArrays mode 0 num
+    err' <- glGetError
+    when (err /= 0) $ putStrLn $ "glDrawArrays Error: " ++ show err'
 
 getPJMV :: Window -> V2 GLfloat -> V2 GLfloat -> GLfloat
         -> IO (M44 GLfloat, M44 GLfloat)
@@ -409,6 +551,20 @@ getPJMV window (V2 x y) (V2 w h) r = do
         pj  = ortho 0 hw hh 0 0 1 :: M44 GLfloat
         mv  = mat4Translate txy !*! rot !*! mat4Scale sxy :: M44 GLfloat
     return (pj,mv)
+
+-- | Configures various shader vertex attributes based on the constructor of
+-- `Color` and returns `True` if they were configured for a `TextureColor` or
+-- `False` if not.
+configureColorVertexAttribs :: Color -> IO Bool
+configureColorVertexAttribs color
+    | TextureColor _ _ <- color = do
+        glEnableVertexAttribArray uvLoc
+        glDisableVertexAttribArray colorLoc
+        return True
+    | otherwise = do
+        glDisableVertexAttribArray uvLoc
+        glEnableVertexAttribArray colorLoc
+        return False
 
 --------------------------------------------------------------------------------
 -- Matrix helpers
@@ -446,7 +602,8 @@ toArrows = concatMap toArrow . toLines
 asColorComponentsFor :: Eq k => Color -> [k] -> [GLfloat]
 asColorComponentsFor clr ks = concatMap F.toList $ catMaybes $ foldl (\ps p -> ps ++ [lookup p m]) [] ks
     where m = zip ks $ cycle cs
+          cs :: [[Float]]
           cs = case clr of
-                   SolidColor c -> [c]
-                   GradientColor c -> c
-
+                   SolidColor c -> [F.toList c]
+                   GradientColor c -> map F.toList c
+                   TextureColor _ c -> map F.toList c

@@ -1,10 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GADTs #-}
 module Render.Types where
 
 import Linear
 import Prelude hiding (init)
+import Network.HTTP.Client
 import Graphics.UI.GLFW
 import Graphics.GL.Types
 import Graphics.Text.TrueType
@@ -13,8 +15,8 @@ import Data.Monoid
 import Data.Typeable
 import Data.ByteString.Char8 (ByteString)
 import Control.Concurrent.Async
-import qualified Data.IntMap as IM
-import qualified Data.Map as M
+import Data.IntMap (IntMap)
+import Data.Map (Map)
 
 type ShaderProgram = GLuint
 type UniformLocation = GLint
@@ -38,12 +40,14 @@ data Resources = Resources { rsrcFonts     :: Async FontCache
                            , rsrcRenderers :: RenderCache
                            , rsrcSources   :: RenderSources
                            , rsrcWindow    :: Window
+                           , rsrcManager   :: Manager
                            , rsrcDpi       :: Dpi
                            , rsrcUTC       :: UTCTime
                            } deriving (Typeable)
 
+type ImageCache = Map Image (Async ByteString)
 
-type RenderCache = IM.IntMap Renderer
+type RenderCache = IntMap Renderer
 
 data RenderDef = RenderDefFP { rdShaderPaths :: [(String, GLuint)]
                              -- ^ ie [("path/to/shader.vert", GL_VERTEX_SHADER), ..]
@@ -59,7 +63,7 @@ data RenderSource = RenderSource { rsProgram    :: ShaderProgram
                                  , rsAttributes :: [(String, GLint)]
                                  } deriving (Show)
 
-type RenderSources = M.Map RenderDef RenderSource
+type RenderSources = Map RenderDef RenderSource
 
 type RenderFunction = Transform -> IO ()
 
@@ -86,12 +90,19 @@ data Triangle a = Triangle (V2 a) (V2 a) (V2 a) deriving (Show)
 data Line a = Line (V2 a) (V2 a) deriving (Show)
 
 data Image = LocalImage FilePath
-           | HttpImage String
+           -- | HttpImage String
            deriving (Typeable, Show)
+
 data Color = SolidColor (V4 Float)
            | GradientColor [V4 Float]
-           -- | TextureColor Image [V2 Float]
+           | TextureColor Image [V2 Float]
            deriving (Typeable)
+
+data UniformUpdates = UniformUpdates { uuProjection :: Maybe GLint
+                                     , uuModelview  :: Maybe GLint
+                                     , uuSampler    :: (GLint, GLint)
+                                     , uuHasUV      :: (GLint, GLint)
+                                     }
 
 newtype UniqueId = UniqueId { unId :: Int } deriving (Enum, Ord, Eq, Num, Show)
 newtype Name = Name { unName :: String } deriving (Ord, Eq)
