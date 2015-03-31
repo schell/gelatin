@@ -50,8 +50,10 @@ cabal-version:       >=1.10
 library
   -- Modules exported by the library.
   exposed-modules:     Render,
+                       Render.IO,
                        Render.Font,
                        Render.Types,
+                       Render.Geometrical,
                        Shader,
                        Shader.Internal,
                        Triangulation.Common,

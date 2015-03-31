@@ -13,7 +13,6 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Triangulation.KET (triangulate) where
 
-import Render.Types
 import Linear
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -23,9 +22,10 @@ type V2i = (V2 Float,Int)
 
 toV2 = V.map (\(x,_) -> x)
 
-triangulate :: [V2 Float] -> [Triangle Float]
-triangulate vs = map (\(a,b,c) -> Triangle (vec V.! a) (vec V.! b) (vec V.! c)) ndxs
-    where vec  = V.fromList vs
+triangulate :: RealFrac a => [V2 a] -> [(V2 a, V2 a, V2 a)]
+triangulate vs = map (\(a,b,c) -> ((vec' V.! a), (vec' V.! b), (vec' V.! c))) ndxs
+    where vec' = V.map (fmap realToFrac) vec
+          vec  = V.fromList $ map (fmap realToFrac) vs
           ndxs = triangulation vec
 
 triangulation :: Vector (V2 Float) -> [(Int,Int,Int)]

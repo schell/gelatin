@@ -9,7 +9,7 @@ uniform sampler2D sampler;
 
 void main() {
     if (hasUV) {
-        fragColor = texture(sampler, fuv);
+        fragColor = texture(sampler, fuv.st);
     } else {
         fragColor = fcolor;
     }

@@ -4,7 +4,7 @@ import Render.Types
 import Triangulation.Common
 import Linear hiding (trace)
 
-triangulate :: [V2 Float] -> [Triangle Float]
+triangulate :: [V2 Float] -> [Geometrical Float]
 triangulate ps = triangulate' [] $ clean ps
     where triangulate' ts ps'
               | (p1:p2:p3:[]) <- ps' = Triangle p1 p2 p3 :ts

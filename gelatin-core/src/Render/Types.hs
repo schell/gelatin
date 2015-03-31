@@ -1,8 +1,18 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE GADTs #-}
-module Render.Types where
+module Render.Types (
+    Resources(..),
+    Renderer(..),
+    RenderDef(..),
+    RenderSource(..),
+    Transform(..),
+    UniformUpdates(..),
+    Geometrical(..),
+    isLikeGeom,
+    Gradient(..),
+    AtLeast2D
+) where
 
 import Linear
 import Prelude hiding (init)
@@ -10,6 +20,7 @@ import Network.HTTP.Client
 import Graphics.UI.GLFW
 import Graphics.GL.Types
 import Graphics.Text.TrueType
+import Codec.Picture
 import Data.Time.Clock
 import Data.Monoid
 import Data.Typeable
@@ -19,22 +30,6 @@ import Data.IntMap (IntMap)
 import Data.Map (Map)
 
 type ShaderProgram = GLuint
-type UniformLocation = GLint
-
-data Display = DisplayTris [Triangle Float]
-             -- ^ Display as a list of triangles.
-             | DisplayPoly [V2 Float]
-             -- ^ Display as a filled polygon.
-             | DisplayText FontDescriptor PixelSize String
-             -- ^ Display as text of a given font and size.
-             | DisplayText' FontDescriptor PixelSize String
-             -- ^ With testing visuals
-             | DisplayLine [V2 Float]
-             -- ^ Display as an outline.
-             | DisplayArrows [V2 Float]
-             -- ^ Display as an outline with arrow heads at each point,
-             -- showing the winding/direction of the outline.
-             deriving (Show, Typeable)
 
 data Resources = Resources { rsrcFonts     :: Async FontCache
                            , rsrcRenderers :: RenderCache
@@ -44,8 +39,6 @@ data Resources = Resources { rsrcFonts     :: Async FontCache
                            , rsrcDpi       :: Dpi
                            , rsrcUTC       :: UTCTime
                            } deriving (Typeable)
-
-type ImageCache = Map Image (Async ByteString)
 
 type RenderCache = IntMap Renderer
 
@@ -69,34 +62,71 @@ type RenderFunction = Transform -> IO ()
 
 type CleanupFunction = IO ()
 
-data Renderer = Renderer { render  :: RenderFunction
-                         , cleanup :: CleanupFunction
+data Renderer = Renderer { rRender  :: RenderFunction
+                         , rCleanup :: CleanupFunction
                          }
 
 instance Monoid Renderer where
     mempty = Renderer (const $ return ()) (return ())
     (Renderer ar ac) `mappend` (Renderer br bc) = Renderer (\t -> ar t >> br t) (ac >> bc)
 
-data Bezier a = Bezier { bezTriArea :: a
-                       , bezA :: V2 a
-                       , bezB :: V2 a
-                       , bezC :: V2 a
-                       } deriving (Show)
+type AtLeast2D f a = (R1 f, R2 f, RealFrac a, Ord a)
 
-bezWoundClockwise :: (Ord a, Num a) => Bezier a -> Bool
-bezWoundClockwise = (< 0) . bezTriArea
+data Geometrical a where
+    Point      :: V2 a                             -> Geometrical a
+    --Circle     :: V2 a -> a                        -> Geometrical a
+    Line       :: V2 a -> V2 a                     -> Geometrical a
+    --AABB       :: V2 a -> a -> a                   -> Geometrical a
+    Triangle   :: V2 a -> V2 a -> V2 a             -> Geometrical a
+    Bezier     :: Ordering -> V2 a -> V2 a -> V2 a -> Geometrical a
+    --Polygon  :: [V2 a]                           -> Geometrical a
+    FontString :: Font -> a -> String              -> Geometrical a
 
-data Triangle a = Triangle (V2 a) (V2 a) (V2 a) deriving (Show)
-data Line a = Line (V2 a) (V2 a) deriving (Show)
+instance Eq (Geometrical a) where
+    (==) = isLikeGeom
 
-data Image = LocalImage FilePath
-           -- | HttpImage String
-           deriving (Typeable, Show)
 
-data Color = SolidColor (V4 Float)
-           | GradientColor [V4 Float]
-           | TextureColor Image [V2 Float]
-           deriving (Typeable)
+instance Ord (Geometrical a) where
+    compare a b
+        | a `isLikeGeom` b = EQ
+        | (Point _) <- a = LT
+        | (Point _) <- b = GT
+        | (Line _ _) <- a = LT
+        | (Line _ _) <- b = GT
+        | (Triangle _ _ _) <- a = LT
+        | (Triangle _ _ _) <- b = GT
+        | (Bezier _ _ _ _) <- a = LT
+        | (Bezier _ _ _ _) <- b = GT
+        | (FontString _ _ _) <- a = LT
+        | (FontString _ _ _) <- a = GT
+        | otherwise = EQ
+
+instance Show a => Show (Geometrical a) where
+    show (Point a) = concat ["Point (",show a,")"]
+    show (Line a b) = concat ["Line (",show a,") (",show b,")"]
+    show (Triangle a b c) =
+        concat ["Triangle (",show a,") (",show b,") (", show c,")"]
+    show (Bezier o a b c) =
+        concat ["Bezier",show o," (",show a,") (",show b,") (",show c,")"]
+    show (FontString _ px s) = concat ["FontString _ ",show px," ",show s]
+
+isLikeGeom :: Geometrical a -> Geometrical a -> Bool
+isLikeGeom (Point _) (Point _) = True
+--isLikeGeom (Circle _ _) (Circle _ _) = True
+isLikeGeom (Line _ _) (Line _ _) = True
+--isLikeGeom (AABB _ _ _) (AABB _ _ _) = True
+isLikeGeom (Triangle _ _ _) (Triangle _ _ _) = True
+isLikeGeom (Bezier _ _ _ _) (Bezier _ _ _ _) = True
+--isLikeGeom (Polygon _) (Polygon _) = True
+isLikeGeom (FontString _ _ _) (FontString _ _ _) = True
+isLikeGeom _ _ = False
+
+data Gradient a = SolidGradient  (V4 a)
+                | RadialGradient (V4 a) (V4 a) a (V2 a)
+    --LinearGradient :: V4 a -> V4 a -> V2 a -> a    -> Gradient a
+    --BoxGradient    :: V4 a -> V4 a -> V4 a -> V4 a -> Gradient a
+
+data Texture a = Texture DynamicImage [Geometrical a]
 
 data UniformUpdates = UniformUpdates { uuProjection :: Maybe GLint
                                      , uuModelview  :: Maybe GLint
@@ -104,49 +134,16 @@ data UniformUpdates = UniformUpdates { uuProjection :: Maybe GLint
                                      , uuHasUV      :: (GLint, GLint)
                                      }
 
-newtype UniqueId = UniqueId { unId :: Int } deriving (Enum, Ord, Eq, Num, Show)
-newtype Name = Name { unName :: String } deriving (Ord, Eq)
-newtype ParentEntity = Parent { unParent :: Int } deriving (Show)
-type Translation = V2 Float
 type Position = V2 Float
 type Scale = V2 Float
 type Rotation = Float
-type Size = V2 Float
-type PixelSize = Float
-type TimeDelta = Float
+
 data Transform = Transform { tfrmTranslation :: Position
                            , tfrmScale       :: Scale
                            , tfrmRotation    :: Rotation
                            } deriving (Show, Typeable)
---makeLensesFor [("tfrmTranslation", "tfrmTranslation_")
---              ,("tfrmScale", "tfrmScale_")
---              ,("tfrmRotation", "tfrmRotation_")
---              ] ''Transform
 
-idTransform :: Transform
-idTransform = mempty
 
 instance Monoid Transform where
     mempty = Transform zero (V2 1 1) 0
     (Transform t1 s1 r1) `mappend` (Transform t2 s2 r2) = Transform (t1 + t2) (s1 * s2) (r1 + r2)
-
-data AABB = AABB { aabbCenter     :: Position
-                 , aabbHalfVector :: Size
-                 } deriving (Show, Eq, Ord)
---makeLensesFor [("aabbCenter", "aabbCenter_")
---              ,("aabbHalfVector", "aabbHalfVector_")
---              ] ''AABB
-
---makeLensesFor [("gUTC", "gUTC_")
---              ,("gBox", "gBox_")
---              ,("gBez", "gBez_")
---              ,("gWindow", "gWindow_")
---              ] ''Globals
-
-data Input = Input { inputLeftAxis    :: (Float, Float)
-                   , inputRightAxis   :: (Float, Float)
-                   , inputWindowSizef :: (Float, Float)
-                   } deriving (Show, Eq)
-
-
-type SeparatingAxis = V2 Float

@@ -1,21 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-module Render.Font where
+module Render.Font (
+    fontGeom,
+    findFont,
+    allFonts,
+    withFont
+) where
 
 import Render.Types
+import Render.Geometrical
 import Linear hiding (trace)
 import Prelude hiding (init)
 import Graphics.Text.TrueType
-import Triangulation.KET as Ket
-import Triangulation.Common
+import Data.List (sort)
 import Control.Eff
 import Control.Eff.Lift
 import Control.Eff.State.Strict
 import Control.Applicative
 import Control.Concurrent.Async
-import Data.List
 import qualified Data.Vector.Unboxed as UV
+import Debug.Trace
 
 findFont :: Async FontCache -> FontDescriptor -> IO (Maybe FilePath)
 findFont afCache desc = do
@@ -52,23 +59,14 @@ withFont desc f = do
                             Right font -> do -- TODO: store the font?
                                              f font
 
-arial :: FontDescriptor
-arial = FontDescriptor "Arial" $ FontStyle False False
-
-ubuntuMono :: FontDescriptor
-ubuntuMono = FontDescriptor "Ubuntu Mono" $ FontStyle False False
-
 --------------------------------------------------------------------------------
 -- Decomposition into triangles and beziers
 --------------------------------------------------------------------------------
 -- | Ephemeral types for creating polygons from font outlines.
 -- Fonty gives us a [[Vector (Float, Float)]] for an entire string, which breaks down to
-type Contours = [Bezier Float]
-type Fill = [Triangle Float]
-type CharacterOutline = [Contours]
-type CharacterFill = [Fill]
-type StringOutline = [CharacterOutline]
-type StringFill = [CharacterFill]
+type Contours a = [Geometrical a] -- Beziers
+type CharacterOutline a = [Contours a]
+type StringOutline a = [CharacterOutline a]
 
 -- | Merges poly a into poly b by "cutting" a and inserting b.
 --cutMerge :: Poly -> Poly -> Poly
@@ -76,45 +74,36 @@ type StringFill = [CharacterFill]
 --    where (ndx, _) = head $ sortBy (\a b -> snd a `compare` snd b) $
 --                         zip [0..] $ map (`distance` (head bs)) as
 
-toBeziers :: (Ord a, Fractional a) => [V2 a] -> [Bezier a]
-toBeziers (a:b:c:ps) = Bezier (triangleArea a b c) a b c : toBeziers (c:ps)
-toBeziers _ = []
+fontGeom :: RealFrac a => Dpi -> [(Font, a, String)] -> [Geometrical a]
+fontGeom dpi strs =
+    let strs' = map (\(font, px, str) -> (font, pixelSizeInPointAtDpi (realToFrac px) dpi, str)) strs
+        cs  = getStringCurveAtPoint dpi (0,0) strs'
+        bs  = beziers cs
+        bs' = concat $ concat bs
+        ts  = concatMap (concatMap (concaveTriangles . onContourPoints)) bs
+        gs  = bs' ++ ts
+    in sort gs
 
 fromFonty :: (UV.Unbox b1, Functor f1, Functor f) => ([V2 b1] -> b) -> f (f1 (UV.Vector (b1, b1))) -> f (f1 b)
 fromFonty f = fmap $ fmap $ f . UV.toList . UV.map (uncurry V2)
 
-beziers :: [[UV.Vector (Float, Float)]] -> StringOutline
-beziers = fromFonty toBeziers
-
-triangles :: [[UV.Vector (Float, Float)]] -> StringFill
-triangles = map (map (toTris . onContourPoints)) . beziers
+beziers :: RealFrac a => [[UV.Vector (Float, Float)]] -> StringOutline a
+beziers = fromFonty (toBeziers . (fmap (fmap realToFrac)))
 
 -- | Turns a polygon into a list of triangles that can be rendered using the
 -- Concave Polygon Stencil Test
 -- @see http://www.glprogramming.com/red/chapter14.html#name13
-concaveTriangles :: [V2 a] -> [Triangle a]
+concaveTriangles :: (Ord a, RealFrac a) => [V2 a] -> [Geometrical a]
 concaveTriangles [] = []
 concaveTriangles (a:as) = tris a as
     where tris p (p':p'':ps) = Triangle p p' p'' : tris p (p'':ps)
           tris _ _ = []
 
-onContourPoints :: (Eq a, Ord a, Num a) => [Bezier a] -> [V2 a]
+-- | Collects the points that lie directly on the contour of the font
+-- outline.
+onContourPoints :: [Geometrical a] -> [V2 a]
 onContourPoints [] = []
-onContourPoints ((Bezier t a b c):bs) = ps ++ onContourPoints bs
-    where ps = if t < 0 then [a,b,c] else [a,c]
-
-dedupe :: Eq a => [a] -> [a]
-dedupe [] = []
-dedupe [a] = [a]
-dedupe (a:b:cs) = if a == b then a: dedupe cs else a: (dedupe $ b:cs)
-
-headLast :: Eq t => [t] -> [t]
-headLast [] = []
-headLast xs = if head xs == last xs then init xs else xs
-
-windCCW :: (Ord a, Num a) => [V2 a] -> [V2 a]
-windCCW xs = if signedArea xs > 0 then reverse xs else xs
-
-toTris :: [V2 Float] -> [Triangle Float]
-toTris = Ket.triangulate
+onContourPoints ((Bezier LT a b c):bs) = [a,b,c] ++ onContourPoints bs
+onContourPoints ((Bezier _ a _ c):bs) = [a,c] ++ onContourPoints bs
+onContourPoints (_:bs) = onContourPoints bs
 

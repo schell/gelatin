@@ -36,7 +36,7 @@ void main() {
     }
     vec4 color = vec4(0);
     if (hasUV) {
-        color = texture(sampler, fuv);
+        color = texture(sampler, fuv.st);
     } else {
         color = fcolor;
     }
