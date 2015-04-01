@@ -83,8 +83,7 @@ library
                        lens,
                        file-embed >= 0.0.8.2,
                        bytestring,
-                       extensible-effects,
-                       http-client
+                       extensible-effects
 
   -- Directories containing source files.
   hs-source-dirs:      src

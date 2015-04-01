@@ -8,19 +8,21 @@ module Render.Types (
     RenderSource(..),
     Transform(..),
     UniformUpdates(..),
-    Geometrical(..),
-    isLikeGeom,
-    Gradient(..),
-    AtLeast2D
+    Point(..),
+    Line(..),
+    Bezier(..),
+    Triangle(..),
+    FontString(..),
+    module J
 ) where
 
-import Linear
+import Linear as J hiding (rotate)
 import Prelude hiding (init)
-import Network.HTTP.Client
-import Graphics.UI.GLFW
-import Graphics.GL.Types
-import Graphics.Text.TrueType
-import Codec.Picture
+import Graphics.UI.GLFW as J
+import Graphics.GL.Types as J
+import Graphics.Text.TrueType as J hiding (CompositeScaling(..))
+import Codec.Picture as J
+import Codec.Picture.Types as J
 import Data.Time.Clock
 import Data.Monoid
 import Data.Typeable
@@ -35,7 +37,6 @@ data Resources = Resources { rsrcFonts     :: Async FontCache
                            , rsrcRenderers :: RenderCache
                            , rsrcSources   :: RenderSources
                            , rsrcWindow    :: Window
-                           , rsrcManager   :: Manager
                            , rsrcDpi       :: Dpi
                            , rsrcUTC       :: UTCTime
                            } deriving (Typeable)
@@ -50,7 +51,6 @@ data RenderDef = RenderDefFP { rdShaderPaths :: [(String, GLuint)]
                | RenderDefBS { rdShaderSrcs :: [(ByteString, GLuint)]
                              , rdUniforms :: [String]
                              } deriving (Show, Eq, Ord)
-
 
 data RenderSource = RenderSource { rsProgram    :: ShaderProgram
                                  , rsAttributes :: [(String, GLint)]
@@ -70,63 +70,23 @@ instance Monoid Renderer where
     mempty = Renderer (const $ return ()) (return ())
     (Renderer ar ac) `mappend` (Renderer br bc) = Renderer (\t -> ar t >> br t) (ac >> bc)
 
-type AtLeast2D f a = (R1 f, R2 f, RealFrac a, Ord a)
+data Point a = Point a
+data Line a = Line a a
+data Bezier a = Bezier Ordering a a a
+data Triangle a = Triangle a a a
+data FontString = FontString Font Float String
 
-data Geometrical a where
-    Point      :: V2 a                             -> Geometrical a
-    --Circle     :: V2 a -> a                        -> Geometrical a
-    Line       :: V2 a -> V2 a                     -> Geometrical a
-    --AABB       :: V2 a -> a -> a                   -> Geometrical a
-    Triangle   :: V2 a -> V2 a -> V2 a             -> Geometrical a
-    Bezier     :: Ordering -> V2 a -> V2 a -> V2 a -> Geometrical a
-    --Polygon  :: [V2 a]                           -> Geometrical a
-    FontString :: Font -> a -> String              -> Geometrical a
+instance Functor Point where
+    fmap f (Point v) = Point $ f v
 
-instance Eq (Geometrical a) where
-    (==) = isLikeGeom
+instance Functor Line where
+    fmap f (Line a b) = Line (f a) (f b)
 
+instance Functor Bezier where
+    fmap f (Bezier o a b c) = Bezier o (f a) (f b) (f c)
 
-instance Ord (Geometrical a) where
-    compare a b
-        | a `isLikeGeom` b = EQ
-        | (Point _) <- a = LT
-        | (Point _) <- b = GT
-        | (Line _ _) <- a = LT
-        | (Line _ _) <- b = GT
-        | (Triangle _ _ _) <- a = LT
-        | (Triangle _ _ _) <- b = GT
-        | (Bezier _ _ _ _) <- a = LT
-        | (Bezier _ _ _ _) <- b = GT
-        | (FontString _ _ _) <- a = LT
-        | (FontString _ _ _) <- a = GT
-        | otherwise = EQ
-
-instance Show a => Show (Geometrical a) where
-    show (Point a) = concat ["Point (",show a,")"]
-    show (Line a b) = concat ["Line (",show a,") (",show b,")"]
-    show (Triangle a b c) =
-        concat ["Triangle (",show a,") (",show b,") (", show c,")"]
-    show (Bezier o a b c) =
-        concat ["Bezier",show o," (",show a,") (",show b,") (",show c,")"]
-    show (FontString _ px s) = concat ["FontString _ ",show px," ",show s]
-
-isLikeGeom :: Geometrical a -> Geometrical a -> Bool
-isLikeGeom (Point _) (Point _) = True
---isLikeGeom (Circle _ _) (Circle _ _) = True
-isLikeGeom (Line _ _) (Line _ _) = True
---isLikeGeom (AABB _ _ _) (AABB _ _ _) = True
-isLikeGeom (Triangle _ _ _) (Triangle _ _ _) = True
-isLikeGeom (Bezier _ _ _ _) (Bezier _ _ _ _) = True
---isLikeGeom (Polygon _) (Polygon _) = True
-isLikeGeom (FontString _ _ _) (FontString _ _ _) = True
-isLikeGeom _ _ = False
-
-data Gradient a = SolidGradient  (V4 a)
-                | RadialGradient (V4 a) (V4 a) a (V2 a)
-    --LinearGradient :: V4 a -> V4 a -> V2 a -> a    -> Gradient a
-    --BoxGradient    :: V4 a -> V4 a -> V4 a -> V4 a -> Gradient a
-
-data Texture a = Texture DynamicImage [Geometrical a]
+instance Functor Triangle where
+    fmap f (Triangle a b c) = Triangle (f a ) (f b) (f c)
 
 data UniformUpdates = UniformUpdates { uuProjection :: Maybe GLint
                                      , uuModelview  :: Maybe GLint
@@ -142,7 +102,6 @@ data Transform = Transform { tfrmTranslation :: Position
                            , tfrmScale       :: Scale
                            , tfrmRotation    :: Rotation
                            } deriving (Show, Typeable)
-
 
 instance Monoid Transform where
     mempty = Transform zero (V2 1 1) 0

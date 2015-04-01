@@ -2,9 +2,8 @@ module Triangulation.EarClipping where
 
 import Render.Types
 import Triangulation.Common
-import Linear hiding (trace)
 
-triangulate :: [V2 Float] -> [Geometrical Float]
+triangulate :: [V2 Float] -> [Triangle (V2 Float)]
 triangulate ps = triangulate' [] $ clean ps
     where triangulate' ts ps'
               | (p1:p2:p3:[]) <- ps' = Triangle p1 p2 p3 :ts
@@ -18,7 +17,7 @@ triangulate ps = triangulate' [] $ clean ps
           clean = removeHeadTail . removeColinears
 
 removeHeadTail :: Eq a => [a] -> [a]
-removeHeadTail xs = if head xs == last xs then init xs else xs
+removeHeadTail xs = if head xs == last xs then Prelude.init xs else xs
 
 removeColinears :: (Fractional a, Eq a) => [V2 a] -> [V2 a]
 removeColinears (a:b:c:ds) = if area a b c == 0
