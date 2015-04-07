@@ -49,16 +49,14 @@ cabal-version:       >=1.10
 
 library
   -- Modules exported by the library.
-  exposed-modules:     Render,
-                       Render.IO,
-                       Render.Font,
-                       Render.Types,
-                       Render.Geometrical,
-                       Shader,
-                       Shader.Internal,
-                       Triangulation.Common,
-                       Triangulation.EarClipping,
-                       Triangulation.KET
+  exposed-modules:     Gelatin.Core.Render,
+                       Gelatin.Core.Render.Font,
+                       Gelatin.Core.Render.Types,
+                       Gelatin.Core.Render.Geometrical,
+                       Gelatin.Core.Shader,
+                       Gelatin.Core.Triangulation.Common,
+                       Gelatin.Core.Triangulation.EarClipping,
+                       Gelatin.Core.Triangulation.KET
 
   -- Modules included in this library but not exported.
   -- other-modules:
@@ -66,10 +64,11 @@ library
   -- LANGUAGE extensions used by modules in this package.
   other-extensions:    OverloadedStrings,
                        FlexibleContexts,
-                       GeneralizedNewtypeDeriving
+                       GeneralizedNewtypeDeriving,
+                       TemplateHaskell
 
   -- Other library packages from which modules are imported.
-  build-depends:       base >=4.7 && <4.8,
+  build-depends:       base >=4.7,
                        linear >=1.17,
                        gl >=0.7,
                        GLFW-b >= 1.4.7.2,
@@ -82,8 +81,7 @@ library
                        vector >=0.10,
                        lens,
                        file-embed >= 0.0.8.2,
-                       bytestring,
-                       extensible-effects
+                       bytestring
 
   -- Directories containing source files.
   hs-source-dirs:      src
