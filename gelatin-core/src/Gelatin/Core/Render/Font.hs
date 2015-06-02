@@ -7,6 +7,7 @@ module Gelatin.Core.Render.Font (
     fontGeom,
     findFont,
     allFonts,
+    withFontAsync,
     withFont
 ) where
 
@@ -34,8 +35,8 @@ allFonts afcache = do
                     Left _ -> Nothing
                     Right fcache -> Just $ enumerateFonts fcache
 
-withFont :: Async FontCache -> FontDescriptor -> (Font -> IO a) -> IO (Maybe a)
-withFont afcache desc f = do
+withFontAsync :: Async FontCache -> FontDescriptor -> (Font -> IO a) -> IO (Maybe a)
+withFontAsync afcache desc f = do
     mPath <- findFont afcache desc
     case mPath of
         Nothing -> return Nothing
@@ -43,6 +44,16 @@ withFont afcache desc f = do
                         case ef of
                             Left err   -> putStrLn err >> return Nothing
                             Right font -> Just `fmap` f font
+
+withFont :: FontCache -> FontDescriptor -> (Font -> IO a) -> IO (Maybe a)
+withFont cache desc f = do
+    case findFontInCache cache desc of
+        Nothing -> return Nothing
+        Just fp -> do ef <- loadFontFile fp
+                      case ef of
+                          Left err   -> putStrLn err >> return Nothing
+                          Right font -> Just `fmap` f font
+
 
 --------------------------------------------------------------------------------
 -- Decomposition into triangles and beziers

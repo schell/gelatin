@@ -65,6 +65,7 @@ type RenderFunction = Transform -> IO ()
 
 type CleanupFunction = IO ()
 
+-- | TODO: Do we really need rSrc?
 data Renderer = Renderer { rRender  :: RenderFunction
                          , rSrc     :: [RenderSource]
                          , rCleanup :: CleanupFunction

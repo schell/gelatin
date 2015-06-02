@@ -69,7 +69,7 @@ library
 
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.7,
-                       linear >=1.17,
+                       linear >=1.18,
                        gl >=0.7,
                        GLFW-b >= 1.4.7.2,
                        FontyFruity >=0.5,

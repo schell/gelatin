@@ -36,20 +36,24 @@ toBeziers _ = []
 --------------------------------------------------------------------------------
 -- Transformation helpers
 --------------------------------------------------------------------------------
-scale :: Float -> Float -> Transform -> Transform
-scale sx sy t@Transform{tfrmScale = V2 x y} = t{tfrmScale = V2 (sx*x) (sy*y)}
+scale :: RealFrac a => a -> a -> Transform -> Transform
+scale sx sy t@Transform{tfrmScale = V2 x y} =
+    t{tfrmScale = V2 (sx'*x) (sy'*y)}
+        where [sx',sy'] = map realToFrac [sx,sy]
 
-translate :: Float -> Float -> Transform -> Transform
-translate tx ty t@Transform{tfrmTranslation = V2 x y} = t{tfrmTranslation = V2 (x+tx) (y+ty)}
+translate :: RealFrac a => a -> a -> Transform -> Transform
+translate tx ty t@Transform{tfrmTranslation = V2 x y} =
+    t{tfrmTranslation = V2 (x+tx') (y+ty')}
+        where [tx',ty'] = map realToFrac [tx,ty]
 
-rotate :: Float -> Transform -> Transform
-rotate r' t@Transform{tfrmRotation = r} = t{tfrmRotation = r+r'}
+rotate :: RealFrac a => a -> Transform -> Transform
+rotate r' t@Transform{tfrmRotation = r} = t{tfrmRotation = r + realToFrac r'}
 
 --------------------------------------------------------------------------------
 -- Matrix helpers
 --------------------------------------------------------------------------------
 mat4Translate :: Num a => V3 a -> M44 a
-mat4Translate = mkTransformationMat eye3
+mat4Translate = mkTransformationMat identity
 
 mat4Rotate :: (Num a, Epsilon a, Floating a) => a -> V3 a -> M44 a
 mat4Rotate phi v = mkTransformation (axisAngle v phi) (V3 0 0 0)

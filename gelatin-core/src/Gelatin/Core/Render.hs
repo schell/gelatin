@@ -16,6 +16,7 @@ module Gelatin.Core.Render (
     loadBezRenderSource,
     loadRenderSource,
     loadTexture,
+    withAsyncRenderer,
     colorRenderer,
     colorBezRenderer,
     colorFontRenderer,
@@ -76,6 +77,23 @@ initWindow ww wh ws = do
 --------------------------------------------------------------------------------
 -- Renderers
 --------------------------------------------------------------------------------
+-- | Creates a Renderer that performs some stuff asyncronously and updates
+-- itself with the results.
+withAsyncRenderer :: Async a -> (a -> IO Renderer) -> IO Renderer
+withAsyncRenderer a f = do
+    asyncRenderer <- async $ do
+        a' <- wait a
+        f a'
+
+    return $ Renderer (rndr asyncRenderer) [] (cln asyncRenderer)
+    where rndr ar t = do meAr <- poll ar
+                         case meAr of
+                             Just (Right r) -> (rRender r) t
+                             _              -> return ()
+          cln ar = do meAr <- poll ar
+                      case meAr of
+                             Just (Right r) -> rCleanup r
+                             _              -> cancel ar
 
 -- | Creates and returns a renderer that renders a given FontString.
 colorFontRenderer :: Window -> GeomRenderSource -> BezRenderSource -> Dpi
@@ -248,7 +266,7 @@ setModelview program uniform (Transform (V2 x y) (V2 w h) r) = do
         sxy = V3 w h 1
         txy = V3 x y 0
         rxy = V3 0 0 1
-        rot = if r /= 0 then mat4Rotate r rxy else eye4
+        rot = if r /= 0 then mat4Rotate r rxy else identity
     glUseProgram program
     with mv $ glUniformMatrix4fv uniform 1 GL_TRUE . castPtr
 
