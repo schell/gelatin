@@ -79,7 +79,7 @@ data Point a = Point a
 data Line a = Line a a
 data Bezier a = Bezier Ordering a a a
 data Triangle a = Triangle a a a
-data FontString = FontString Font Float String
+data FontString = FontString Font Float (Float,Float) String
 
 instance Functor Point where
     fmap f (Point v) = Point $ f v

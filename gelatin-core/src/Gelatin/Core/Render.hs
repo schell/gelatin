@@ -16,7 +16,6 @@ module Gelatin.Core.Render (
     loadBezRenderSource,
     loadRenderSource,
     loadTexture,
-    withAsyncRenderer,
     colorRenderer,
     colorBezRenderer,
     colorFontRenderer,
@@ -77,24 +76,6 @@ initWindow ww wh ws = do
 --------------------------------------------------------------------------------
 -- Renderers
 --------------------------------------------------------------------------------
--- | Creates a Renderer that performs some stuff asyncronously and updates
--- itself with the results.
-withAsyncRenderer :: Async a -> (a -> IO Renderer) -> IO Renderer
-withAsyncRenderer a f = do
-    asyncRenderer <- async $ do
-        a' <- wait a
-        f a'
-
-    return $ Renderer (rndr asyncRenderer) [] (cln asyncRenderer)
-    where rndr ar t = do meAr <- poll ar
-                         case meAr of
-                             Just (Right r) -> (rRender r) t
-                             _              -> return ()
-          cln ar = do meAr <- poll ar
-                      case meAr of
-                             Just (Right r) -> rCleanup r
-                             _              -> cancel ar
-
 -- | Creates and returns a renderer that renders a given FontString.
 colorFontRenderer :: Window -> GeomRenderSource -> BezRenderSource -> Dpi
                   -> FontString -> (V2 Float -> V4 Float) -> IO Renderer

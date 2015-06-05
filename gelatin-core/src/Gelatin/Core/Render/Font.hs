@@ -71,9 +71,9 @@ type StringOutline = [CharacterOutline]
 --                         zip [0..] $ map (`distance` (head bs)) as
 
 fontGeom :: Dpi -> FontString -> ([Bezier (V2 Float)], [Triangle (V2 Float)])
-fontGeom dpi (FontString font px str) =
-    let sz  = pixelSizeInPointAtDpi (realToFrac px) dpi
-        cs  = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
+fontGeom dpi (FontString font px offset str) =
+    let sz  = pixelSizeInPointAtDpi px dpi
+        cs  = getStringCurveAtPoint dpi offset [(font, sz, str)]
         bs  = beziers cs
         ts  = concatMap (concatMap (concaveTriangles . onContourPoints)) bs
     in (concat $ concat bs,ts)

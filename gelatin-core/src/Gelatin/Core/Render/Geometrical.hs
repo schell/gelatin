@@ -2,6 +2,9 @@ module Gelatin.Core.Render.Geometrical (
     toLines,
     toArrows,
     toBeziers,
+    transform,
+    transformV2,
+    transformPoly,
     scale,
     translate,
     rotate,
@@ -36,6 +39,26 @@ toBeziers _ = []
 --------------------------------------------------------------------------------
 -- Transformation helpers
 --------------------------------------------------------------------------------
+toM44 :: Transform -> M44 Float
+toM44 (Transform (V2 x y) (V2 w h) r) = mv
+    where mv = mat4Translate txy !*! rot !*! mat4Scale sxy
+          sxy = V3 w h 1
+          txy = V3 x y 0
+          rxy = V3 0 0 1
+          rot = if r /= 0 then mat4Rotate r rxy else identity
+
+transformPoly :: Transform -> Poly -> Poly
+transformPoly t p = map (transformV2 t) p
+
+transformV2 :: Transform -> V2 Float -> V2 Float
+transformV2 t (V2 x y) = V2 x' y'
+    where V3 x' y' _ = transform t $ V3 x y 1
+
+transform :: Transform -> V3 Float -> V3 Float
+transform t (V3 x y z) = V3 x' y' z'
+    where V4 (V1 x') (V1 y') (V1 z') _ = t' !*! V4 (V1 x) (V1 y) (V1 z) (V1 1)
+          t' = toM44 t
+
 scale :: RealFrac a => a -> a -> Transform -> Transform
 scale sx sy t@Transform{tfrmScale = V2 x y} =
     t{tfrmScale = V2 (sx'*x) (sy'*y)}
