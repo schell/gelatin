@@ -21,6 +21,7 @@ module Gelatin.Core.Render (
     colorFontRenderer,
     textureRenderer,
     stencilXOR,
+    transformRenderer,
     toTexture,
     calculateDpi,
     compileFontCache
@@ -225,6 +226,9 @@ stencilXOR (Renderer r s c) = Renderer r' s c
                     glStencilOp GL_ZERO GL_ZERO GL_ZERO
                     r t
                     glDisable GL_STENCIL_TEST
+
+transformRenderer :: Transform -> Renderer -> Renderer
+transformRenderer t (Renderer r rs c) = Renderer (r . (t <>)) rs c
 
 --------------------------------------------------------------------------------
 -- Updating uniforms

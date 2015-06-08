@@ -1,4 +1,4 @@
-module Gelatin.Color where
+module Gelatin.Core.Color where
 
 import Linear
 import Data.Bits
@@ -47,6 +47,9 @@ black = V4 0 (0/255) (0/255) 1
 
 gray :: (Num a, Fractional a) => V4 a
 gray = V4 (128/255) (128/255) (128/255) 1
+
+grey :: (Num a, Fractional a) => V4 a
+grey = gray
 
 silver :: (Num a, Fractional a) => V4 a
 silver = V4 (192/255) (192/255) (192/255) 1

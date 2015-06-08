@@ -54,6 +54,7 @@ library
                        Gelatin.Core.Render.Types,
                        Gelatin.Core.Render.Geometrical,
                        Gelatin.Core.Shader,
+                       Gelatin.Core.Color,
                        Gelatin.Core.Triangulation.Common,
                        Gelatin.Core.Triangulation.EarClipping,
                        Gelatin.Core.Triangulation.KET
