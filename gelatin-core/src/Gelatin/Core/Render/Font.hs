@@ -15,6 +15,8 @@ import Gelatin.Core.Render.Types
 import Gelatin.Core.Render.Geometrical
 import Prelude hiding (init)
 import Control.Concurrent.Async
+import Linear
+import Graphics.Text.TrueType
 import qualified Data.Vector.Unboxed as UV
 
 findFont :: Async FontCache -> FontDescriptor -> IO (Maybe FilePath)

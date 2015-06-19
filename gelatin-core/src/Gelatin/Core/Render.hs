@@ -4,18 +4,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Gelatin.Core.Render (
     module R,
-    module GLFW,
-    initWindow,
-    --enableBlending,
-    --getRenderer,
-    --render,
-    --rendering,
-    --renderToTexture,
-    --cache,
+    initGelatin,
+    newWindow,
     loadGeomRenderSource,
     loadBezRenderSource,
     loadRenderSource,
     loadTexture,
+    loadImageAsTexture,
+    filledTriangleRenderer,
     colorRenderer,
     colorBezRenderer,
     colorFontRenderer,
@@ -25,17 +21,20 @@ module Gelatin.Core.Render (
     toTexture,
     calculateDpi,
     compileFontCache
-    --drawClear,
-    --withNewFrame,
-    --gets
 ) where
 
 import Gelatin.Core.Shader
 import Gelatin.Core.Render.Types as R
+import Gelatin.Core.Render.Polylines as R
 import Gelatin.Core.Render.Geometrical as R
 import Gelatin.Core.Render.Font as R
+import Linear
+import Graphics.Text.TrueType
 import Graphics.GL.Core33
-import Graphics.UI.GLFW as GLFW
+import Graphics.GL.Types
+import Graphics.UI.GLFW as GLFW hiding (Image(..))
+import Codec.Picture.Types
+import Codec.Picture (readImage)
 import Foreign.Marshal.Array
 import Foreign.Marshal.Utils
 import Foreign.C.String
@@ -44,7 +43,6 @@ import Foreign.Ptr
 import Data.Monoid
 import Data.Maybe
 import Data.Vector.Storable (Vector,unsafeWith)
-import Control.Applicative
 import Control.Concurrent.Async
 import Control.Monad
 import System.Directory
@@ -53,12 +51,20 @@ import System.Exit
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Foldable as F
 
--- | Starts up the app by creating a window and returning some default
--- values for resources.
-initWindow :: Int -> Int -> String -> IO Window
-initWindow ww wh ws = do
+-- | Initializes the system.
+initGelatin :: IO Bool
+initGelatin = do
     setErrorCallback $ Just $ \_ -> hPutStrLn stderr
-    True <- GLFW.init
+    GLFW.init
+
+-- | Creates a window.
+newWindow :: Int -- ^ Width
+          -> Int -- ^ Height
+          -> String -- ^ Title
+          -> Maybe Monitor -- ^ The monitor to fullscreen into.
+          -> Maybe Window -- ^ A window to share OpenGL contexts with.
+          -> IO Window
+newWindow ww wh ws mmon mwin = do
     defaultWindowHints
     windowHint $ WindowHint'OpenGLDebugContext True
     windowHint $ WindowHint'OpenGLProfile OpenGLProfile'Core
@@ -66,9 +72,9 @@ initWindow ww wh ws = do
     windowHint $ WindowHint'ContextVersionMajor 3
     windowHint $ WindowHint'ContextVersionMinor 2
     windowHint $ WindowHint'DepthBits 16
-    mwin <- createWindow ww wh ws Nothing Nothing
-    makeContextCurrent mwin
-    window <- case mwin of
+    mwin' <- createWindow ww wh ws mmon mwin
+    makeContextCurrent mwin'
+    window <- case mwin' of
                   Nothing  -> do putStrLn "could not create window"
                                  exitFailure
                   Just win -> return win
@@ -77,6 +83,28 @@ initWindow ww wh ws = do
 --------------------------------------------------------------------------------
 -- Renderers
 --------------------------------------------------------------------------------
+-- | Creates and returns a renderer that renders a given string of
+-- triangles with the given filling.
+filledTriangleRenderer :: Window -> GeomRenderSource -> [Triangle (V2 Float)]
+                       -> Fill -> IO Renderer
+filledTriangleRenderer win grs ts fill = do
+    let vs = trisToComp ts
+    mfr <- getFillResult fill vs
+    case mfr of
+        Just (FillResultColor cs) -> colorRenderer win grs GL_TRIANGLES vs cs
+        Just (FillResultTexture t uvs) -> textureRenderer win grs t GL_TRIANGLES
+                                                                    vs uvs
+        _ -> do putStrLn "Could not create a filledTriangleRenderer."
+                return $ Renderer (const $ putStrLn "Non op renderer.") [] (return ())
+
+getFillResult :: Fill -> [V2 Float] -> IO (Maybe FillResult)
+getFillResult (FillColor f) vs = return $ Just $ FillResultColor $ map f vs
+getFillResult (FillTexture fp f) vs = do
+    mtex <- loadImageAsTexture fp
+    return $ case mtex of
+        Nothing  -> Nothing
+        Just tex -> Just $ FillResultTexture tex $ map f vs
+
 -- | Creates and returns a renderer that renders a given FontString.
 colorFontRenderer :: Window -> GeomRenderSource -> BezRenderSource -> Dpi
                   -> FontString -> (V2 Float -> V4 Float) -> IO Renderer
@@ -90,6 +118,8 @@ colorFontRenderer window grs brs dpi fstr clrf = do
     bezr <- colorBezRenderer window brs bs bcs
 
     return $ stencilXOR $ clrr <> bezr
+
+
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
@@ -299,6 +329,13 @@ loadRenderSource (RenderDefFP fps uniforms) = do
         return (src, shaderType)
     loadRenderSource $ RenderDefBS srcs uniforms
 
+loadImageAsTexture :: FilePath -> IO (Maybe GLuint)
+loadImageAsTexture fp = do
+    eStrOrImg <- readImage fp
+    case eStrOrImg of
+        Left err -> putStrLn err >> return Nothing
+        Right i  -> loadTexture i >>= return . Just
+
 loadTexture :: DynamicImage -> IO GLuint
 loadTexture img = do
     putStrLn "Loading texture"
@@ -359,15 +396,6 @@ toTexture (w, h) r = do
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST
 
-{-
-    [d] <- allocaArray 1 $ \ptr -> do
-        glGenRenderbuffers 1 ptr
-        peekArray 1 ptr
-    glBindRenderbuffer GL_RENDERBUFFER d
-    glRenderbufferStorage GL_RENDERBUFFER GL_DEPTH_COMPONENT w' h'
-    glFramebufferRenderbuffer GL_FRAMEBUFFER GL_DEPTH_ATTACHMENT GL_RENDERBUFFER d
--}
-
     glFramebufferTexture GL_FRAMEBUFFER GL_COLOR_ATTACHMENT0 t 0
     withArray [GL_COLOR_ATTACHMENT0] $ glDrawBuffers 1
 
@@ -408,21 +436,6 @@ compileFontCache = async $ do
     a <- buildCache
     putStrLn "Font cache loaded."
     return a
-
-
---resources :: Window -> IO Resources
---resources window = do
---    -- Calculate the dpi of the primary monitor.
---    dpi <- calculateDpi
---    a <- compileFontCache
---    t <- getCurrentTime
---    return $ Resources { rsrcFonts = a
---                       , rsrcRenderers = IM.empty
---                       , rsrcSources = M.empty
---                       , rsrcWindow = window
---                       , rsrcDpi = dpi
---                       , rsrcUTC = t
---                       }
 
 --------------------------------------------------------------------------------
 -- Buffering, Vertex Array Objects, Uniforms, etc.
@@ -477,14 +490,7 @@ drawBuffer :: GLuint
            -> IO ()
 drawBuffer program vao mode num = do
     glUseProgram program
-    --case (,) <$> uuProjection <*> uuModelview of
-    --    Nothing -> return ()
-    --    Just (pju,mvu) -> do setOrthoWindowProjection window program pju
-    --                         setModelview program mvu tfrm
-    --let (spu,spub) = uuSampler
-    --    (hvu,hvub) = uuHasUV
-    --glUniform1i spu spub
-    --glUniform1i hvu hvub
+
     glBindVertexArray vao
     err <- glGetError
     when (err /= 0) $ putStrLn $ "glBindVertex Error: " ++ show err
@@ -495,39 +501,4 @@ drawBuffer program vao mode num = do
 
 glFloatSize :: Int
 glFloatSize = sizeOf (undefined :: GLfloat)
-
---enableBlending :: SetMember Lift (Lift IO) r => IO ()
---enableBlending = lift $ do
---    glEnable GL_BLEND
---    glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
-
---drawClear :: (Member (State Resources) r,
---              SetMember Lift (Lift IO) r) => IO ()
---drawClear = do
---    (fbw, fbh) <- framebufferSize
---    lift $ do
---        pollEvents
---        glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
---        glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
-
---framebufferSize :: (Member (State Resources) r,
---                    SetMember Lift (Lift IO) r) => IO (Int, Int)
---framebufferSize = gets rsrcWindow >>= lift . getFramebufferSize
-
---withNewFrame :: (Member (State Resources) r,
---                 SetMember Lift (Lift IO) r)
---             => IO () -> IO ()
---withNewFrame f = do
---    t <- lift $ do pollEvents
---                   getCurrentTime
---    modify $ \rsrcs -> rsrcs{rsrcUTC = t}
---    f
---    window <- gets rsrcWindow
---    lift $ do
---        swapBuffers window
---        shouldClose <- windowShouldClose window
---        if shouldClose
---        then exitSuccess
---        else threadDelay 100
-
 

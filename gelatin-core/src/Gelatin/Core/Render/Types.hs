@@ -13,18 +13,18 @@ module Gelatin.Core.Render.Types (
     Bezier(..),
     Triangle(..),
     FontString(..),
-    module J
+    EndCap(..),
+    LineJoin(..),
+    Fill(..),
+    FillResult(..)
 ) where
 
 import Linear as J hiding (rotate)
 import Prelude hiding (init)
-import Graphics.UI.GLFW as J
-import Graphics.GL.Types as J
-import Graphics.Text.TrueType as J hiding (CompositeScaling(..))
-import Codec.Picture as J
-import Codec.Picture.Types as J
+import Graphics.UI.GLFW
+import Graphics.GL.Types
+import Graphics.Text.TrueType hiding (CompositeScaling(..))
 import Data.Time.Clock
-import Data.Monoid
 import Data.Typeable
 import Data.ByteString.Char8 (ByteString)
 import Control.Concurrent.Async
@@ -75,11 +75,23 @@ instance Monoid Renderer where
     mempty = Renderer (const $ return ()) [] (return ())
     (Renderer ar as ac) `mappend` (Renderer br bs bc) = Renderer (\t -> ar t >> br t) (as ++ bs) (ac >> bc)
 
+data Primitive a = PrimitiveBez (Bezier a)
+                 | PrimitiveTri (Triangle a)
+                 deriving (Show, Eq)
 data Point a = Point a
-data Line a = Line a a
-data Bezier a = Bezier Ordering a a a
-data Triangle a = Triangle a a a
+data Line a = Line a a deriving (Show, Eq)
+data Bezier a = Bezier Ordering a a a deriving (Show, Eq)
+data Triangle a = Triangle a a a deriving (Show, Eq)
 data FontString = FontString Font Float (Float,Float) String
+
+data LineJoin = LineJoinMiter
+              | LineJoinBevel
+              | LineJoinRound
+              deriving (Show, Eq)
+data EndCap = EndCapButt
+            | EndCapRound
+            | EndCapSquare
+            deriving (Show, Eq)
 
 instance Functor Point where
     fmap f (Point v) = Point $ f v
@@ -111,3 +123,9 @@ data Transform = Transform { tfrmTranslation :: Position
 instance Monoid Transform where
     mempty = Transform zero (V2 1 1) 0
     (Transform t1 s1 r1) `mappend` (Transform t2 s2 r2) = Transform (t1 + t2) (s1 * s2) (r1 + r2)
+
+data Fill = FillColor (V2 Float -> V4 Float)
+          | FillTexture FilePath (V2 Float -> V2 Float)
+
+data FillResult = FillResultColor [V4 Float]
+                | FillResultTexture GLuint [V2 Float]

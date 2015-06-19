@@ -34,6 +34,7 @@ void main() {
         // We are right on the boundary, interpolate the color intensity.
         a = alpha;
     }
+
     vec4 color = vec4(0);
     if (hasUV) {
         color = texture(sampler, fuv.st);

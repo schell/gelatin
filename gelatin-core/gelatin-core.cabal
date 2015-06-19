@@ -48,11 +48,13 @@ cabal-version:       >=1.10
 
 
 library
+  ghc-options: -Wall
   -- Modules exported by the library.
   exposed-modules:     Gelatin.Core.Render,
                        Gelatin.Core.Render.Font,
                        Gelatin.Core.Render.Types,
                        Gelatin.Core.Render.Geometrical,
+                       Gelatin.Core.Render.Polylines,
                        Gelatin.Core.Shader,
                        Gelatin.Core.Color,
                        Gelatin.Core.Triangulation.Common,
@@ -69,7 +71,7 @@ library
                        TemplateHaskell
 
   -- Other library packages from which modules are imported.
-  build-depends:       base >=4.7,
+  build-depends:       base >=4.7 && < 5,
                        linear >=1.18,
                        gl >=0.7,
                        GLFW-b >= 1.4.7.2,
@@ -90,3 +92,25 @@ library
   -- Base language which the package is written in.
   default-language:    Haskell2010
 
+executable example
+  buildable:           True
+  ghc-prof-options:    -Wall
+  hs-source-dirs:      src
+  main-is:             Example.hs
+  build-depends:       base >=4.6 && <5.0,
+                       gelatin-core -any,
+                       linear >=1.18,
+                       gl >=0.7,
+                       GLFW-b >= 1.4.7.2,
+                       FontyFruity >=0.5,
+                       JuicyPixels,
+                       time >=1.4,
+                       async >=2.0,
+                       directory >=1.2,
+                       containers >=0.5,
+                       vector >=0.10,
+                       lens,
+                       file-embed >= 0.0.8.2,
+                       bytestring
+
+  default-language:    Haskell2010

@@ -2,6 +2,7 @@ module Gelatin.Core.Triangulation.EarClipping where
 
 import Gelatin.Core.Render.Types
 import Gelatin.Core.Triangulation.Common
+import Linear
 
 triangulate :: [V2 Float] -> [Triangle (V2 Float)]
 triangulate ps = triangulate' [] $ clean ps

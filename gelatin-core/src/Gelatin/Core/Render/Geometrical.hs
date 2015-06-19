@@ -2,6 +2,8 @@ module Gelatin.Core.Render.Geometrical (
     toLines,
     toArrows,
     toBeziers,
+    trisToComp,
+    triPoints,
     transform,
     transformV2,
     transformPoly,
@@ -15,6 +17,7 @@ module Gelatin.Core.Render.Geometrical (
 
 import Gelatin.Core.Triangulation.Common
 import Gelatin.Core.Render.Types
+import Linear hiding (rotate)
 
 toLines :: [a] -> [Line a]
 toLines (a:b:cs) = Line a b : toLines (b:cs)
@@ -35,6 +38,12 @@ toArrows _ = []
 toBeziers :: (Fractional a, Ord a) => [V2 a] -> [Bezier (V2 a)]
 toBeziers (a:b:c:ps) = Bezier (compare (triangleArea a b c) 0) a b c : toBeziers (c:ps)
 toBeziers _ = []
+
+trisToComp :: [Triangle (V2 a)] -> [V2 a]
+trisToComp = concatMap triPoints
+
+triPoints :: Triangle (V2 a) -> [V2 a]
+triPoints (Triangle a b c) = [a, b, c]
 
 --------------------------------------------------------------------------------
 -- Transformation helpers
