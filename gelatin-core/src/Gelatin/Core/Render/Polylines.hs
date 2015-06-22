@@ -5,123 +5,78 @@ import Gelatin.Core.Render.Geometrical
 import Linear hiding (trace)
 import Debug.Trace
 
-test :: [Triangle (V2 Float)]
-test =
-    let vs = [ V2 0 0
+-- | The outline at a given thickness of a given line.
+polyOutline :: [V2 Float] -> Float -> [V2 Float]
+polyOutline ps t = exs ++ reverse ins ++ h
+    where js = joins ps t
+          (exs,ins) = unzip $ map (uncurry miterLine) $ zip js ps
+          h = case exs of
+                  h':_ -> [h']
+                  _    -> []
+
+polyline :: [V2 Float] -> Float -> [Triangle (V2 Float)]
+polyline ps t = concatMap (uncurry polylineTriangles) jps'
+    where js   = joins ps t
+          jps  = zip js ps
+          jps' = zip jps $ tail jps
+
+polylineTriangles :: (Join, V2 Float) -> (Join, V2 Float) -> [Triangle (V2 Float)]
+polylineTriangles (j1, p1) (j2, p2) = [t1, t2]
+    where (a,b) = miterLine j1 p1
+          (c,d) = miterLine j2 p2
+          t1 = Triangle a b c
+          t2 = Triangle b c d
+
+miterLine :: Join -> V2 Float -> (V2 Float, V2 Float)
+miterLine (Join v l) p = (a,b)
+    where a  = p + v'
+          b  = p - v'
+          v' = (v ^* l)
+
+-- | Find the cap and miter joins of a polyline. For a polyline of N points
+-- there will be N joins.
+joins :: [V2 Float] -> Float -> [Join]
+joins []  _ = []
+joins [_] _ = []
+joins [n1,n2] t = let c = capJoin n1 n2 t in [c,c]
+joins ps t = start : mid ++ [end]
+    where start     = capJoin n1 n2 t
+          end       = capJoin n1' n2' t
+          mid       = miters ps t
+          [n1,n2]   = take 2 ps
+          [n1',n2'] = reverse $ take 2 $ reverse $ ps
+
+-- | Finds the miters of a polyline. For a polyline of N points there will
+-- be N-2 miters.
+miters :: [V2 Float] -> Float -> [Join]
+miters (a:b:c:ps) t = miterJoin a b c t : miters (b:c:ps) t
+miters _ _ = []
+
+-- | Finds the miter line of three points with a thickness.
+miterJoin :: V2 Float -> V2 Float -> V2 Float -> Float -> Join
+miterJoin a b c t = Join v ln
+    where l1 = b - a
+          l2 = c - b
+          tgnt = signorm $ (signorm l2) + (signorm l1)
+          v = perp tgnt
+          ln = t / (v `dot` n)
+          Join n _ = capJoin a b t
+
+capJoin :: V2 Float -> V2 Float -> Float -> Join
+capJoin a b t = Join v t
+    where v = signorm $ perp $ b - a
+
+data Join = Join { joinVector :: V2 Float
+                 , joinLength :: Float
+                 } deriving (Show, Eq)
+
+--------------------------------------------------------------------------------
+-- Try #1
+--------------------------------------------------------------------------------
+
+testPoints :: [V2 Float]
+testPoints = [ V2 0 0
              , V2 100 100
              , V2 0 200
              , V2 100 300
              ]
-    in case polylineToJoins 5 $ toLines vs of
-        Nothing -> []
-        Just js -> joinsToTris EndCapButt LineJoinMiter js
-
-joinsToTris :: Fractional a
-            => EndCap -> LineJoin -> [Join (V2 a)] -> [Triangle (V2 a)]
-joinsToTris _ _ [] = []
-joinsToTris _ _ [_] = []
-joinsToTris c j (j1:j2:js) = ts ++ joinsToTris c j (j2:js)
-    where (a,b) = exitPoints j1
-          ts = [Triangle a b m1, Triangle b m1 m2]
-          (m1,m2) = exitPoints j2
-
-exitPoints :: Fractional a => Join (V2 a) -> (V2 a, V2 a)
-exitPoints e@(Elbow{}) = (a, b)
-    where b = p + (d *^ m)
-          a = p - (d *^ m)
-          d = realToFrac $ elbowMiterLength e
-          m = elbowMiterLine e
-          (l1,_) = elbowLines e
-          (_,p) = lineMetricsPoints l1
-exitPoints (Start lm) = (a,b)
-    where (a,b,_,_) = lineMetricsCorners lm
-exitPoints (End lm) = (c,d)
-    where (_,_,c,d) = lineMetricsCorners lm
-
-startCap :: EndCap -> LineMetrics (V2 a) -> [Triangle (V2 a)]
-startCap EndCapButt _ = []
-startCap _ _ = undefined
-
-endCap :: EndCap -> LineMetrics (V2 a) -> [Triangle (V2 a)]
-endCap EndCapButt _ = []
-endCap _ _ = undefined
-
-polylineToJoins :: (Eq a, Floating a, Real a)
-                 => a -> [Line (V2 a)] -> Maybe [Join (V2 a)]
-polylineToJoins t ps@(l1:_)=  (:) <$> start <*> rest
-    where start = Just $ End $ lineMetrics t l1
-          rest = segmentToJoins t ps
-polylineToJoins _ _ = Just []
-
-segmentToJoins :: (Eq a, Floating a, Real a)
-          => a -> [Line (V2 a)] -> Maybe [Join (V2 a)]
-segmentToJoins t (l1:[]) = Just [End $ lineMetrics t l1]
-segmentToJoins t (l1:l2:[]) =
-    (:) <$> elbow
-        <*> end
-        where elbow = joinMetrics (lineMetrics t l1) (lineMetrics t l2)
-              end   = Just [End $ lineMetrics t l2]
-segmentToJoins t (l1:l2:ls) =
-    (:) <$> elbow
-        <*> rest
-        where elbow = joinMetrics (lineMetrics t l1) (lineMetrics t l2)
-              rest  = segmentToJoins t $ l2:ls
-segmentToJoins _ _ = Just []
-
--- | Calculate the join metrics of two line metrics. May result in
--- `Nothing` if the two lines cannot be joined.
-joinMetrics :: (Eq a, Floating a, Real a)
-            => LineMetrics (V2 a) -> LineMetrics (V2 a)
-            -> Maybe (Join (V2 a))
-joinMetrics a b =
-    case lineMetricsAreConnected a b of
-        False -> Nothing
-        True  -> Just $ Elbow ls t m ln
-            where ls = (a,b)
-                  t  = signorm $ l1 + l2
-                  l1 = signorm $ lineMetricsLine a
-                  l2 = signorm $ lineMetricsLine b
-                  m  = perp t
-                  d  = realToFrac $ m `dot` (lineMetricsNorm a)
-                  ln = (lineMetricsThickness a) / d
-
-lineMetricsAreConnected :: Eq a => LineMetrics a -> LineMetrics a -> Bool
-lineMetricsAreConnected a b = p1 == p2
-    where p1 = snd $ lineMetricsPoints a
-          p2 = fst $ lineMetricsPoints b
-
-data Join a = Elbow { elbowLines       :: (LineMetrics a, LineMetrics a)
-                    , elbowTangent     :: a
-                    , elbowMiterLine   :: a
-                    , elbowMiterLength :: Double
-                    }
-            | Start { startLine :: LineMetrics a }
-            | End { endLine :: LineMetrics a }
-            deriving (Show, Eq)
-
--- | Calculate the bounding box metrics of this line given a thickness.
---
---   b --- d
---   |     |<--thickness/2
---   p0----p1
---   |     |
---   a --- c
-lineMetrics :: (Floating a, Real a) => a -> Line (V2 a) -> LineMetrics (V2 a)
-lineMetrics thickn (Line p0 p1) = LineMetrics ps l n cs $ realToFrac thickn
-    where ps = (p0,p1)
-          l = p1 - p0
-          n = signorm l
-          t = thickn *^ n
-          a = p0 - t
-          b = p0 + t
-          c = p1 - t
-          d = p1 + t
-          cs = (a,b,c,d)
-
-data LineMetrics a = LineMetrics { lineMetricsPoints    :: (a, a)
-                                 , lineMetricsLine      :: a
-                                 , lineMetricsNorm      :: a
-                                 , lineMetricsCorners   :: (a, a, a, a)
-                                 , lineMetricsThickness :: Double
-                                 } deriving (Show, Eq)
-

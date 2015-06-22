@@ -1,3 +1,5 @@
+// Loop-Blinn curve rendering
+
 #version 330 core
 in vec3 fbez;
 in vec4 fcolor;
