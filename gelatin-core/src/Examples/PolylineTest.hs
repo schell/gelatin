@@ -8,6 +8,7 @@ import Gelatin.Core.Color
 import Graphics.UI.GLFW
 import Graphics.GL.Core33
 import Control.Concurrent (threadDelay)
+import Control.Monad
 import Data.IORef
 import Data.Bits
 import Data.Monoid
@@ -26,7 +27,25 @@ polylineTest win grs _ = do
     setCursorPosCallback win $ Just $ \_ x y ->
         modifyIORef ref $ \(_, b) -> ((x,y), b)
 
-    box  <- colorRenderer win grs GL_TRIANGLES [V2 0 0, V2 100 0, V2 100 50] $ replicate 3 red
+    box   <- colorRenderer win grs GL_TRIANGLES [V2 0 0, V2 100 0, V2 100 50] $
+                                                replicate 3 red
+    let spklns = [ [ V2 0 0
+                   , V2 300 10
+                   , V2 0 20
+                   , V2 300 30
+                   ]
+                 , [ V2 300 60
+                   , V2 0 70
+                   , V2 300 80
+                   , V2 0 90
+                   ]
+                 ]
+    lns <- forM spklns $ \ln -> do
+        spike <- filledTriangleRenderer win grs (polyline LineJoinBevel 5 ln) $ FillColor $ const red
+        inner <- filledTriangleRenderer win grs (polyline LineJoinBevel 1 ln) $ FillColor $ const white
+        return $ spike <> inner
+    let lns' = foldl (<>) mempty lns
+
     let t = Triangle (V2 0 0) (V2 100 0) (V2 100 50)
         -- A canary to white gradient fill
         gradFill  = FillColor $ \(V2 _ y) -> V4 1 1 (y/200) 1
@@ -59,20 +78,21 @@ polylineTest win grs _ = do
                                modifyIORef ref (const ((x,y), False))
                                ps <- readIORef pnts
                                print ps
-                               let ln = polyline ps 5
+                               let ln = polyline LineJoinBevel 5 ps
                                    ol = polyOutline ps 5
-                                   ln' = polyline ol 0.5
+                                   ln' = polyline LineJoinBevel 0.5 ol
                                r' <- filledTriangleRenderer win grs ln magFill
-                               r'' <- filledTriangleRenderer win grs ln' cynFill
+                               --r'' <- filledTriangleRenderer win grs ln' cynFill
                                rCleanup oldR
-                               let r = r' <> r''
-                               modifyIORef rRef $ const r
-                               return r
+                               --let r = r' <> r''
+                               modifyIORef rRef $ const r'
+                               return r'
                              else return oldR
 
                   mapM_ (uncurry rRender) [ (box, translate 25 25 mempty)
                                           , (tris, mempty)
-                                          , (poly, mempty)]
+                                          , (poly, mempty)
+                                          , (lns', translate 200 200 mempty)]
 
                   pollEvents
                   swapBuffers win
