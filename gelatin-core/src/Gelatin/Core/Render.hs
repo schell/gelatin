@@ -32,7 +32,7 @@ import Linear
 import Graphics.Text.TrueType
 import Graphics.GL.Core33
 import Graphics.GL.Types
-import Graphics.UI.GLFW as GLFW hiding (Image(..))
+import Graphics.UI.GLFW as GLFW --hiding (Image(..))
 import Codec.Picture.Types
 import Codec.Picture (readImage)
 import Foreign.Marshal.Array
@@ -501,4 +501,3 @@ drawBuffer program vao mode num = do
 
 glFloatSize :: Int
 glFloatSize = sizeOf (undefined :: GLfloat)
-

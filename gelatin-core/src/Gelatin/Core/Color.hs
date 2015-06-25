@@ -2,6 +2,10 @@ module Gelatin.Core.Color where
 
 import Linear
 import Data.Bits
+import Gelatin.Core.Render.Types (Fill(..))
+
+solid :: V4 Float -> Fill
+solid = FillColor . const
 
 maroon :: (Num a, Fractional a) => V4 a
 maroon = V4 (128/255) (0/255) (0/255) 1

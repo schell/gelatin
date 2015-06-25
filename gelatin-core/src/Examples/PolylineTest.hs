@@ -30,19 +30,20 @@ polylineTest win grs _ = do
     box   <- colorRenderer win grs GL_TRIANGLES [V2 0 0, V2 100 0, V2 100 50] $
                                                 replicate 3 red
     let spklns = [ [ V2 0 0
-                   , V2 300 10
-                   , V2 0 20
-                   , V2 300 30
-                   ]
-                 , [ V2 300 60
-                   , V2 0 70
-                   , V2 300 80
-                   , V2 0 90
+                   , V2 300 50
+                   , V2 0 100
+                   , V2 300 150
+                   , V2 0 200
+                   , V2 300 250
+                   , V2 0 300
+                   , V2 300 350
+                   , V2 0 400
+                   , V2 20 410
                    ]
                  ]
     lns <- forM spklns $ \ln -> do
-        spike <- filledTriangleRenderer win grs (polyline LineJoinBevel 5 ln) $ FillColor $ const red
-        inner <- filledTriangleRenderer win grs (polyline LineJoinBevel 1 ln) $ FillColor $ const white
+        spike <- filledTriangleRenderer win grs (polyline EndCapRound LineJoinBevel 10 ln) $ FillColor $ const $ alpha red 0.5
+        inner <- filledTriangleRenderer win grs (polyline EndCapButt LineJoinMiter 0.5 ln) $ FillColor $ const white
         return $ spike <> inner
     let lns' = foldl (<>) mempty lns
 
@@ -50,7 +51,7 @@ polylineTest win grs _ = do
         -- A canary to white gradient fill
         gradFill  = FillColor $ \(V2 _ y) -> V4 1 1 (y/200) 1
         -- A magenta fill
-        magFill = FillColor $ const magenta
+        magFill = FillColor $ const $ alpha magenta 0.5
         -- A cyan fill
         cynFill  = FillColor $ const cyan
     tris <- filledTriangleRenderer win grs [ t
@@ -77,22 +78,34 @@ polylineTest win grs _ = do
                                modifyIORef pnts (++ map (fmap double2Float) [V2 x y])
                                modifyIORef ref (const ((x,y), False))
                                ps <- readIORef pnts
-                               print ps
-                               let ln = polyline LineJoinBevel 5 ps
-                                   ol = polyOutline ps 5
-                                   ln' = polyline LineJoinBevel 0.5 ol
-                               r' <- filledTriangleRenderer win grs ln magFill
-                               --r'' <- filledTriangleRenderer win grs ln' cynFill
+                               let l3 = reverse $ take 3 $ reverse ps
+                               case l3 of
+                                   [a,b,c] -> print (pi/180, angleBetween (b - a) (b - c))
+                                   _       -> return ()
+
+                               let ln = polyline EndCapRound LineJoinBevel 10 ps
+                                   ln' = polyline EndCapButt LineJoinBevel 1 ps
+                                   js  = joints EndCapRound LineJoinBevel 10 ps
+                                   (ns,xs) = unzip $ map (\j -> (entryLine j, exitLine j)) js
+                                   f (a,b) = polyline EndCapButt LineJoinMiter 1 [a,b]
+                                   ns' = concatMap f ns
+                                   xs' = concatMap f xs
+                                   ftr = filledTriangleRenderer win grs
+
+                               r'  <- ftr ln magFill
+                               r'' <- ftr ln' cynFill
+                               n   <- ftr ns' $ solid white
+                               x   <- ftr xs' $ solid yellow
                                rCleanup oldR
-                               --let r = r' <> r''
-                               modifyIORef rRef $ const r'
-                               return r'
+                               let r = r' <> r'' <> n <> x
+                               modifyIORef rRef $ const r
+                               return r
                              else return oldR
 
                   mapM_ (uncurry rRender) [ (box, translate 25 25 mempty)
                                           , (tris, mempty)
                                           , (poly, mempty)
-                                          , (lns', translate 200 200 mempty)]
+                                          , (lns', translate 100 100 mempty)]
 
                   pollEvents
                   swapBuffers win

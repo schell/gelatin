@@ -15,6 +15,8 @@ module Gelatin.Core.Render.Types (
     FontString(..),
     EndCap(..),
     LineJoin(..),
+    Joint(..),
+    Winding(..),
     Fill(..),
     FillResult(..)
 ) where
@@ -84,15 +86,6 @@ data Bezier a = Bezier Ordering a a a deriving (Show, Eq)
 data Triangle a = Triangle a a a deriving (Show, Eq)
 data FontString = FontString Font Float (Float,Float) String
 
-data LineJoin = LineJoinMiter
-              | LineJoinBevel
-              | LineJoinRound
-              deriving (Show, Eq)
-data EndCap = EndCapButt
-            | EndCapRound
-            | EndCapSquare
-            deriving (Show, Eq)
-
 instance Functor Point where
     fmap f (Point v) = Point $ f v
 
@@ -129,3 +122,21 @@ data Fill = FillColor (V2 Float -> V4 Float)
 
 data FillResult = FillResultColor [V4 Float]
                 | FillResultTexture GLuint [V2 Float]
+--------------------------------------------------------------------------------
+-- Polylines
+--------------------------------------------------------------------------------
+data LineJoin = LineJoinMiter
+              | LineJoinBevel
+              -- | LineJoinRound
+              deriving (Show, Eq)
+data EndCap = EndCapButt
+            | EndCapBevel
+            | EndCapSquare
+            | EndCapRound
+            deriving (Show, Eq)
+data Winding = Clockwise
+             | CounterCW
+             deriving (Show, Eq)
+data Joint = Cap (V2 Float) [V2 Float]
+           | Elbow Winding (V2 Float, V2 Float) [V2 Float]
+           deriving (Show, Eq)

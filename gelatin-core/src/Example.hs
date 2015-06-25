@@ -4,9 +4,11 @@ import System.Environment
 import Gelatin.Core.Render
 import Graphics.UI.GLFW
 import Examples.PolylineTest
+import Examples.PolylineWinding
 
 examples :: [(String, Window -> GeomRenderSource -> BezRenderSource -> IO ())]
-examples = [("polylineTest", polylineTest)]
+examples = [("polylineTest", polylineTest)
+           ,("polylineWinding", polylineWinding)]
 
 main :: IO ()
 main = do
