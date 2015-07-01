@@ -3,15 +3,38 @@ module Gelatin.Core.Render.Polylines where
 import Gelatin.Core.Render.Types
 import Gelatin.Core.Triangulation.Common (triangleArea)
 import Linear hiding (trace)
+import Debug.Trace
 
--- | The outline at a given thickness of a given line.
---polyOutline :: [V2 Float] -> Float -> [V2 Float]
---polyOutline ps t = exs ++ reverse ins ++ h
---    where js = joins t ps
---          (exs,ins) = unzip $ map (uncurry miterLine) $ zip js ps
---          h = case exs of
---                  h':_ -> [h']
---                  _    -> []
+polygonExpand :: Float -> [V2 Float] -> [V2 Float]
+polygonExpand t ps = trace (show (length ps, length vs, length poly)) poly
+    where poly  = zipWith f ps vs
+          f p v = p + (v ^* t)
+          bows  = zip3 ps' (tail ps') (tail $ tail ps')
+          vs    = map (\(a,b,c) -> perp $ tangentOf a b c) bows
+          ps'   = start ++ ps ++ end
+          start = case ps of
+                      x:_ -> [x]
+                      _   -> []
+          end   = case reverse ps of
+                      x:_ -> [x]
+                      _   -> []
+
+-- | The polyline outline of another polyline drawn at a given thickness.
+outlinePolyline :: EndCap -> LineJoin -> Float -> [V2 Float] -> [V2 Float]
+outlinePolyline c j t ps = scap ++ ptans ++ ecap ++ reverse ntans ++ h
+    where js = joints c j t ps
+          (ptans,ntans) = both concat $ unzip $ map tangentPoints js
+          both f (a,b) = (f a, f b)
+          scap = case js of
+                     (Cap _ xs:_) -> reverse xs
+                     _            -> []
+          ecap = case reverse js of
+                     (Cap _ xs:_) -> reverse xs
+                     _            -> []
+
+          h = case scap of
+                  h':_ -> [h']
+                  _    -> []
 
 polyline :: EndCap -> LineJoin -> Float -> [V2 Float] -> [Triangle (V2 Float)]
 polyline c j t ps = triangulate $ joints c j t ps
@@ -30,6 +53,16 @@ triangulate (j:j':js) = arm ++ bow ++ (triangulate $ j':js)
     where arm   = triangulateArm j j'
           bow   = triangulateElbow j
 triangulate _ = []
+
+-- | Returns the points in a joint separated by the line's winding
+-- direction. Points on the side of the line in the positive tangent direction
+-- are `fst` and points in the negative tangent direction are `snd`.
+tangentPoints :: Joint -> ([V2 Float], [V2 Float])
+-- There isn't enough info in a cap to provide this.
+tangentPoints (Cap _ _) = ([], [])
+tangentPoints (Elbow _ (p,n) []) = ([p],[n])
+tangentPoints (Elbow Clockwise (p,_) ps) = ([p],ps)
+tangentPoints (Elbow CounterCW (_,n) ps) = (ps,[n])
 
 exitLine :: Joint -> (V2 Float, V2 Float)
 exitLine (Cap _ ps) = (head ps, head $ reverse ps)
@@ -123,13 +156,11 @@ bevelJoint t a b c =
 
 miterJoint :: Float -> V2 Float -> V2 Float -> V2 Float -> Joint
 miterJoint t a b c =
-    if (abs $ angleBetween (b - a) (c - b)) < 1
-    then bevelJoint t a b c
-    else if triangleArea a b c >= 0
-         then Elbow Clockwise (ptan,ntan) []
-         else Elbow CounterCW (ptan,ntan) []
-         where j       = join t a b c
-               (ptan,ntan) = miterLine j b
+    if triangleArea a b c >= 0
+    then Elbow Clockwise (ptan,ntan) []
+    else Elbow CounterCW (ptan,ntan) []
+    where j = join t a b c
+          (ptan,ntan) = miterLine j b
 
 -- | Finds the miter line through a midpoint for a given join.
 miterLine :: Join -> V2 Float -> (V2 Float, V2 Float)

@@ -10,6 +10,7 @@ module Gelatin.Core.Render (
     loadBezRenderSource,
     loadRenderSource,
     loadTexture,
+    unloadTexture,
     loadImageAsTexture,
     filledTriangleRenderer,
     colorRenderer,
@@ -19,8 +20,7 @@ module Gelatin.Core.Render (
     stencilXOR,
     transformRenderer,
     toTexture,
-    calculateDpi,
-    compileFontCache
+    calculateDpi
 ) where
 
 import Gelatin.Core.Shader
@@ -32,7 +32,7 @@ import Linear
 import Graphics.Text.TrueType
 import Graphics.GL.Core33
 import Graphics.GL.Types
-import Graphics.UI.GLFW as GLFW --hiding (Image(..))
+import Graphics.UI.GLFW as GLFW hiding (Image(..))
 import Codec.Picture.Types
 import Codec.Picture (readImage)
 import Foreign.Marshal.Array
@@ -43,7 +43,6 @@ import Foreign.Ptr
 import Data.Monoid
 import Data.Maybe
 import Data.Vector.Storable (Vector,unsafeWith)
-import Control.Concurrent.Async
 import Control.Monad
 import System.Directory
 import System.IO
@@ -95,7 +94,7 @@ filledTriangleRenderer win grs ts fill = do
         Just (FillResultTexture t uvs) -> textureRenderer win grs t GL_TRIANGLES
                                                                     vs uvs
         _ -> do putStrLn "Could not create a filledTriangleRenderer."
-                return $ Renderer (const $ putStrLn "Non op renderer.") [] (return ())
+                return $ Renderer (const $ putStrLn "Non op renderer.") (return ())
 
 getFillResult :: Fill -> [V2 Float] -> IO (Maybe FillResult)
 getFillResult (FillColor f) vs = return $ Just $ FillResultColor $ map f vs
@@ -105,10 +104,13 @@ getFillResult (FillTexture fp f) vs = do
         Nothing  -> Nothing
         Just tex -> Just $ FillResultTexture tex $ map f vs
 
+-- | TODO: textureFontRenderer and then fontRenderer.
+
 -- | Creates and returns a renderer that renders a given FontString.
-colorFontRenderer :: Window -> GeomRenderSource -> BezRenderSource -> Dpi
+colorFontRenderer :: Window -> GeomRenderSource -> BezRenderSource
                   -> FontString -> (V2 Float -> V4 Float) -> IO Renderer
-colorFontRenderer window grs brs dpi fstr clrf = do
+colorFontRenderer window grs brs fstr clrf = do
+    dpi <- calculateDpi
     let (bs,ts) = fontGeom dpi fstr
         vs = concatMap (\(Triangle a b c) -> [a,b,c]) ts
         cs = map clrf vs
@@ -118,8 +120,6 @@ colorFontRenderer window grs brs dpi fstr clrf = do
     bezr <- colorBezRenderer window brs bs bcs
 
     return $ stencilXOR $ clrr <> bezr
-
-
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
@@ -153,7 +153,7 @@ colorRenderer window grs mode vs gs = do
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
-        return $ Renderer renderFunction srcs cleanupFunction
+        return $ Renderer renderFunction cleanupFunction
 
 -- | Creates and returns a renderer that renders the given textured
 -- geometry.
@@ -162,7 +162,6 @@ textureRenderer :: Window -> GeomRenderSource -> GLuint -> GLuint -> [V2 Float]
 textureRenderer window grs t mode vs gs = do
     let (GRS src) = grs
         texr = Renderer (const $ glBindTexture GL_TEXTURE_2D t)
-                        []
                         (withArray [t] $ glDeleteTextures 1)
         srcs = [src]
 
@@ -193,7 +192,7 @@ textureRenderer window grs t mode vs gs = do
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
-            geomr = Renderer renderFunction srcs cleanupFunction
+            geomr = Renderer renderFunction cleanupFunction
         return $ texr <> geomr
 
 -- | Creates and returns a renderer that renders the given colored beziers.
@@ -234,12 +233,12 @@ colorBezRenderer window (BRS src) bs ts =
                 withUniform "modelview" srcs $ \p mvu -> do
                     setModelview p mvu t
                 drawBuffer (rsProgram src) vao GL_TRIANGLES num
-        return $ Renderer renderFunction srcs cleanupFunction
+        return $ Renderer renderFunction cleanupFunction
 
 -- | Creates a renderer that masks all pixels that are drawn to an odd
 -- number of times by the given renderer.
 stencilXOR :: Renderer -> Renderer
-stencilXOR (Renderer r s c) = Renderer r' s c
+stencilXOR (Renderer r c) = Renderer r' c
     where r' t = do glClear GL_DEPTH_BUFFER_BIT
                     glEnable GL_STENCIL_TEST
                     glColorMask GL_FALSE GL_FALSE GL_FALSE GL_FALSE
@@ -258,8 +257,7 @@ stencilXOR (Renderer r s c) = Renderer r' s c
                     glDisable GL_STENCIL_TEST
 
 transformRenderer :: Transform -> Renderer -> Renderer
-transformRenderer t (Renderer r rs c) = Renderer (r . (t <>)) rs c
-
+transformRenderer t (Renderer r c) = Renderer (r . (t <>)) c
 --------------------------------------------------------------------------------
 -- Updating uniforms
 --------------------------------------------------------------------------------
@@ -349,12 +347,10 @@ loadTexture img = do
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T GL_REPEAT
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_LINEAR
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_LINEAR_MIPMAP_LINEAR
-    -- glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST
-    -- glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
-    -- glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S GL_REPEAT
-    -- glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T GL_REPEAT
-    -- glBindTexture GL_TEXTURE_2D 0
     return t
+
+unloadTexture :: GLuint -> IO ()
+unloadTexture t = withArray [t] $ glDeleteTextures 1
 
 loadJuicy :: DynamicImage -> IO ()
 loadJuicy (ImageY8 (Image w h d)) = bufferImageData w h d GL_RED GL_UNSIGNED_BYTE
@@ -429,14 +425,6 @@ calculateDpi = do
                               let dpi = floor $ px / inches
                               putStrLn $ "Dpi: " ++ show dpi
                               return dpi
-
-compileFontCache :: IO (Async FontCache)
-compileFontCache = async $ do
-    putStrLn "Loading font cache."
-    a <- buildCache
-    putStrLn "Font cache loaded."
-    return a
-
 --------------------------------------------------------------------------------
 -- Buffering, Vertex Array Objects, Uniforms, etc.
 --------------------------------------------------------------------------------

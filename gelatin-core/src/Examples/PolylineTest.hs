@@ -27,6 +27,7 @@ polylineTest win grs _ = do
     setCursorPosCallback win $ Just $ \_ x y ->
         modifyIORef ref $ \(_, b) -> ((x,y), b)
 
+
     box   <- colorRenderer win grs GL_TRIANGLES [V2 0 0, V2 100 0, V2 100 50] $
                                                 replicate 3 red
     let spklns = [ [ V2 0 0
@@ -78,26 +79,26 @@ polylineTest win grs _ = do
                                modifyIORef pnts (++ map (fmap double2Float) [V2 x y])
                                modifyIORef ref (const ((x,y), False))
                                ps <- readIORef pnts
-                               let l3 = reverse $ take 3 $ reverse ps
-                               case l3 of
-                                   [a,b,c] -> print (pi/180, angleBetween (b - a) (b - c))
-                                   _       -> return ()
 
-                               let ln = polyline EndCapRound LineJoinBevel 10 ps
-                                   ln' = polyline EndCapButt LineJoinBevel 1 ps
-                                   js  = joints EndCapRound LineJoinBevel 10 ps
-                                   (ns,xs) = unzip $ map (\j -> (entryLine j, exitLine j)) js
-                                   f (a,b) = polyline EndCapButt LineJoinMiter 1 [a,b]
-                                   ns' = concatMap f ns
-                                   xs' = concatMap f xs
+                               let ln = polyline EndCapButt LineJoinMiter 10 ps
+                                   --ol = polyline EndCapButt LineJoinMiter 1 $
+                                   --         polygonExpand 5 $
+                                   --         outlinePolyline EndCapButt LineJoinMiter 10 ps
+                                   --ln' = polyline EndCapButt LineJoinBevel 1 ps
+                                   --js  = joints EndCapRound LineJoinBevel 10 ps
+                                   --(ns,xs) = unzip $ map (\j -> (entryLine j, exitLine j)) js
+                                   --f (a,b) = polyline EndCapButt LineJoinMiter 1 [a,b]
+                                   --ns' = concatMap f ns
+                                   --xs' = concatMap f xs
                                    ftr = filledTriangleRenderer win grs
 
                                r'  <- ftr ln magFill
-                               r'' <- ftr ln' cynFill
-                               n   <- ftr ns' $ solid white
-                               x   <- ftr xs' $ solid yellow
+                               --r'' <- ftr ln' cynFill
+                               --o   <- ftr ol $ solid $ alpha green 0.5
+                               --n   <- ftr ns' $ solid white
+                               --x   <- ftr xs' $ solid yellow
                                rCleanup oldR
-                               let r = r' <> r'' <> n <> x
+                               let r = r' {-<> r'' <> n <> x <> o-}
                                modifyIORef rRef $ const r
                                return r
                              else return oldR

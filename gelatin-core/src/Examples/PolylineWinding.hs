@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Examples.PolylineWinding where
 
 import GHC.Float
@@ -8,14 +9,20 @@ import Gelatin.Core.Color
 import Gelatin.Core.Triangulation.Common
 import Graphics.UI.GLFW
 import Graphics.GL.Core33
+import Graphics.Text.TrueType
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async
 import Control.Monad
 import Data.IORef
 import Data.Bits
-import Data.Monoid
 
 polylineWinding :: Window -> GeomRenderSource -> BezRenderSource -> IO ()
-polylineWinding win grs _ = do
+polylineWinding win grs brs = do
+    afc  <- compileFontCache
+    fc   <- wait afc
+    Just arial <- withFont fc (FontDescriptor "Arial" $ FontStyle False False)
+                              return
+
     ref  <- newIORef (0,0)
     rRef <- newIORef (mempty :: Renderer)
 
@@ -32,17 +39,25 @@ polylineWinding win grs _ = do
                   poly <- do (x,y) <- readIORef ref
                              oldR  <- readIORef rRef
                              rCleanup oldR
-                             let a = V2 300 300
-                                 b = V2 400 300
+                             let a = V2 100 100
+                                 b = V2 200 200
                                  c = fmap double2Float $ V2 x y
                                  n = angleBetween (signorm $ b - a) (signorm $ c - b)
                                  t = triangleArea a b c
-                                 ln = polyline EndCapRound LineJoinBevel 1 [a, b, c]
+                                 ps = [a, b, c]
+                                 ln = polyline EndCapButt LineJoinMiter 5 ps
+                                 ln' = polyline EndCapButt LineJoinBevel 5 $ map (+ V2 0 50) ps
                                  ftr = filledTriangleRenderer win grs
                              r  <- ftr ln $ solid white
+                             r' <- ftr ln' $ solid grey
                              modifyIORef rRef $ const r
-                             print (n, t)
-                             return r
+                             let ss = ["Angle: " ++ show n
+                                      ,"Area: " ++ show t
+                                      ]
+                             txs <- forM (zip ss [1..]) $ \(s, i) -> do
+                                 let fstr = FontString arial 16 (0,i * 16) s
+                                 colorFontRenderer win grs brs fstr $ const white
+                             return $ mconcat $ r:r':txs
 
                   mapM_ (uncurry rRender) [ (poly, mempty)
                                           ]

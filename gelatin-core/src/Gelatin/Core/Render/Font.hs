@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Gelatin.Core.Render.Font (
+    compileFontCache,
     fontGeom,
     findFont,
     allFonts,
@@ -18,6 +19,13 @@ import Control.Concurrent.Async
 import Linear
 import Graphics.Text.TrueType
 import qualified Data.Vector.Unboxed as UV
+
+compileFontCache :: IO (Async FontCache)
+compileFontCache = async $ do
+    putStrLn "Loading font cache."
+    a <- buildCache
+    putStrLn "Font cache loaded."
+    return a
 
 findFont :: Async FontCache -> FontDescriptor -> IO (Maybe FilePath)
 findFont afCache desc = do
