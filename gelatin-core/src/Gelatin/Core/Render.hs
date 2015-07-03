@@ -423,7 +423,6 @@ calculateDpi = do
                                   px  = sqrt $ (fromIntegral vw :: Double)*(fromIntegral vh)
                                   inches = sqrt $ mm2 / (25.4 * 25.4)
                               let dpi = floor $ px / inches
-                              putStrLn $ "Dpi: " ++ show dpi
                               return dpi
 --------------------------------------------------------------------------------
 -- Buffering, Vertex Array Objects, Uniforms, etc.
