@@ -8,6 +8,7 @@ module Gelatin.Core.Render (
     newWindow,
     loadGeomRenderSource,
     loadBezRenderSource,
+    loadMaskRenderSource,
     loadRenderSource,
     loadTexture,
     unloadTexture,
@@ -17,9 +18,13 @@ module Gelatin.Core.Render (
     colorBezRenderer,
     colorFontRenderer,
     textureRenderer,
-    stencilXOR,
+    textureUnitRenderer,
+    maskRenderer,
     transformRenderer,
+    stencilMask,
+    alphaMask,
     toTexture,
+    toTextureUnit,
     calculateDpi
 ) where
 
@@ -91,8 +96,8 @@ filledTriangleRenderer win grs ts fill = do
     mfr <- getFillResult fill vs
     case mfr of
         Just (FillResultColor cs) -> colorRenderer win grs GL_TRIANGLES vs cs
-        Just (FillResultTexture t uvs) -> textureRenderer win grs t GL_TRIANGLES
-                                                                    vs uvs
+        Just (FillResultTexture _ uvs) -> textureRenderer win grs GL_TRIANGLES
+                                                                  vs uvs
         _ -> do putStrLn "Could not create a filledTriangleRenderer."
                 return $ Renderer (const $ putStrLn "Non op renderer.") (return ())
 
@@ -119,7 +124,8 @@ colorFontRenderer window grs brs fstr clrf = do
     let bcs = map ((\(Bezier _ a b c) -> Triangle a b c) . fmap clrf) bs
     bezr <- colorBezRenderer window brs bs bcs
 
-    return $ stencilXOR $ clrr <> bezr
+    let r = clrr <> bezr
+    return $ stencilMask r r
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
@@ -145,29 +151,34 @@ colorRenderer window grs mode vs gs = do
                 withUniform "hasUV" srcs $ \p huv -> do
                     glUseProgram p
                     glUniform1i huv 0
-                withUniform "projection" srcs $ \p pju -> do
-                    setOrthoWindowProjection window p pju
-                withUniform "modelview" srcs $ \p mvu -> do
-                    setModelview p mvu t
+                withUniform "projection" srcs $ setOrthoWindowProjection window
+                withUniform "modelview" srcs $ setModelview t
                 drawBuffer (rsProgram src) vao mode num
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
         return $ Renderer renderFunction cleanupFunction
 
+-- | Creates and returns a renderer that renders a textured
+-- geometry.
+textureRenderer :: Window -> GeomRenderSource -> GLuint -> [V2 Float]
+                -> [V2 Float] -> IO Renderer
+textureRenderer = textureUnitRenderer Nothing
+
 -- | Creates and returns a renderer that renders the given textured
 -- geometry.
-textureRenderer :: Window -> GeomRenderSource -> GLuint -> GLuint -> [V2 Float]
-                -> [V2 Float] -> IO Renderer
-textureRenderer window grs t mode vs gs = do
+textureUnitRenderer :: (Maybe GLint) -> Window -> GeomRenderSource -> GLuint
+                    -> [V2 Float] -> [V2 Float] -> IO Renderer
+textureUnitRenderer Nothing w gs md vs uvs =
+    textureUnitRenderer (Just 0) w gs md vs uvs
+textureUnitRenderer (Just u) win grs mode vs uvs = do
     let (GRS src) = grs
-        texr = Renderer (const $ glBindTexture GL_TEXTURE_2D t)
-                        (withArray [t] $ glDeleteTextures 1)
         srcs = [src]
 
     withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
-        let ps = map realToFrac $ concatMap F.toList vs :: [GLfloat]
-            cs = map realToFrac $ concatMap F.toList $ take (length vs) gs :: [GLfloat]
+        let f xs = map realToFrac $ concatMap F.toList xs :: [GLfloat]
+            ps = f vs
+            cs = f $ take (length vs) uvs
 
         glDisableVertexAttribArray colorLoc
         glEnableVertexAttribArray uvLoc
@@ -183,17 +194,14 @@ textureRenderer window grs t mode vs gs = do
                     glUniform1i huv 1
                 withUniform "sampler" srcs $ \p smp -> do
                     glUseProgram p
-                    glUniform1i smp 0
-                withUniform "projection" srcs $ \p pju -> do
-                    setOrthoWindowProjection window p pju
-                withUniform "modelview" srcs $ \p mvu -> do
-                    setModelview p mvu tfrm
+                    glUniform1i smp u
+                withUniform "projection" srcs $ setOrthoWindowProjection win
+                withUniform "modelview" srcs $ setModelview tfrm
                 drawBuffer (rsProgram src) vao mode num
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
-            geomr = Renderer renderFunction cleanupFunction
-        return $ texr <> geomr
+        return $ Renderer renderFunction cleanupFunction
 
 -- | Creates and returns a renderer that renders the given colored beziers.
 colorBezRenderer :: Window -> BezRenderSource -> [Bezier (V2 Float)]
@@ -213,7 +221,6 @@ colorBezRenderer window (BRS src) bs ts =
 
         glDisableVertexAttribArray uvLoc
         glEnableVertexAttribArray colorLoc
-
         bufferAttrib positionLoc 2 pbuf ps
         bufferAttrib bezLoc 3 tbuf ws
         bufferAttrib colorLoc 4 cbuf cs
@@ -228,33 +235,72 @@ colorBezRenderer window (BRS src) bs ts =
                 withUniform "hasUV" srcs $ \p huv -> do
                     glUseProgram p
                     glUniform1i huv 0
-                withUniform "projection" srcs $ \p pju -> do
-                    setOrthoWindowProjection window p pju
-                withUniform "modelview" srcs $ \p mvu -> do
-                    setModelview p mvu t
+                withUniform "projection" srcs $ setOrthoWindowProjection window
+                withUniform "modelview" srcs $ setModelview t
                 drawBuffer (rsProgram src) vao GL_TRIANGLES num
         return $ Renderer renderFunction cleanupFunction
 
--- | Creates a renderer that masks all pixels that are drawn to an odd
--- number of times by the given renderer.
-stencilXOR :: Renderer -> Renderer
-stencilXOR (Renderer r c) = Renderer r' c
-    where r' t = do glClear GL_DEPTH_BUFFER_BIT
+-- | Creates and returns a renderer that masks a textured rectangular area with
+-- another texture.
+maskRenderer :: Window -> MaskRenderSource -> GLuint -> GLuint -> GLuint
+             -> [V2 Float] -> [V2 Float] -> IO Renderer
+maskRenderer win (MRS src) tex msk mode vs uvs =
+    withVAO $ \vao -> withBuffers 2 $ \[pbuf, uvbuf] -> do
+        let vs'  = map realToFrac $ concatMap F.toList vs :: [GLfloat]
+            uvs' = map realToFrac $ concatMap F.toList uvs :: [GLfloat]
+
+        glDisableVertexAttribArray colorLoc
+        glEnableVertexAttribArray positionLoc
+        glEnableVertexAttribArray uvLoc
+        bufferAttrib positionLoc 2 pbuf vs'
+        bufferAttrib uvLoc 2 uvbuf uvs'
+        glBindVertexArray 0
+
+        let cleanup = do withArray [pbuf, uvbuf] $ glDeleteBuffers 2
+                         withArray [vao] $ glDeleteVertexArrays 1
+            num = fromIntegral $ length vs
+            render t = do
+                withUniform "projection" [src] $ setOrthoWindowProjection win
+                withUniform "modelview" [src] $ setModelview t
+                withUniform "mainTex" [src] $ \p smp -> do
+                    glUseProgram p
+                    glUniform1i smp 0
+                withUniform "maskTex" [src] $ \p smp -> do
+                    glUseProgram p
+                    glUniform1i smp 1
+                drawBuffer (rsProgram src) vao mode num
+        return $ Renderer render cleanup
+
+-- | Mask one renderer using the alpha component of another.
+alphaMask :: Renderer -> Renderer -> Renderer
+alphaMask r2 r1 = undefined
+
+-- | Mask one renderer using a stencil test.
+stencilMask :: Renderer -> Renderer -> Renderer
+stencilMask r2 r1 = Renderer r' $ return ()
+    where r' t = do -- Clear the current depth buffer
+                    glClear GL_DEPTH_BUFFER_BIT
+                    -- Enable stencil testing
                     glEnable GL_STENCIL_TEST
+                    -- Disable writing frame buffer color components
                     glColorMask GL_FALSE GL_FALSE GL_FALSE GL_FALSE
+                    -- Disable writing into the depth buffer
                     glDepthMask GL_FALSE
+                    -- Enable writing to all bits of the stencil mask
                     glStencilMask 0xFF
+                    -- Clear the stencil buffer
                     glClear GL_STENCIL_BUFFER_BIT
                     glStencilFunc GL_NEVER 0 1
                     glStencilOp GL_INVERT GL_INVERT GL_INVERT
-                    r t
+                    rRender r1 t
 
                     glColorMask GL_TRUE GL_TRUE GL_TRUE GL_TRUE
                     glDepthMask GL_TRUE
                     glStencilFunc GL_EQUAL 1 1
                     glStencilOp GL_ZERO GL_ZERO GL_ZERO
-                    r t
+                    rRender r2 t
                     glDisable GL_STENCIL_TEST
+
 
 transformRenderer :: Transform -> Renderer -> Renderer
 transformRenderer t (Renderer r c) = Renderer (r . (t <>)) c
@@ -273,8 +319,8 @@ setOrthoWindowProjection window program pju = do
     glUseProgram program
     with pj $ glUniformMatrix4fv pju 1 GL_TRUE . castPtr
 
-setModelview :: GLuint -> GLint -> Transform -> IO ()
-setModelview program uniform (Transform (V2 x y) (V2 w h) r) = do
+setModelview :: Transform -> GLuint -> GLint -> IO ()
+setModelview (Transform (V2 x y) (V2 w h) r) program uniform = do
     let mv = mat4Translate txy !*! rot !*! mat4Scale sxy :: M44 GLfloat
         sxy = V3 w h 1
         txy = V3 x y 0
@@ -296,8 +342,8 @@ orthoWindowProjection window = do
 loadGeomRenderSource :: IO GeomRenderSource
 loadGeomRenderSource = do
     let def = RenderDefBS [(vertSourceGeom, GL_VERTEX_SHADER)
-                          ,(fragSourceGeom, GL_FRAGMENT_SHADER)]
-                          ["projection", "modelview", "sampler", "hasUV"]
+                          ,(fragSourceGeom, GL_FRAGMENT_SHADER)
+                          ] ["projection", "modelview", "sampler", "hasUV"]
     GRS <$> loadRenderSource def
 
 -- | Loads a new shader progarm and attributes for rendering beziers.
@@ -305,9 +351,16 @@ loadBezRenderSource :: IO BezRenderSource
 loadBezRenderSource = do
     let def = RenderDefBS [(vertSourceBezier, GL_VERTEX_SHADER)
                           ,(fragSourceBezier, GL_FRAGMENT_SHADER)
-                          ]
-                          ["projection", "modelview", "sampler", "hasUV"]
+                          ] ["projection", "modelview", "sampler", "hasUV"]
     BRS <$> loadRenderSource def
+
+-- | Loads a new shader program and attributes for masking textures.
+loadMaskRenderSource :: IO MaskRenderSource
+loadMaskRenderSource = do
+    let def = RenderDefBS [(vertSourceMask, GL_VERTEX_SHADER)
+                          ,(fragSourceMask, GL_FRAGMENT_SHADER)
+                          ] ["projection","modelview","mainTex","maskTex"]
+    MRS <$> loadRenderSource def
 
 loadRenderSource :: RenderDef -> IO RenderSource
 loadRenderSource (RenderDefBS ss uniforms) = do
@@ -319,6 +372,7 @@ loadRenderSource (RenderDefBS ss uniforms) = do
         return $ if loc == (-1)
                  then Nothing
                  else Just (attr, loc)
+    print locs
     return $ RenderSource program $ catMaybes locs
 loadRenderSource (RenderDefFP fps uniforms) = do
     cwd <- getCurrentDirectory
@@ -335,11 +389,16 @@ loadImageAsTexture fp = do
         Right i  -> loadTexture i >>= return . Just
 
 loadTexture :: DynamicImage -> IO GLuint
-loadTexture img = do
+loadTexture = loadTextureUnit Nothing
+
+loadTextureUnit :: Maybe GLuint -> DynamicImage -> IO GLuint
+loadTextureUnit Nothing img = loadTextureUnit (Just GL_TEXTURE0) img
+loadTextureUnit (Just u) img = do
     putStrLn "Loading texture"
     [t] <- allocaArray 1 $ \ptr -> do
         glGenTextures 1 ptr
         peekArray 1 ptr
+    glActiveTexture u
     glBindTexture GL_TEXTURE_2D t
     loadJuicy img
     glGenerateMipmap GL_TEXTURE_2D  -- Generate mipmaps now!!!
@@ -368,8 +427,12 @@ loadJuicy (ImageCMYK8 i) = loadJuicy $ ImageRGB8 $ convertImage i
 loadJuicy (ImageCMYK16 i) = loadJuicy $ ImageRGB16 $ convertImage i
 
 
-toTexture :: (Int, Int) -> IO () -> IO GLuint
-toTexture (w, h) r = do
+toTexture :: Window -> IO () -> IO GLuint
+toTexture = toTextureUnit Nothing
+
+toTextureUnit :: Maybe GLuint -> Window -> IO () -> IO GLuint
+toTextureUnit Nothing win r = toTextureUnit (Just GL_TEXTURE0) win r
+toTextureUnit (Just u) win r = do
     [fb] <- allocaArray 1 $ \ptr -> do
         glGenFramebuffers 1 ptr
         peekArray 1 ptr
@@ -378,7 +441,9 @@ toTexture (w, h) r = do
     [t] <- allocaArray 1 $ \ptr -> do
         glGenTextures 1 ptr
         peekArray 1 ptr
+    glActiveTexture u
     glBindTexture GL_TEXTURE_2D t
+    (w,h) <- getWindowSize win
     let [w',h'] = map fromIntegral [w,h]
     glTexImage2D GL_TEXTURE_2D
                  0
@@ -400,7 +465,11 @@ toTexture (w, h) r = do
     then putStrLn "incomplete framebuffer!"
     else do glClearColor 0 0 0 0
             glClear GL_COLOR_BUFFER_BIT
-            glViewport 0 0 w' h'
+            --ww <- (fromIntegral . fst) <$> getWindowSize win
+            --fbw <- (fromIntegral . fst) <$> getFramebufferSize win
+            --let s = floor (fbw/ww :: Double)
+            --print s
+            glViewport 0 0 w' h' --fbw' fbh'
             r
             glBindFramebuffer GL_FRAMEBUFFER 0
             with fb $ glDeleteFramebuffers 1

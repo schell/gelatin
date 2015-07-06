@@ -10,7 +10,9 @@ module Gelatin.Core.Shader (
     vertSourceGeom,
     fragSourceGeom,
     vertSourceBezier,
-    fragSourceBezier
+    fragSourceBezier,
+    vertSourceMask,
+    fragSourceMask
 ) where
 
 import Prelude hiding (init)
@@ -38,7 +40,6 @@ uvLoc = 2
 
 bezLoc :: GLuint
 bezLoc = 3
-
 
 compileShader :: ByteString -> GLuint -> IO GLuint
 compileShader src sh = do
@@ -96,13 +97,19 @@ compileProgram shaders = do
 
 
 vertSourceGeom :: ByteString
-vertSourceGeom = $(embedFile "shaders/vert.glsl")
+vertSourceGeom = $(embedFile "shaders/2d.vert")
 
 fragSourceGeom :: ByteString
-fragSourceGeom = $(embedFile "shaders/frag.glsl")
+fragSourceGeom = $(embedFile "shaders/2d.frag")
 
 vertSourceBezier :: ByteString
 vertSourceBezier = $(embedFile "shaders/bezier.vert")
 
 fragSourceBezier :: ByteString
 fragSourceBezier = $(embedFile "shaders/bezier.frag")
+
+vertSourceMask :: ByteString
+vertSourceMask = $(embedFile "shaders/mask.vert")
+
+fragSourceMask :: ByteString
+fragSourceMask = $(embedFile "shaders/mask.frag")

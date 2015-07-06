@@ -5,10 +5,13 @@ import Gelatin.Core.Render
 import Graphics.UI.GLFW
 import Examples.PolylineTest
 import Examples.PolylineWinding
+import Examples.Masking
 
 examples :: [(String, Window -> GeomRenderSource -> BezRenderSource -> IO ())]
 examples = [("polylineTest", polylineTest)
-           ,("polylineWinding", polylineWinding)]
+           ,("polylineWinding", polylineWinding)
+           ,("masking", masking)
+           ]
 
 main :: IO ()
 main = do

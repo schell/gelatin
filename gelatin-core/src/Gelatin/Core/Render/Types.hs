@@ -6,6 +6,7 @@ module Gelatin.Core.Render.Types (
     RenderSource(..),
     GeomRenderSource(..),
     BezRenderSource(..),
+    MaskRenderSource(..),
     Transform(..),
     UniformUpdates(..),
     Point(..),
@@ -115,6 +116,7 @@ type CleanupFunction = IO ()
 
 data GeomRenderSource = GRS RenderSource
 data BezRenderSource = BRS RenderSource
+data MaskRenderSource = MRS RenderSource
 type RenderSources = Map RenderDef RenderSource
 
 data RenderSource = RenderSource { rsProgram    :: ShaderProgram
