@@ -11,6 +11,7 @@ module Gelatin.Core.Render (
     loadMaskRenderSource,
     loadRenderSource,
     loadTexture,
+    loadTextureUnit,
     unloadTexture,
     loadImageAsTexture,
     filledTriangleRenderer,
@@ -242,9 +243,9 @@ colorBezRenderer window (BRS src) bs ts =
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.
-maskRenderer :: Window -> MaskRenderSource -> GLuint -> GLuint -> GLuint
-             -> [V2 Float] -> [V2 Float] -> IO Renderer
-maskRenderer win (MRS src) tex msk mode vs uvs =
+maskRenderer :: Window -> MaskRenderSource -> GLuint -> [V2 Float]
+             -> [V2 Float] -> IO Renderer
+maskRenderer win (MRS src) mode vs uvs =
     withVAO $ \vao -> withBuffers 2 $ \[pbuf, uvbuf] -> do
         let vs'  = map realToFrac $ concatMap F.toList vs :: [GLfloat]
             uvs' = map realToFrac $ concatMap F.toList uvs :: [GLfloat]
@@ -271,9 +272,26 @@ maskRenderer win (MRS src) tex msk mode vs uvs =
                 drawBuffer (rsProgram src) vao mode num
         return $ Renderer render cleanup
 
--- | Mask one renderer using the alpha component of another.
-alphaMask :: Renderer -> Renderer -> Renderer
-alphaMask r2 r1 = undefined
+alphaMask :: Window -> MaskRenderSource -> IO () -> IO () -> IO Renderer
+alphaMask win mrs r2 r1 = do
+    mainTex <- toTextureUnit (Just GL_TEXTURE0) win r2
+    maskTex <- toTextureUnit (Just GL_TEXTURE1) win r1
+    (w,h)   <- getWindowSize win
+    let vs = map (fmap fromIntegral) [V2 0 0, V2 w 0, V2 w h, V2 0 h]
+        uvs = [V2 0 1, V2 1 1, V2 1 0, V2 0 0]
+    r <- maskRenderer win mrs GL_TRIANGLE_FAN vs uvs
+    let r'  = Renderer f c
+        r'' = Renderer f' (return ())
+        f _ = do glActiveTexture GL_TEXTURE0
+                 glBindTexture GL_TEXTURE_2D mainTex
+                 glActiveTexture GL_TEXTURE1
+                 glBindTexture GL_TEXTURE_2D maskTex
+        c   = withArray [mainTex,maskTex] $ glDeleteTextures 2
+        f' _ = do glActiveTexture GL_TEXTURE0
+                  glBindTexture GL_TEXTURE_2D 0
+                  glActiveTexture GL_TEXTURE1
+                  glBindTexture GL_TEXTURE_2D 0
+    return $ r' <> r <> r''
 
 -- | Mask one renderer using a stencil test.
 stencilMask :: Renderer -> Renderer -> Renderer
@@ -394,7 +412,6 @@ loadTexture = loadTextureUnit Nothing
 loadTextureUnit :: Maybe GLuint -> DynamicImage -> IO GLuint
 loadTextureUnit Nothing img = loadTextureUnit (Just GL_TEXTURE0) img
 loadTextureUnit (Just u) img = do
-    putStrLn "Loading texture"
     [t] <- allocaArray 1 $ \ptr -> do
         glGenTextures 1 ptr
         peekArray 1 ptr
@@ -404,8 +421,9 @@ loadTextureUnit (Just u) img = do
     glGenerateMipmap GL_TEXTURE_2D  -- Generate mipmaps now!!!
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S GL_REPEAT
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T GL_REPEAT
-    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_LINEAR
-    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_LINEAR_MIPMAP_LINEAR
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST_MIPMAP_LINEAR
+    glBindTexture GL_TEXTURE_2D 0
     return t
 
 unloadTexture :: GLuint -> IO ()
