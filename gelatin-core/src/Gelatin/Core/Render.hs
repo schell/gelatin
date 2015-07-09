@@ -55,6 +55,7 @@ import System.IO
 import System.Exit
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Foldable as F
+import GHC.Stack
 
 -- | Initializes the system.
 initGelatin :: IO Bool
@@ -120,13 +121,14 @@ colorFontRenderer window grs brs fstr clrf = do
     let (bs,ts) = fontGeom dpi fstr
         vs = concatMap (\(Triangle a b c) -> [a,b,c]) ts
         cs = map clrf vs
-    clrr <- colorRenderer window grs GL_TRIANGLES vs cs
+    Renderer fg cg <- colorRenderer window grs GL_TRIANGLES vs cs
 
     let bcs = map ((\(Bezier _ a b c) -> Triangle a b c) . fmap clrf) bs
-    bezr <- colorBezRenderer window brs bs bcs
+    Renderer fb cb <- colorBezRenderer window brs bs bcs
 
-    let r = clrr <> bezr
-    return $ stencilMask r r
+    let fgb t = fg t >> fb t
+        r t   = stencilMask (fgb t) (fgb t)
+    return $ Renderer r (cg >> cb)
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
@@ -279,45 +281,42 @@ alphaMask win mrs r2 r1 = do
     (w,h)   <- getWindowSize win
     let vs = map (fmap fromIntegral) [V2 0 0, V2 w 0, V2 w h, V2 0 h]
         uvs = [V2 0 1, V2 1 1, V2 1 0, V2 0 0]
-    r <- maskRenderer win mrs GL_TRIANGLE_FAN vs uvs
-    let r'  = Renderer f c
-        r'' = Renderer f' (return ())
-        f _ = do glActiveTexture GL_TEXTURE0
-                 glBindTexture GL_TEXTURE_2D mainTex
-                 glActiveTexture GL_TEXTURE1
-                 glBindTexture GL_TEXTURE_2D maskTex
-        c   = withArray [mainTex,maskTex] $ glDeleteTextures 2
-        f' _ = do glActiveTexture GL_TEXTURE0
-                  glBindTexture GL_TEXTURE_2D 0
+    Renderer f c <- maskRenderer win mrs GL_TRIANGLE_FAN vs uvs
+    let f' _ = do glActiveTexture GL_TEXTURE0
+                  glBindTexture GL_TEXTURE_2D mainTex
                   glActiveTexture GL_TEXTURE1
-                  glBindTexture GL_TEXTURE_2D 0
-    return $ r' <> r <> r''
+                  glBindTexture GL_TEXTURE_2D maskTex
+        c'    = withArray [mainTex,maskTex] $ glDeleteTextures 2
+        f'' _ = do glActiveTexture GL_TEXTURE0
+                   glBindTexture GL_TEXTURE_2D 0
+                   glActiveTexture GL_TEXTURE1
+                   glBindTexture GL_TEXTURE_2D 0
+    return $ Renderer (\t -> f' t >> f t >> f'' t) (c >> c')
 
 -- | Mask one renderer using a stencil test.
-stencilMask :: Renderer -> Renderer -> Renderer
-stencilMask r2 r1 = Renderer r' $ return ()
-    where r' t = do -- Clear the current depth buffer
-                    glClear GL_DEPTH_BUFFER_BIT
-                    -- Enable stencil testing
-                    glEnable GL_STENCIL_TEST
-                    -- Disable writing frame buffer color components
-                    glColorMask GL_FALSE GL_FALSE GL_FALSE GL_FALSE
-                    -- Disable writing into the depth buffer
-                    glDepthMask GL_FALSE
-                    -- Enable writing to all bits of the stencil mask
-                    glStencilMask 0xFF
-                    -- Clear the stencil buffer
-                    glClear GL_STENCIL_BUFFER_BIT
-                    glStencilFunc GL_NEVER 0 1
-                    glStencilOp GL_INVERT GL_INVERT GL_INVERT
-                    rRender r1 t
+stencilMask :: IO () -> IO () -> IO ()
+stencilMask r2 r1  = do
+    glClear GL_DEPTH_BUFFER_BIT
+    -- Enable stencil testing
+    glEnable GL_STENCIL_TEST
+    -- Disable writing frame buffer color components
+    glColorMask GL_FALSE GL_FALSE GL_FALSE GL_FALSE
+    -- Disable writing into the depth buffer
+    glDepthMask GL_FALSE
+    -- Enable writing to all bits of the stencil mask
+    glStencilMask 0xFF
+    -- Clear the stencil buffer
+    glClear GL_STENCIL_BUFFER_BIT
+    glStencilFunc GL_NEVER 0 1
+    glStencilOp GL_INVERT GL_INVERT GL_INVERT
+    r1
 
-                    glColorMask GL_TRUE GL_TRUE GL_TRUE GL_TRUE
-                    glDepthMask GL_TRUE
-                    glStencilFunc GL_EQUAL 1 1
-                    glStencilOp GL_ZERO GL_ZERO GL_ZERO
-                    rRender r2 t
-                    glDisable GL_STENCIL_TEST
+    glColorMask GL_TRUE GL_TRUE GL_TRUE GL_TRUE
+    glDepthMask GL_TRUE
+    glStencilFunc GL_EQUAL 1 1
+    glStencilOp GL_ZERO GL_ZERO GL_ZERO
+    r2
+    glDisable GL_STENCIL_TEST
 
 
 transformRenderer :: Transform -> Renderer -> Renderer
@@ -422,7 +421,7 @@ loadTextureUnit (Just u) img = do
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S GL_REPEAT
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T GL_REPEAT
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
-    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST_MIPMAP_LINEAR
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST_MIPMAP_NEAREST
     glBindTexture GL_TEXTURE_2D 0
     return t
 
@@ -484,13 +483,15 @@ toTextureUnit (Just u) win r = do
     else do glClearColor 0 0 0 0
             glClear GL_COLOR_BUFFER_BIT
             --ww <- (fromIntegral . fst) <$> getWindowSize win
-            --fbw <- (fromIntegral . fst) <$> getFramebufferSize win
+
             --let s = floor (fbw/ww :: Double)
             --print s
             glViewport 0 0 w' h' --fbw' fbh'
             r
             glBindFramebuffer GL_FRAMEBUFFER 0
             with fb $ glDeleteFramebuffers 1
+            (fbw, fbh) <- getFramebufferSize win
+            glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
     return t
 
 calculateDpi :: IO Dpi
@@ -564,14 +565,20 @@ drawBuffer :: GLuint
            -> IO ()
 drawBuffer program vao mode num = do
     glUseProgram program
-
     glBindVertexArray vao
     err <- glGetError
-    when (err /= 0) $ putStrLn $ "glBindVertex Error: " ++ show err
+    when (err /= 0) $ do
+        putStrLn $ "glBindVertex Error: " ++ show err
+        cs <- currentCallStack
+        mapM_ (putStrLn . ("    " ++)) cs
+        exitFailure
     glDrawArrays mode 0 num
     err' <- glGetError
-    when (err /= 0) $ putStrLn $ "glDrawArrays Error: " ++ show err'
-
+    when (err' /= 0) $ do
+        putStrLn $ "glDrawArrays Error: " ++ show err'
+        cs <- currentCallStack
+        mapM_ (putStrLn . ("    " ++)) cs
+        exitFailure
 
 glFloatSize :: Int
 glFloatSize = sizeOf (undefined :: GLfloat)

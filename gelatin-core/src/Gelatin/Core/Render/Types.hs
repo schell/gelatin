@@ -107,9 +107,7 @@ instance Monoid Renderer where
     (Renderer ar ac) `mappend` (Renderer br bc) =
         Renderer (\t -> ar t >> br t) (ac >> bc)
 
-data Renderer = Renderer { rRender  :: RenderFunction
-                         , rCleanup :: CleanupFunction
-                         }
+data Renderer = Renderer RenderFunction CleanupFunction
 type RenderFunction = Transform -> IO ()
 
 type CleanupFunction = IO ()

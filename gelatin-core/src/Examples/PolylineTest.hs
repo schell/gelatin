@@ -73,7 +73,7 @@ polylineTest win grs _ = do
                   glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
                   poly <- do ((x,y), b) <- readIORef ref
-                             oldR <- readIORef rRef
+                             Renderer oldf oldc <- readIORef rRef
                              if b
                              then do
                                modifyIORef pnts (++ map (fmap double2Float) [V2 x y])
@@ -97,16 +97,17 @@ polylineTest win grs _ = do
                                --o   <- ftr ol $ solid $ alpha green 0.5
                                --n   <- ftr ns' $ solid white
                                --x   <- ftr xs' $ solid yellow
-                               rCleanup oldR
+                               oldc
                                let r = r' {-<> r'' <> n <> x <> o-}
                                modifyIORef rRef $ const r
                                return r
-                             else return oldR
+                             else return $ Renderer oldf oldc
 
-                  mapM_ (uncurry rRender) [ (box, translate 25 25 mempty)
-                                          , (tris, mempty)
-                                          , (poly, mempty)
-                                          , (lns', translate 100 100 mempty)]
+                  let f (Renderer r c) = r
+                  mapM_ (uncurry f) [ (box, translate 25 25 mempty)
+                                    , (tris, mempty)
+                                    , (poly, mempty)
+                                    , (lns', translate 100 100 mempty)]
 
                   pollEvents
                   swapBuffers win

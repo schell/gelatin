@@ -37,8 +37,8 @@ polylineWinding win grs brs = do
                   glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
                   poly <- do (x,y) <- readIORef ref
-                             oldR  <- readIORef rRef
-                             rCleanup oldR
+                             Renderer oldf oldc <- readIORef rRef
+                             oldc
                              let a = V2 100 100
                                  b = V2 200 200
                                  c = fmap double2Float $ V2 x y
@@ -59,8 +59,7 @@ polylineWinding win grs brs = do
                                  colorFontRenderer win grs brs fstr $ const white
                              return $ mconcat $ r:r':txs
 
-                  mapM_ (uncurry rRender) [ (poly, mempty)
-                                          ]
+                  mapM_ (\(Renderer f _, t) -> f t) [ (poly, mempty) ]
 
                   pollEvents
                   swapBuffers win
