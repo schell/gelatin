@@ -1,6 +1,6 @@
 module Gelatin.Core.Triangulation.EarClipping where
 
-import Gelatin.Core.Render.Types
+import Gelatin.Core.Rendering.Types
 import Gelatin.Core.Triangulation.Common
 import Linear
 

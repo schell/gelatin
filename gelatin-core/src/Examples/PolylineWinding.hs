@@ -4,7 +4,7 @@ module Examples.PolylineWinding where
 import GHC.Float
 import Linear
 import System.Exit
-import Gelatin.Core.Render
+import Gelatin.Core.Rendering
 import Gelatin.Core.Color
 import Gelatin.Core.Triangulation.Common
 import Graphics.UI.GLFW

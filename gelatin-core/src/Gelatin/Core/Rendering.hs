@@ -30,10 +30,10 @@ module Gelatin.Core.Rendering (
 ) where
 
 import Gelatin.Core.Shader
-import Gelatin.Core.Render.Types as R
-import Gelatin.Core.Render.Polylines as R
-import Gelatin.Core.Render.Geometrical as R
-import Gelatin.Core.Render.Font as R
+import Gelatin.Core.Rendering.Types as R
+import Gelatin.Core.Rendering.Polylines as R
+import Gelatin.Core.Rendering.Geometrical as R
+import Gelatin.Core.Rendering.Font as R
 import Linear
 import Graphics.Text.TrueType
 import Graphics.GL.Core33

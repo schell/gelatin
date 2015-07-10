@@ -3,7 +3,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-module Gelatin.Core.Render.Font (
+module Gelatin.Core.Rendering.Font (
     compileFontCache,
     fontGeom,
     findFont,
@@ -12,8 +12,8 @@ module Gelatin.Core.Render.Font (
     withFont
 ) where
 
-import Gelatin.Core.Render.Types
-import Gelatin.Core.Render.Geometrical
+import Gelatin.Core.Rendering.Types
+import Gelatin.Core.Rendering.Geometrical
 import Prelude hiding (init)
 import Control.Concurrent.Async
 import Linear

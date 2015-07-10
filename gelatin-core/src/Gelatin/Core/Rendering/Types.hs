@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module Gelatin.Core.Render.Types (
+module Gelatin.Core.Rendering.Types (
     Resources(..),
     Rendering(..),
     RenderDef(..),

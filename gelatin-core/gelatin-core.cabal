@@ -50,11 +50,11 @@ cabal-version:       >=1.10
 library
   ghc-options: -Wall
   -- Modules exported by the library.
-  exposed-modules:     Gelatin.Core.Render,
-                       Gelatin.Core.Render.Font,
-                       Gelatin.Core.Render.Types,
-                       Gelatin.Core.Render.Geometrical,
-                       Gelatin.Core.Render.Polylines,
+  exposed-modules:     Gelatin.Core.Rendering,
+                       Gelatin.Core.Rendering.Font,
+                       Gelatin.Core.Rendering.Types,
+                       Gelatin.Core.Rendering.Geometrical,
+                       Gelatin.Core.Rendering.Polylines,
                        Gelatin.Core.Shader,
                        Gelatin.Core.Color,
                        Gelatin.Core.Triangulation.Common,

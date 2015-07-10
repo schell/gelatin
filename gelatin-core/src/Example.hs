@@ -1,7 +1,7 @@
 module Main where
 
 import System.Environment
-import Gelatin.Core.Render
+import Gelatin.Core.Rendering
 import Graphics.UI.GLFW
 import Examples.PolylineTest
 import Examples.PolylineWinding

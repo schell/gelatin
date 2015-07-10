@@ -2,7 +2,7 @@ module Gelatin.Core.Color where
 
 import Linear
 import Data.Bits
-import Gelatin.Core.Render.Types (Fill(..))
+import Gelatin.Core.Rendering.Types (Fill(..))
 
 solid :: V4 Float -> Fill
 solid = FillColor . const

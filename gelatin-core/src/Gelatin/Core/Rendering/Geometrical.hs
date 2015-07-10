@@ -1,4 +1,4 @@
-module Gelatin.Core.Render.Geometrical (
+module Gelatin.Core.Rendering.Geometrical (
     toLines,
     toArrows,
     toBeziers,
@@ -16,7 +16,7 @@ module Gelatin.Core.Render.Geometrical (
 ) where
 
 import Gelatin.Core.Triangulation.Common
-import Gelatin.Core.Render.Types
+import Gelatin.Core.Rendering.Types
 import Linear hiding (rotate)
 
 toLines :: [a] -> [Line a]

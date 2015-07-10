@@ -3,7 +3,7 @@ module Examples.PolylineTest where
 import GHC.Float
 import Linear
 import System.Exit
-import Gelatin.Core.Render
+import Gelatin.Core.Rendering
 import Gelatin.Core.Color
 import Graphics.UI.GLFW
 import Graphics.GL.Core33

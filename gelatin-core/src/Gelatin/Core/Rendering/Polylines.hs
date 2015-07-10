@@ -1,6 +1,6 @@
-module Gelatin.Core.Render.Polylines where
+module Gelatin.Core.Rendering.Polylines where
 
-import Gelatin.Core.Render.Types
+import Gelatin.Core.Rendering.Types
 import Gelatin.Core.Triangulation.Common (triangleArea)
 import Linear hiding (trace)
 import Debug.Trace
