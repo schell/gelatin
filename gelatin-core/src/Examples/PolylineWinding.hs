@@ -24,7 +24,7 @@ polylineWinding win grs brs = do
                               return
 
     ref  <- newIORef (0,0)
-    rRef <- newIORef (mempty :: Renderer)
+    rRef <- newIORef (mempty :: Rendering)
 
     setCursorPosCallback win $ Just $ \_ x y ->
         modifyIORef ref $ const (x,y)
@@ -37,7 +37,7 @@ polylineWinding win grs brs = do
                   glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
                   poly <- do (x,y) <- readIORef ref
-                             Renderer oldf oldc <- readIORef rRef
+                             Rendering oldf oldc <- readIORef rRef
                              oldc
                              let a = V2 100 100
                                  b = V2 200 200
@@ -47,7 +47,7 @@ polylineWinding win grs brs = do
                                  ps = [a, b, c]
                                  ln = polyline EndCapButt LineJoinMiter 5 ps
                                  ln' = polyline EndCapButt LineJoinBevel 5 $ map (+ V2 0 50) ps
-                                 ftr = filledTriangleRenderer win grs
+                                 ftr = filledTriangleRendering win grs
                              r  <- ftr ln $ solid white
                              r' <- ftr ln' $ solid grey
                              modifyIORef rRef $ const r
@@ -56,10 +56,10 @@ polylineWinding win grs brs = do
                                       ]
                              txs <- forM (zip ss [1..]) $ \(s, i) -> do
                                  let fstr = FontString arial 16 (0,i * 16) s
-                                 colorFontRenderer win grs brs fstr $ const white
+                                 colorFontRendering win grs brs fstr $ const white
                              return $ mconcat $ r:r':txs
 
-                  mapM_ (\(Renderer f _, t) -> f t) [ (poly, mempty) ]
+                  mapM_ (\(Rendering f _, t) -> f t) [ (poly, mempty) ]
 
                   pollEvents
                   swapBuffers win

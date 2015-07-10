@@ -17,7 +17,7 @@ polylineTest :: Window -> GeomRenderSource -> BezRenderSource -> IO ()
 polylineTest win grs _ = do
     ref  <- newIORef ((0,0), False)
     pnts <- newIORef []
-    rRef <- newIORef (mempty :: Renderer)
+    rRef <- newIORef (mempty :: Rendering)
 
     setMouseButtonCallback win $ Just $ \_ _ mbs _ ->
         if mbs == MouseButtonState'Released
@@ -28,7 +28,7 @@ polylineTest win grs _ = do
         modifyIORef ref $ \(_, b) -> ((x,y), b)
 
 
-    box   <- colorRenderer win grs GL_TRIANGLES [V2 0 0, V2 100 0, V2 100 50] $
+    box   <- colorRendering win grs GL_TRIANGLES [V2 0 0, V2 100 0, V2 100 50] $
                                                 replicate 3 red
     let spklns = [ [ V2 0 0
                    , V2 300 50
@@ -43,8 +43,8 @@ polylineTest win grs _ = do
                    ]
                  ]
     lns <- forM spklns $ \ln -> do
-        spike <- filledTriangleRenderer win grs (polyline EndCapRound LineJoinBevel 10 ln) $ FillColor $ const $ alpha red 0.5
-        inner <- filledTriangleRenderer win grs (polyline EndCapButt LineJoinMiter 0.5 ln) $ FillColor $ const white
+        spike <- filledTriangleRendering win grs (polyline EndCapRound LineJoinBevel 10 ln) $ FillColor $ const $ alpha red 0.5
+        inner <- filledTriangleRendering win grs (polyline EndCapButt LineJoinMiter 0.5 ln) $ FillColor $ const white
         return $ spike <> inner
     let lns' = foldl (<>) mempty lns
 
@@ -55,7 +55,7 @@ polylineTest win grs _ = do
         magFill = FillColor $ const $ alpha magenta 0.5
         -- A cyan fill
         cynFill  = FillColor $ const cyan
-    tris <- filledTriangleRenderer win grs [ t
+    tris <- filledTriangleRendering win grs [ t
                                            , (V2 0 50 +)  <$> t
                                            , (V2 0 100 +) <$> t
                                            , (V2 0 150 +) <$> t
@@ -73,7 +73,7 @@ polylineTest win grs _ = do
                   glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
                   poly <- do ((x,y), b) <- readIORef ref
-                             Renderer oldf oldc <- readIORef rRef
+                             Rendering oldf oldc <- readIORef rRef
                              if b
                              then do
                                modifyIORef pnts (++ map (fmap double2Float) [V2 x y])
@@ -90,7 +90,7 @@ polylineTest win grs _ = do
                                    --f (a,b) = polyline EndCapButt LineJoinMiter 1 [a,b]
                                    --ns' = concatMap f ns
                                    --xs' = concatMap f xs
-                                   ftr = filledTriangleRenderer win grs
+                                   ftr = filledTriangleRendering win grs
 
                                r'  <- ftr ln magFill
                                --r'' <- ftr ln' cynFill
@@ -101,9 +101,9 @@ polylineTest win grs _ = do
                                let r = r' {-<> r'' <> n <> x <> o-}
                                modifyIORef rRef $ const r
                                return r
-                             else return $ Renderer oldf oldc
+                             else return $ Rendering oldf oldc
 
-                  let f (Renderer r c) = r
+                  let f (Rendering r c) = r
                   mapM_ (uncurry f) [ (box, translate 25 25 mempty)
                                     , (tris, mempty)
                                     , (poly, mempty)

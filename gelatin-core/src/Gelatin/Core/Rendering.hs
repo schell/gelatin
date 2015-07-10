@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Gelatin.Core.Render (
+module Gelatin.Core.Rendering (
     module R,
     initGelatin,
     newWindow,
@@ -14,14 +14,14 @@ module Gelatin.Core.Render (
     loadTextureUnit,
     unloadTexture,
     loadImageAsTexture,
-    filledTriangleRenderer,
-    colorRenderer,
-    colorBezRenderer,
-    colorFontRenderer,
-    textureRenderer,
-    textureUnitRenderer,
-    maskRenderer,
-    transformRenderer,
+    filledTriangleRendering,
+    colorRendering,
+    colorBezRendering,
+    colorFontRendering,
+    textureRendering,
+    textureUnitRendering,
+    maskRendering,
+    transformRendering,
     stencilMask,
     alphaMask,
     toTexture,
@@ -87,21 +87,21 @@ newWindow ww wh ws mmon mwin = do
     return window
 
 --------------------------------------------------------------------------------
--- Renderers
+-- Renderings
 --------------------------------------------------------------------------------
 -- | Creates and returns a renderer that renders a given string of
 -- triangles with the given filling.
-filledTriangleRenderer :: Window -> GeomRenderSource -> [Triangle (V2 Float)]
-                       -> Fill -> IO Renderer
-filledTriangleRenderer win grs ts fill = do
+filledTriangleRendering :: Window -> GeomRenderSource -> [Triangle (V2 Float)]
+                       -> Fill -> IO Rendering
+filledTriangleRendering win grs ts fill = do
     let vs = trisToComp ts
     mfr <- getFillResult fill vs
     case mfr of
-        Just (FillResultColor cs) -> colorRenderer win grs GL_TRIANGLES vs cs
-        Just (FillResultTexture _ uvs) -> textureRenderer win grs GL_TRIANGLES
+        Just (FillResultColor cs) -> colorRendering win grs GL_TRIANGLES vs cs
+        Just (FillResultTexture _ uvs) -> textureRendering win grs GL_TRIANGLES
                                                                   vs uvs
-        _ -> do putStrLn "Could not create a filledTriangleRenderer."
-                return $ Renderer (const $ putStrLn "Non op renderer.") (return ())
+        _ -> do putStrLn "Could not create a filledTriangleRendering."
+                return $ Rendering (const $ putStrLn "Non op renderer.") (return ())
 
 getFillResult :: Fill -> [V2 Float] -> IO (Maybe FillResult)
 getFillResult (FillColor f) vs = return $ Just $ FillResultColor $ map f vs
@@ -111,30 +111,30 @@ getFillResult (FillTexture fp f) vs = do
         Nothing  -> Nothing
         Just tex -> Just $ FillResultTexture tex $ map f vs
 
--- | TODO: textureFontRenderer and then fontRenderer.
+-- | TODO: textureFontRendering and then fontRendering.
 
 -- | Creates and returns a renderer that renders a given FontString.
-colorFontRenderer :: Window -> GeomRenderSource -> BezRenderSource
-                  -> FontString -> (V2 Float -> V4 Float) -> IO Renderer
-colorFontRenderer window grs brs fstr clrf = do
+colorFontRendering :: Window -> GeomRenderSource -> BezRenderSource
+                  -> FontString -> (V2 Float -> V4 Float) -> IO Rendering
+colorFontRendering window grs brs fstr clrf = do
     dpi <- calculateDpi
     let (bs,ts) = fontGeom dpi fstr
         vs = concatMap (\(Triangle a b c) -> [a,b,c]) ts
         cs = map clrf vs
-    Renderer fg cg <- colorRenderer window grs GL_TRIANGLES vs cs
+    Rendering fg cg <- colorRendering window grs GL_TRIANGLES vs cs
 
     let bcs = map ((\(Bezier _ a b c) -> Triangle a b c) . fmap clrf) bs
-    Renderer fb cb <- colorBezRenderer window brs bs bcs
+    Rendering fb cb <- colorBezRendering window brs bs bcs
 
     let fgb t = fg t >> fb t
         r t   = stencilMask (fgb t) (fgb t)
-    return $ Renderer r (cg >> cb)
+    return $ Rendering r (cg >> cb)
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
-colorRenderer :: Window -> GeomRenderSource -> GLuint -> [V2 Float]
-              -> [V4 Float] -> IO Renderer
-colorRenderer window grs mode vs gs = do
+colorRendering :: Window -> GeomRenderSource -> GLuint -> [V2 Float]
+              -> [V4 Float] -> IO Rendering
+colorRendering window grs mode vs gs = do
     let (GRS src) = grs
         srcs = [src]
 
@@ -160,21 +160,21 @@ colorRenderer window grs mode vs gs = do
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
-        return $ Renderer renderFunction cleanupFunction
+        return $ Rendering renderFunction cleanupFunction
 
 -- | Creates and returns a renderer that renders a textured
 -- geometry.
-textureRenderer :: Window -> GeomRenderSource -> GLuint -> [V2 Float]
-                -> [V2 Float] -> IO Renderer
-textureRenderer = textureUnitRenderer Nothing
+textureRendering :: Window -> GeomRenderSource -> GLuint -> [V2 Float]
+                -> [V2 Float] -> IO Rendering
+textureRendering = textureUnitRendering Nothing
 
 -- | Creates and returns a renderer that renders the given textured
 -- geometry.
-textureUnitRenderer :: (Maybe GLint) -> Window -> GeomRenderSource -> GLuint
-                    -> [V2 Float] -> [V2 Float] -> IO Renderer
-textureUnitRenderer Nothing w gs md vs uvs =
-    textureUnitRenderer (Just 0) w gs md vs uvs
-textureUnitRenderer (Just u) win grs mode vs uvs = do
+textureUnitRendering :: (Maybe GLint) -> Window -> GeomRenderSource -> GLuint
+                    -> [V2 Float] -> [V2 Float] -> IO Rendering
+textureUnitRendering Nothing w gs md vs uvs =
+    textureUnitRendering (Just 0) w gs md vs uvs
+textureUnitRendering (Just u) win grs mode vs uvs = do
     let (GRS src) = grs
         srcs = [src]
 
@@ -204,12 +204,12 @@ textureUnitRenderer (Just u) win grs mode vs uvs = do
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
-        return $ Renderer renderFunction cleanupFunction
+        return $ Rendering renderFunction cleanupFunction
 
 -- | Creates and returns a renderer that renders the given colored beziers.
-colorBezRenderer :: Window -> BezRenderSource -> [Bezier (V2 Float)]
-                 -> [Triangle (V4 Float)] -> IO Renderer
-colorBezRenderer window (BRS src) bs ts =
+colorBezRendering :: Window -> BezRenderSource -> [Bezier (V2 Float)]
+                 -> [Triangle (V4 Float)] -> IO Rendering
+colorBezRendering window (BRS src) bs ts =
     withVAO $ \vao -> withBuffers 3 $ \[pbuf, tbuf, cbuf] -> do
         let vs = concatMap (\(Bezier _ a b c) -> [a,b,c]) bs
             cvs = concatMap (\(Triangle a b c) -> [a,b,c]) $ take (length bs) ts
@@ -241,13 +241,13 @@ colorBezRenderer window (BRS src) bs ts =
                 withUniform "projection" srcs $ setOrthoWindowProjection window
                 withUniform "modelview" srcs $ setModelview t
                 drawBuffer (rsProgram src) vao GL_TRIANGLES num
-        return $ Renderer renderFunction cleanupFunction
+        return $ Rendering renderFunction cleanupFunction
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.
-maskRenderer :: Window -> MaskRenderSource -> GLuint -> [V2 Float]
-             -> [V2 Float] -> IO Renderer
-maskRenderer win (MRS src) mode vs uvs =
+maskRendering :: Window -> MaskRenderSource -> GLuint -> [V2 Float]
+             -> [V2 Float] -> IO Rendering
+maskRendering win (MRS src) mode vs uvs =
     withVAO $ \vao -> withBuffers 2 $ \[pbuf, uvbuf] -> do
         let vs'  = map realToFrac $ concatMap F.toList vs :: [GLfloat]
             uvs' = map realToFrac $ concatMap F.toList uvs :: [GLfloat]
@@ -272,16 +272,16 @@ maskRenderer win (MRS src) mode vs uvs =
                     glUseProgram p
                     glUniform1i smp 1
                 drawBuffer (rsProgram src) vao mode num
-        return $ Renderer render cleanup
+        return $ Rendering render cleanup
 
-alphaMask :: Window -> MaskRenderSource -> IO () -> IO () -> IO Renderer
+alphaMask :: Window -> MaskRenderSource -> IO () -> IO () -> IO Rendering
 alphaMask win mrs r2 r1 = do
     mainTex <- toTextureUnit (Just GL_TEXTURE0) win r2
     maskTex <- toTextureUnit (Just GL_TEXTURE1) win r1
     (w,h)   <- getWindowSize win
     let vs = map (fmap fromIntegral) [V2 0 0, V2 w 0, V2 w h, V2 0 h]
         uvs = [V2 0 1, V2 1 1, V2 1 0, V2 0 0]
-    Renderer f c <- maskRenderer win mrs GL_TRIANGLE_FAN vs uvs
+    Rendering f c <- maskRendering win mrs GL_TRIANGLE_FAN vs uvs
     let f' _ = do glActiveTexture GL_TEXTURE0
                   glBindTexture GL_TEXTURE_2D mainTex
                   glActiveTexture GL_TEXTURE1
@@ -291,7 +291,7 @@ alphaMask win mrs r2 r1 = do
                    glBindTexture GL_TEXTURE_2D 0
                    glActiveTexture GL_TEXTURE1
                    glBindTexture GL_TEXTURE_2D 0
-    return $ Renderer (\t -> f' t >> f t >> f'' t) (c >> c')
+    return $ Rendering (\t -> f' t >> f t >> f'' t) (c >> c')
 
 -- | Mask one renderer using a stencil test.
 stencilMask :: IO () -> IO () -> IO ()
@@ -319,8 +319,8 @@ stencilMask r2 r1  = do
     glDisable GL_STENCIL_TEST
 
 
-transformRenderer :: Transform -> Renderer -> Renderer
-transformRenderer t (Renderer r c) = Renderer (r . (t <>)) c
+transformRendering :: Transform -> Rendering -> Rendering
+transformRendering t (Rendering r c) = Rendering (r . (t <>)) c
 --------------------------------------------------------------------------------
 -- Updating uniforms
 --------------------------------------------------------------------------------

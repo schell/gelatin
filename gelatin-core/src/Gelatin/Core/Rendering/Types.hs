@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 module Gelatin.Core.Render.Types (
     Resources(..),
-    Renderer(..),
+    Rendering(..),
     RenderDef(..),
     RenderSource(..),
     GeomRenderSource(..),
@@ -91,7 +91,7 @@ data Point a = Point a
 -- Application Resources
 --------------------------------------------------------------------------------
 data Resources = Resources { rsrcFonts     :: Async FontCache
-                           , rsrcRenderers :: RenderCache
+                           , rsrcRenderings :: RenderCache
                            , rsrcSources   :: RenderSources
                            , rsrcWindow    :: Window
                            , rsrcDpi       :: Dpi
@@ -100,14 +100,14 @@ data Resources = Resources { rsrcFonts     :: Async FontCache
 --------------------------------------------------------------------------------
 -- General Rendering
 --------------------------------------------------------------------------------
-type RenderCache = IntMap Renderer
+type RenderCache = IntMap Rendering
 
-instance Monoid Renderer where
-    mempty = Renderer (const $ return ()) (return ())
-    (Renderer ar ac) `mappend` (Renderer br bc) =
-        Renderer (\t -> ar t >> br t) (ac >> bc)
+instance Monoid Rendering where
+    mempty = Rendering (const $ return ()) (return ())
+    (Rendering ar ac) `mappend` (Rendering br bc) =
+        Rendering (\t -> ar t >> br t) (ac >> bc)
 
-data Renderer = Renderer RenderFunction CleanupFunction
+data Rendering = Rendering RenderFunction CleanupFunction
 type RenderFunction = Transform -> IO ()
 
 type CleanupFunction = IO ()

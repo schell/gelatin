@@ -20,11 +20,11 @@ masking win grs _ = do
         cs' = replicate 4 blue
         ms = [V2 0 0, V2 200 0, V2 200 200, V2 0 200]
         mcs = [white `alpha` 0, white `alpha` 0, white, white]
-    rbox <- colorRenderer win grs GL_TRIANGLE_FAN vs cs
-    bbox <- colorRenderer win grs GL_TRIANGLE_FAN vs' cs'
-    wbox <- colorRenderer win grs GL_TRIANGLE_FAN ms mcs
-    let r1 = mapM_ (\(Renderer f _) -> f mempty) [rbox, bbox]
-        r2 = (\(Renderer f _) -> f mempty) wbox
+    rbox <- colorRendering win grs GL_TRIANGLE_FAN vs cs
+    bbox <- colorRendering win grs GL_TRIANGLE_FAN vs' cs'
+    wbox <- colorRendering win grs GL_TRIANGLE_FAN ms mcs
+    let r1 = mapM_ (\(Rendering f _) -> f mempty) [rbox, bbox]
+        r2 = (\(Rendering f _) -> f mempty) wbox
     mask <- alphaMask win mrs r1 r2
 
     let loop = do (fbw,fbh) <- getFramebufferSize win
@@ -35,7 +35,7 @@ masking win grs _ = do
                   glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
                   glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
-                  let f (Renderer r _) = r
+                  let f (Rendering r _) = r
                   mapM_ (`f` mempty) [rbox, bbox, wbox]
                   f mask $ translate 200 0 mempty
 
