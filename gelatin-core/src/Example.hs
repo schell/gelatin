@@ -6,11 +6,13 @@ import Graphics.UI.GLFW
 import Examples.PolylineTest
 import Examples.PolylineWinding
 import Examples.Masking
+import Examples.Text
 
 examples :: [(String, Window -> GeomRenderSource -> BezRenderSource -> IO ())]
 examples = [("polylineTest", polylineTest)
            ,("polylineWinding", polylineWinding)
            ,("masking", masking)
+           ,("text", text)
            ]
 
 main :: IO ()

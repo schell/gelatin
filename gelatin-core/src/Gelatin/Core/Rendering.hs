@@ -126,9 +126,9 @@ colorFontRendering window grs brs fstr clrf = do
     let bcs = map ((\(Bezier _ a b c) -> Triangle a b c) . fmap clrf) bs
     Rendering fb cb <- colorBezRendering window brs bs bcs
 
-    let fgb t = fg t >> fb t
-        r t   = stencilMask (fgb t) (fgb t)
-    return $ Rendering r (cg >> cb)
+    let s t  = stencilMask (fg t) (fg t)
+        gs t = s t >> fb t
+    return $ Rendering gs (cg >> cb)
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
