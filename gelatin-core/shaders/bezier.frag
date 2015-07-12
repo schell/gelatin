@@ -43,5 +43,5 @@ void main() {
     } else {
         color = fcolor;
     }
-    fragColor = vec4(color.rgb, a);
+    fragColor = vec4(color.rgb, color.a * a);
 }
