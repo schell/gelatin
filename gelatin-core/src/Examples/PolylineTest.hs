@@ -54,7 +54,6 @@ polylineTest win grs _ = do
         -- A magenta fill
         magFill = FillColor $ const $ alpha magenta 0.5
         -- A cyan fill
-        cynFill  = FillColor $ const cyan
     tris <- filledTriangleRendering win grs [ t
                                            , (V2 0 50 +)  <$> t
                                            , (V2 0 100 +) <$> t
@@ -103,7 +102,7 @@ polylineTest win grs _ = do
                                return r
                              else return $ Rendering oldf oldc
 
-                  let f (Rendering r c) = r
+                  let f (Rendering r _) = r
                   mapM_ (uncurry f) [ (box, translate 25 25 mempty)
                                     , (tris, mempty)
                                     , (poly, mempty)

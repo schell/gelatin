@@ -18,6 +18,7 @@ triangulate ps = triangulate' [] $ clean ps
           clean = removeHeadTail . removeColinears
 
 removeHeadTail :: Eq a => [a] -> [a]
+removeHeadTail [] = []
 removeHeadTail xs = if head xs == last xs then Prelude.init xs else xs
 
 removeColinears :: (Fractional a, Eq a) => [V2 a] -> [V2 a]

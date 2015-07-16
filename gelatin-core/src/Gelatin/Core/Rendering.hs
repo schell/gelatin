@@ -26,6 +26,7 @@ module Gelatin.Core.Rendering (
     alphaMask,
     toTexture,
     toTextureUnit,
+    clipTexture,
     calculateDpi
 ) where
 
@@ -76,7 +77,7 @@ newWindow ww wh ws mmon mwin = do
     windowHint $ WindowHint'OpenGLProfile OpenGLProfile'Core
     windowHint $ WindowHint'OpenGLForwardCompat True
     windowHint $ WindowHint'ContextVersionMajor 3
-    windowHint $ WindowHint'ContextVersionMinor 2
+    windowHint $ WindowHint'ContextVersionMinor 3
     windowHint $ WindowHint'DepthBits 16
     mwin' <- createWindow ww wh ws mmon mwin
     makeContextCurrent mwin'
@@ -397,7 +398,9 @@ loadRenderSource (RenderDefFP fps uniforms) = do
         src <- B.readFile $ cwd ++ "/" ++ fp
         return (src, shaderType)
     loadRenderSource $ RenderDefBS srcs uniforms
-
+--------------------------------------------------------------------------------
+-- Working with textures.
+--------------------------------------------------------------------------------
 loadImageAsTexture :: FilePath -> IO (Maybe GLuint)
 loadImageAsTexture fp = do
     eStrOrImg <- readImage fp
@@ -494,6 +497,59 @@ toTextureUnit (Just u) win r = do
             glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
     return t
 
+-- | Sub-samples a texture using the given coordinate box and creates a new
+-- texture. Keep in mind that OpenGL texture coordinates are flipped from
+-- 'normal' graphics coordinates (y = 0 is the bottom of the texture). That
+-- fact has bitten the author a number of times while clipping a texture
+-- created with `toTexture` and `toUnitTexture`.
+clipTexture :: GLuint -> ClippingArea -> IO GLuint
+clipTexture rtex ((V2 x1 y1), (V2 x2 y2)) = do
+    -- Create our framebuffers
+    [fbread,fbwrite] <- allocaArray 2 $ \ptr -> do
+        glGenFramebuffers 2 ptr
+        peekArray 2 ptr
+    -- Bind our read frame buffer and attach the input texture to it
+    glBindFramebuffer GL_READ_FRAMEBUFFER fbread
+    glFramebufferTexture2D GL_READ_FRAMEBUFFER GL_COLOR_ATTACHMENT0 GL_TEXTURE_2D rtex 0
+    clearErrors "clipTexture bind read framebuffer"
+    -- Generate a new texture and bind our write framebuffer to it
+    [wtex] <- allocaArray 1 $ \ptr -> do
+        glGenTextures 1 ptr
+        peekArray 1 ptr
+    glActiveTexture GL_TEXTURE0
+    glBindTexture GL_TEXTURE_2D wtex
+    let [x1',y1',x2',y2',w',h'] = map fromIntegral
+                                      [x1,y1,x2,y2,(abs $ x2 - x1)
+                                                  ,(abs $ y2 - y1)]
+    glTexImage2D GL_TEXTURE_2D
+                 0
+                 GL_RGBA
+                 w'
+                 h'
+                 0
+                 GL_RGBA
+                 GL_UNSIGNED_BYTE
+                 nullPtr
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST
+    glBindFramebuffer GL_DRAW_FRAMEBUFFER fbwrite
+    glFramebufferTexture2D GL_DRAW_FRAMEBUFFER GL_COLOR_ATTACHMENT0 GL_TEXTURE_2D wtex 0
+    clearErrors "clipTexture bind write framebuffer"
+    -- Check our frame buffer stati
+    forM_ [GL_READ_FRAMEBUFFER,GL_DRAW_FRAMEBUFFER] $ \fb -> do
+        status <- glCheckFramebufferStatus fb
+        when (status /= GL_FRAMEBUFFER_COMPLETE) $ do
+            putStrLn "incomplete framebuffer!"
+            exitFailure
+    -- Blit the read framebuffer into the write framebuffer
+    glBlitFramebuffer x1' y1' x2' y2' 0 0 w' h' GL_COLOR_BUFFER_BIT GL_NEAREST
+    clearErrors "clipTexture blit framebuffers"
+    -- Cleanup
+    glBindFramebuffer GL_FRAMEBUFFER 0
+    withArray [fbread,fbwrite] $ glDeleteFramebuffers 2
+    glBindTexture GL_TEXTURE_2D 0
+    return wtex
+
 calculateDpi :: IO Dpi
 calculateDpi = do
     mMonitor <- getPrimaryMonitor
@@ -566,19 +622,14 @@ drawBuffer :: GLuint
 drawBuffer program vao mode num = do
     glUseProgram program
     glBindVertexArray vao
-    err <- glGetError
-    when (err /= 0) $ do
-        putStrLn $ "glBindVertex Error: " ++ show err
-        cs <- currentCallStack
-        mapM_ (putStrLn . ("    " ++)) cs
-        exitFailure
+    clearErrors "glBindVertex"
     glDrawArrays mode 0 num
+    clearErrors "glDrawArrays"
+
+clearErrors :: String -> IO ()
+clearErrors str = do
     err' <- glGetError
-    when (err' /= 0) $ do
-        putStrLn $ "glDrawArrays Error: " ++ show err'
-        cs <- currentCallStack
-        mapM_ (putStrLn . ("    " ++)) cs
-        exitFailure
+    when (err' /= 0) $ errorWithStackTrace $ unwords [str, show err']
 
 glFloatSize :: Int
 glFloatSize = sizeOf (undefined :: GLfloat)

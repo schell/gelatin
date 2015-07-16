@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 module Gelatin.Core.Rendering.Types (
     Resources(..),
+    runRendering,
+    cleanRendering,
     Rendering(..),
     RenderDef(..),
     RenderSource(..),
@@ -9,6 +11,7 @@ module Gelatin.Core.Rendering.Types (
     MaskRenderSource(..),
     Transform(..),
     UniformUpdates(..),
+    ClippingArea,
     Point(..),
     Line(..),
     Bezier(..),
@@ -98,9 +101,19 @@ data Resources = Resources { rsrcFonts     :: Async FontCache
                            , rsrcUTC       :: UTCTime
                            } deriving (Typeable)
 --------------------------------------------------------------------------------
+-- Special Rendering
+--------------------------------------------------------------------------------
+type ClippingArea = (V2 Int, V2 Int)
+--------------------------------------------------------------------------------
 -- General Rendering
 --------------------------------------------------------------------------------
 type RenderCache = IntMap Rendering
+
+runRendering :: Transform -> Rendering -> IO ()
+runRendering t (Rendering f _) = f t
+
+cleanRendering :: Rendering -> IO ()
+cleanRendering (Rendering _ c) = c
 
 instance Monoid Rendering where
     mempty = Rendering (const $ return ()) (return ())

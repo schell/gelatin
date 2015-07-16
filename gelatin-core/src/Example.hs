@@ -7,12 +7,14 @@ import Examples.PolylineTest
 import Examples.PolylineWinding
 import Examples.Masking
 import Examples.Text
+import Examples.ClipTexture
 
 examples :: [(String, Window -> GeomRenderSource -> BezRenderSource -> IO ())]
 examples = [("polylineTest", polylineTest)
            ,("polylineWinding", polylineWinding)
            ,("masking", masking)
            ,("text", text)
+           ,("clipTexture", clippingTexture)
            ]
 
 main :: IO ()

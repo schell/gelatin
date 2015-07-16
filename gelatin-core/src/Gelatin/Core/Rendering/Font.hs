@@ -9,7 +9,8 @@ module Gelatin.Core.Rendering.Font (
     findFont,
     allFonts,
     withFontAsync,
-    withFont
+    withFont,
+    concaveTriangles
 ) where
 
 import Gelatin.Core.Rendering.Types
