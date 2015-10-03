@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 -- The name of the package.
-name:                gelatin-core
+name:                gelatin
 
 -- The package version.  See the Haskell package versioning policy (PVP)
 -- for standards guiding when and how versions should be incremented.
@@ -10,14 +10,14 @@ name:                gelatin-core
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.1.0.0
+version:             0.0.0.0
 
 -- A short (one-line) description of the package.
 synopsis:            An experimental real time renderer.
 
 -- A longer description of the package.
-description:         gelatin-core is a very experimental real time rendering
-                     engine.
+description:         gelatin is a very experimental real time rendering
+                     engine for 2d graphics. It is backed by opengl 3.2.
 
 -- The license under which the package is released.
 license:             MIT
@@ -30,7 +30,7 @@ author:              Schell Scivally
 
 -- An email address to which users can send suggestions, bug reports, and
 -- patches.
-maintainer:          schell.scivally@synapsegroup.com
+maintainer:          efsubenovex@gmail.com
 
 -- A copyright notice.
 -- copyright:
@@ -46,9 +46,12 @@ build-type:          Simple
 -- Constraint on the version of Cabal needed to build this package.
 cabal-version:       >=1.10
 
+source-repository head
+  type: git
+  location: https://github.com/schell/gelatin
 
 library
-  ghc-options: -Wall
+  ghc-options:         -Wall
   -- Modules exported by the library.
   exposed-modules:     Gelatin.Core.Rendering,
                        Gelatin.Core.Rendering.Font,
