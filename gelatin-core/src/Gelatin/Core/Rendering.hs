@@ -58,13 +58,15 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.Foldable as F
 import GHC.Stack
 
--- | Initializes the system.
+-- | Initializes the system. This must be called before creating a window.
+-- Returns True when initialization was successful.
 initGelatin :: IO Bool
 initGelatin = do
     setErrorCallback $ Just $ \_ -> hPutStrLn stderr
     GLFW.init
 
--- | Creates a window.
+-- | Creates a window. This can only be called after initializing with
+-- `initGelatin`.
 newWindow :: Int -- ^ Width
           -> Int -- ^ Height
           -> String -- ^ Title
@@ -104,6 +106,8 @@ filledTriangleRendering win grs ts fill = do
         _ -> do putStrLn "Could not create a filledTriangleRendering."
                 return $ Rendering (const $ putStrLn "Non op renderer.") (return ())
 
+-- | Applies a fill to a list of points to create a fill result. If the
+-- Fill is a texture then the texture's image will be loaded.
 getFillResult :: Fill -> [V2 Float] -> IO (Maybe FillResult)
 getFillResult (FillColor f) vs = return $ Just $ FillResultColor $ map f vs
 getFillResult (FillTexture fp f) vs = do
@@ -164,13 +168,13 @@ colorRendering window grs mode vs gs = do
         return $ Rendering renderFunction cleanupFunction
 
 -- | Creates and returns a renderer that renders a textured
--- geometry.
+-- geometry using the texture bound to GL_TEXTURE0.
 textureRendering :: Window -> GeomRenderSource -> GLuint -> [V2 Float]
                 -> [V2 Float] -> IO Rendering
 textureRendering = textureUnitRendering Nothing
 
 -- | Creates and returns a renderer that renders the given textured
--- geometry.
+-- geometry using the specified texture binding.
 textureUnitRendering :: (Maybe GLint) -> Window -> GeomRenderSource -> GLuint
                     -> [V2 Float] -> [V2 Float] -> IO Rendering
 textureUnitRendering Nothing w gs md vs uvs =
@@ -275,6 +279,8 @@ maskRendering win (MRS src) mode vs uvs =
                 drawBuffer (rsProgram src) vao mode num
         return $ Rendering render cleanup
 
+-- | Creates a rendering that masks an IO () drawing computation with the alpha
+-- value of another.
 alphaMask :: Window -> MaskRenderSource -> IO () -> IO () -> IO Rendering
 alphaMask win mrs r2 r1 = do
     mainTex <- toTextureUnit (Just GL_TEXTURE0) win r2
@@ -294,7 +300,8 @@ alphaMask win mrs r2 r1 = do
                    glBindTexture GL_TEXTURE_2D 0
     return $ Rendering (\t -> f' t >> f t >> f'' t) (c >> c')
 
--- | Mask one renderer using a stencil test.
+-- | Creates an IO () drawing computation that masks an IO () drawing
+-- computation with another using a stencil test.
 stencilMask :: IO () -> IO () -> IO ()
 stencilMask r2 r1  = do
     glClear GL_DEPTH_BUFFER_BIT
