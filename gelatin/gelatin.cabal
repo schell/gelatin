@@ -10,14 +10,14 @@ name:                gelatin
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.0.0.0
+version:             0.0.0.3
 
 -- A short (one-line) description of the package.
 synopsis:            An experimental real time renderer.
 
 -- A longer description of the package.
 description:         gelatin is a very experimental real time rendering
-                     engine for 2d graphics. It is backed by opengl 3.2.
+                     engine for 2d graphics. It is backed by opengl 3.3.
 
 -- The license under which the package is released.
 license:             MIT
@@ -41,7 +41,12 @@ build-type:          Simple
 
 -- Extra files to be distributed with the package, such as examples or a
 -- README.
--- extra-source-files:
+extra-source-files:    shaders/2d.frag,
+                       shaders/2d.vert,
+                       shaders/bezier.frag,
+                       shaders/bezier.vert,
+                       shaders/mask.frag,
+                       shaders/mask.vert
 
 -- Constraint on the version of Cabal needed to build this package.
 cabal-version:       >=1.10
@@ -101,7 +106,7 @@ executable example
   hs-source-dirs:      src
   main-is:             Example.hs
   build-depends:       base >=4.6 && <5.0,
-                       gelatin-core -any,
+                       gelatin -any,
                        linear >=1.18,
                        gl >=0.7,
                        GLFW-b >= 1.4.7.2,

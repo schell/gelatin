@@ -16,8 +16,10 @@ import Control.Monad
 import Data.IORef
 import Data.Bits
 
-polylineWinding :: Window -> GeomRenderSource -> BezRenderSource -> IO ()
-polylineWinding win grs brs = do
+polylineWinding :: Window -> SumShader -> IO ()
+polylineWinding win ss = do
+    let grs = _shGeometry ss
+        brs = _shBezier ss
     afc  <- compileFontCache
     fc   <- wait afc
     Just arial <- withFont fc (FontDescriptor "Arial" $ FontStyle False False)

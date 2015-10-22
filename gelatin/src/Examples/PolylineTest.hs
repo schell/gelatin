@@ -13,8 +13,9 @@ import Data.IORef
 import Data.Bits
 import Data.Monoid
 
-polylineTest :: Window -> GeomRenderSource -> BezRenderSource -> IO ()
-polylineTest win grs _ = do
+polylineTest :: Window -> SumShader -> IO ()
+polylineTest win ss = do
+    let grs = _shGeometry ss
     ref  <- newIORef ((0,0), False)
     pnts <- newIORef []
     rRef <- newIORef (mempty :: Rendering)

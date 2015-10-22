@@ -185,7 +185,9 @@ miterLine (Join v l) p = (ptan,ntan)
 join :: Float -> V2 Float -> V2 Float -> V2 Float -> Join
 join t a b c = Join v ln
     where tgnt = tangentOf a b c
+          -- The normal
           v = perp tgnt
+          -- The length of the miter
           ln = min d $ t / (v `dot` n)
           n = signorm $ perp $ b - a
           d = min (distance (c - b) zero) (distance (b - a) zero)

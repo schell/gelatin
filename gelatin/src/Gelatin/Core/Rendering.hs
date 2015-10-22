@@ -1,19 +1,22 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 module Gelatin.Core.Rendering (
     module R,
     initGelatin,
     newWindow,
-    loadGeomRenderSource,
-    loadBezRenderSource,
-    loadMaskRenderSource,
-    loadRenderSource,
+    loadShaders,
+    loadPolylineShader,
+    loadGeomShader,
+    loadBezShader,
+    loadMaskShader,
+    loadShader,
     loadTexture,
     loadTextureUnit,
     unloadTexture,
     loadImageAsTexture,
+    expandedPolylineRendering,
     filledTriangleRendering,
     colorRendering,
     colorBezRendering,
@@ -83,25 +86,82 @@ newWindow ww wh ws mmon mwin = do
     windowHint $ WindowHint'DepthBits 16
     mwin' <- createWindow ww wh ws mmon mwin
     makeContextCurrent mwin'
-    window <- case mwin' of
-                  Nothing  -> do putStrLn "could not create window"
-                                 exitFailure
-                  Just win -> return win
-    return window
+    case mwin' of
+        Nothing  -> do putStrLn "could not create window"
+                       exitFailure
+        Just win -> return win
 
 --------------------------------------------------------------------------------
 -- Renderings
 --------------------------------------------------------------------------------
+-- | Creates and returns a renderer that renders an expanded 2d polyline.
+expandedPolylineRendering :: Window -> PolylineShader -> Float
+                          -> [V2 Float] -> [V4 Float] -> IO Rendering
+expandedPolylineRendering win psh thickness verts colors
+    | thickness <= 1 = expandedPolylineRendering win psh 1.5 verts $ map (fmap (thickness * 1.5 *)) colors
+    | (v1:v2:_) <- verts
+    , (c1:_:_) <- colors = do
+    let v3:v3n:_ = reverse verts
+        c3:_:_ = reverse $ take (length verts) colors
+
+        -- if the polyline is closed return a miter with the last point
+        startCap = ([v1,v1], [c1,c1], [n,n], [m,-m])
+            where Join n m = if v1 == v3
+                             then R.join (thickness/2) v3n v1 v2
+                             else R.capJoin (thickness/2) v1 v2
+        endCap = ([v3,v3], [c3,c3], [n,n], [m,-m])
+            where Join n m = if v1 == v3
+                             then R.join (thickness/2) v3n v1 v2
+                             else R.capJoin (thickness/2) v3n v3
+
+        vcs  = zip verts colors :: [(V2 Float, V4 Float)]
+        tris = startCap : zipWith3 strip vcs (drop 1 vcs) (drop 2 vcs)
+                        ++ [endCap]
+        -- Expand the line into a triangle strip
+        strip (a, _) (b, bc) (c, _) = ([b, b], [bc, bc], [n, n], [m, -m])
+            where Join n m = R.join (thickness/2) a b c
+        vertList  = concatMap (\(a,_,_,_) -> a) tris
+        colorList = concatMap (\(_,a,_,_) -> a) tris
+        normList  = concatMap (\(_,_,a,_) -> a) tris
+        miterList = concatMap (\(_,_,_,a) -> a) tris
+        vs = map realToFrac $ concatMap F.toList vertList :: [GLfloat]
+        cs = map realToFrac $ concatMap F.toList colorList :: [GLfloat]
+        ns = map realToFrac $ concatMap F.toList normList :: [GLfloat]
+        ms = map realToFrac miterList :: [GLfloat]
+        PRS src = psh
+        srcs = [src]
+    withVAO $ \vao -> withBuffers 4 $ \[vbuf, cbuf, nbuf, mbuf] -> do
+        onlyEnableAttribs [positionLoc, colorLoc, normLoc, miterLoc]
+        bufferAttrib positionLoc 2 vbuf vs
+        bufferAttrib colorLoc 4 cbuf cs
+        bufferAttrib normLoc 2 nbuf ns
+        bufferAttrib miterLoc 1 mbuf ms
+        glBindVertexArray 0
+        let num = floor $ fromIntegral (length vs) / (2 :: Double)
+            r t = do withUniform "projection" srcs $ setOrthoWindowProjection win
+                     withUniform "modelview" srcs $ setModelview t
+                     withUniform "thickness" srcs $ \p u -> do
+                         glUseProgram p
+                         glUniform1f u thickness
+                     withUniform "opacity" srcs $ \p u -> do
+                         glUseProgram p
+                         glUniform1f u 1.0
+                     drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
+            c = do withArray [vbuf, cbuf, nbuf, mbuf] $ glDeleteBuffers 4
+                   withArray [vao] $ glDeleteVertexArrays 1
+        return $ Rendering r c
+    | otherwise = return mempty
+
 -- | Creates and returns a renderer that renders a given string of
 -- triangles with the given filling.
-filledTriangleRendering :: Window -> GeomRenderSource -> [Triangle (V2 Float)]
+filledTriangleRendering :: Window -> GeomShader -> [Triangle (V2 Float)]
                        -> Fill -> IO Rendering
-filledTriangleRendering win grs ts fill = do
+filledTriangleRendering win gsh ts fill = do
     let vs = trisToComp ts
     mfr <- getFillResult fill vs
     case mfr of
-        Just (FillResultColor cs) -> colorRendering win grs GL_TRIANGLES vs cs
-        Just (FillResultTexture _ uvs) -> textureRendering win grs GL_TRIANGLES
+        Just (FillResultColor cs) -> colorRendering win gsh GL_TRIANGLES vs cs
+        Just (FillResultTexture _ uvs) -> textureRendering win gsh GL_TRIANGLES
                                                                   vs uvs
         _ -> do putStrLn "Could not create a filledTriangleRendering."
                 return $ Rendering (const $ putStrLn "Non op renderer.") (return ())
@@ -119,14 +179,14 @@ getFillResult (FillTexture fp f) vs = do
 -- | TODO: textureFontRendering and then fontRendering.
 
 -- | Creates and returns a renderer that renders a given FontString.
-colorFontRendering :: Window -> GeomRenderSource -> BezRenderSource
+colorFontRendering :: Window -> GeomShader -> BezShader
                   -> FontString -> (V2 Float -> V4 Float) -> IO Rendering
-colorFontRendering window grs brs fstr clrf = do
+colorFontRendering window gsh brs fstr clrf = do
     dpi <- calculateDpi
     let (bs,ts) = fontGeom dpi fstr
         vs = concatMap (\(Triangle a b c) -> [a,b,c]) ts
         cs = map clrf vs
-    Rendering fg cg <- colorRendering window grs GL_TRIANGLES vs cs
+    Rendering fg cg <- colorRendering window gsh GL_TRIANGLES vs cs
 
     let bcs = map ((\(Bezier _ a b c) -> Triangle a b c) . fmap clrf) bs
     Rendering fb cb <- colorBezRendering window brs bs bcs
@@ -137,10 +197,10 @@ colorFontRendering window grs brs fstr clrf = do
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
-colorRendering :: Window -> GeomRenderSource -> GLuint -> [V2 Float]
+colorRendering :: Window -> GeomShader -> GLuint -> [V2 Float]
               -> [V4 Float] -> IO Rendering
-colorRendering window grs mode vs gs = do
-    let (GRS src) = grs
+colorRendering window gsh mode vs gs = do
+    let (GRS src) = gsh
         srcs = [src]
 
     withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
@@ -161,7 +221,7 @@ colorRendering window grs mode vs gs = do
                     glUniform1i huv 0
                 withUniform "projection" srcs $ setOrthoWindowProjection window
                 withUniform "modelview" srcs $ setModelview t
-                drawBuffer (rsProgram src) vao mode num
+                drawBuffer (shProgram src) vao mode num
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
@@ -169,18 +229,18 @@ colorRendering window grs mode vs gs = do
 
 -- | Creates and returns a renderer that renders a textured
 -- geometry using the texture bound to GL_TEXTURE0.
-textureRendering :: Window -> GeomRenderSource -> GLuint -> [V2 Float]
+textureRendering :: Window -> GeomShader -> GLuint -> [V2 Float]
                 -> [V2 Float] -> IO Rendering
 textureRendering = textureUnitRendering Nothing
 
 -- | Creates and returns a renderer that renders the given textured
 -- geometry using the specified texture binding.
-textureUnitRendering :: (Maybe GLint) -> Window -> GeomRenderSource -> GLuint
+textureUnitRendering :: Maybe GLint -> Window -> GeomShader -> GLuint
                     -> [V2 Float] -> [V2 Float] -> IO Rendering
 textureUnitRendering Nothing w gs md vs uvs =
     textureUnitRendering (Just 0) w gs md vs uvs
-textureUnitRendering (Just u) win grs mode vs uvs = do
-    let (GRS src) = grs
+textureUnitRendering (Just u) win gsh mode vs uvs = do
+    let (GRS src) = gsh
         srcs = [src]
 
     withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
@@ -205,14 +265,14 @@ textureUnitRendering (Just u) win grs mode vs uvs = do
                     glUniform1i smp u
                 withUniform "projection" srcs $ setOrthoWindowProjection win
                 withUniform "modelview" srcs $ setModelview tfrm
-                drawBuffer (rsProgram src) vao mode num
+                drawBuffer (shProgram src) vao mode num
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
         return $ Rendering renderFunction cleanupFunction
 
 -- | Creates and returns a renderer that renders the given colored beziers.
-colorBezRendering :: Window -> BezRenderSource -> [Bezier (V2 Float)]
+colorBezRendering :: Window -> BezShader -> [Bezier (V2 Float)]
                  -> [Triangle (V4 Float)] -> IO Rendering
 colorBezRendering window (BRS src) bs ts =
     withVAO $ \vao -> withBuffers 3 $ \[pbuf, tbuf, cbuf] -> do
@@ -245,12 +305,12 @@ colorBezRendering window (BRS src) bs ts =
                     glUniform1i huv 0
                 withUniform "projection" srcs $ setOrthoWindowProjection window
                 withUniform "modelview" srcs $ setModelview t
-                drawBuffer (rsProgram src) vao GL_TRIANGLES num
+                drawBuffer (shProgram src) vao GL_TRIANGLES num
         return $ Rendering renderFunction cleanupFunction
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.
-maskRendering :: Window -> MaskRenderSource -> GLuint -> [V2 Float]
+maskRendering :: Window -> MaskShader -> GLuint -> [V2 Float]
              -> [V2 Float] -> IO Rendering
 maskRendering win (MRS src) mode vs uvs =
     withVAO $ \vao -> withBuffers 2 $ \[pbuf, uvbuf] -> do
@@ -276,12 +336,12 @@ maskRendering win (MRS src) mode vs uvs =
                 withUniform "maskTex" [src] $ \p smp -> do
                     glUseProgram p
                     glUniform1i smp 1
-                drawBuffer (rsProgram src) vao mode num
+                drawBuffer (shProgram src) vao mode num
         return $ Rendering render cleanup
 
 -- | Creates a rendering that masks an IO () drawing computation with the alpha
 -- value of another.
-alphaMask :: Window -> MaskRenderSource -> IO () -> IO () -> IO Rendering
+alphaMask :: Window -> MaskShader -> IO () -> IO () -> IO Rendering
 alphaMask win mrs r2 r1 = do
     mainTex <- toTextureUnit (Just GL_TEXTURE0) win r2
     maskTex <- toTextureUnit (Just GL_TEXTURE1) win r1
@@ -332,11 +392,9 @@ transformRendering t (Rendering r c) = Rendering (r . (t <>)) c
 --------------------------------------------------------------------------------
 -- Updating uniforms
 --------------------------------------------------------------------------------
-withUniform :: String -> [RenderSource] -> (GLuint -> GLint -> IO ()) -> IO ()
+withUniform :: String -> [Shader] -> (GLuint -> GLint -> IO ()) -> IO ()
 withUniform name srcs f = mapM_ update srcs
-    where update (RenderSource p ls) = case lookup name ls of
-                                           Nothing -> return ()
-                                           Just u  -> do f p u
+    where update (Shader p ls) = forM_ (lookup name ls) (f p)
 
 setOrthoWindowProjection :: Window -> GLuint -> GLint -> IO ()
 setOrthoWindowProjection window program pju = do
@@ -362,33 +420,48 @@ orthoWindowProjection window = do
 --------------------------------------------------------------------------------
 -- Loading resources and things
 --------------------------------------------------------------------------------
+-- | Compile all shader programs and return a "sum renderer".
+loadShaders :: IO SumShader
+loadShaders = SRS <$> loadPolylineShader
+                  <*> loadGeomShader
+                  <*> loadBezShader
+                  <*> loadMaskShader
+
+-- | Compile a shader program and link attributes for rendering expanded
+-- polylines.
+loadPolylineShader :: IO PolylineShader
+loadPolylineShader = do
+    let def = ShaderDefBS[(vertSourcePoly, GL_VERTEX_SHADER)
+                         ,(fragSourcePoly, GL_FRAGMENT_SHADER)
+                         ] ["projection", "modelview", "thickness", "opacity"]
+    PRS <$> loadShader def
 
 -- | Loads a new shader program and attributes for rendering geometry.
-loadGeomRenderSource :: IO GeomRenderSource
-loadGeomRenderSource = do
-    let def = RenderDefBS [(vertSourceGeom, GL_VERTEX_SHADER)
+loadGeomShader :: IO GeomShader
+loadGeomShader = do
+    let def = ShaderDefBS [(vertSourceGeom, GL_VERTEX_SHADER)
                           ,(fragSourceGeom, GL_FRAGMENT_SHADER)
                           ] ["projection", "modelview", "sampler", "hasUV"]
-    GRS <$> loadRenderSource def
+    GRS <$> loadShader def
 
 -- | Loads a new shader progarm and attributes for rendering beziers.
-loadBezRenderSource :: IO BezRenderSource
-loadBezRenderSource = do
-    let def = RenderDefBS [(vertSourceBezier, GL_VERTEX_SHADER)
+loadBezShader :: IO BezShader
+loadBezShader = do
+    let def = ShaderDefBS [(vertSourceBezier, GL_VERTEX_SHADER)
                           ,(fragSourceBezier, GL_FRAGMENT_SHADER)
                           ] ["projection", "modelview", "sampler", "hasUV"]
-    BRS <$> loadRenderSource def
+    BRS <$> loadShader def
 
 -- | Loads a new shader program and attributes for masking textures.
-loadMaskRenderSource :: IO MaskRenderSource
-loadMaskRenderSource = do
-    let def = RenderDefBS [(vertSourceMask, GL_VERTEX_SHADER)
+loadMaskShader :: IO MaskShader
+loadMaskShader = do
+    let def = ShaderDefBS [(vertSourceMask, GL_VERTEX_SHADER)
                           ,(fragSourceMask, GL_FRAGMENT_SHADER)
                           ] ["projection","modelview","mainTex","maskTex"]
-    MRS <$> loadRenderSource def
+    MRS <$> loadShader def
 
-loadRenderSource :: RenderDef -> IO RenderSource
-loadRenderSource (RenderDefBS ss uniforms) = do
+loadShader :: ShaderDef -> IO Shader
+loadShader (ShaderDefBS ss uniforms) = do
     shaders <- mapM (uncurry compileShader) ss
     program <- compileProgram shaders
     glUseProgram program
@@ -397,14 +470,13 @@ loadRenderSource (RenderDefBS ss uniforms) = do
         return $ if loc == (-1)
                  then Nothing
                  else Just (attr, loc)
-    print locs
-    return $ RenderSource program $ catMaybes locs
-loadRenderSource (RenderDefFP fps uniforms) = do
+    return $ Shader program $ catMaybes locs
+loadShader (ShaderDefFP fps uniforms) = do
     cwd <- getCurrentDirectory
     srcs <- forM fps $ \(fp, shaderType) -> do
         src <- B.readFile $ cwd ++ "/" ++ fp
         return (src, shaderType)
-    loadRenderSource $ RenderDefBS srcs uniforms
+    loadShader $ ShaderDefBS srcs uniforms
 --------------------------------------------------------------------------------
 -- Working with textures.
 --------------------------------------------------------------------------------
@@ -413,7 +485,7 @@ loadImageAsTexture fp = do
     eStrOrImg <- readImage fp
     case eStrOrImg of
         Left err -> putStrLn err >> return Nothing
-        Right i  -> loadTexture i >>= return . Just
+        Right i  -> liftM Just (loadTexture i)
 
 loadTexture :: DynamicImage -> IO GLuint
 loadTexture = loadTextureUnit Nothing

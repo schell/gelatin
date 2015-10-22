@@ -1,16 +1,21 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Gelatin.Core.Rendering.Types (
-    Resources(..),
     runRendering,
     cleanRendering,
     Rendering(..),
-    RenderDef(..),
-    RenderSource(..),
-    GeomRenderSource(..),
-    BezRenderSource(..),
-    MaskRenderSource(..),
+    ShaderDef(..),
+    Shader(..),
+    PolylineShader(..),
+    GeomShader(..),
+    BezShader(..),
+    MaskShader(..),
+    SumShader(..),
+    shBezier,
+    shPolyline,
+    shMask,
+    shGeometry,
     Transform(..),
-    UniformUpdates(..),
     ClippingArea,
     Point(..),
     Line(..),
@@ -27,16 +32,11 @@ module Gelatin.Core.Rendering.Types (
 
 import Linear as J hiding (rotate)
 import Prelude hiding (init)
-import Graphics.UI.GLFW
 import Graphics.GL.Types
 import Graphics.Text.TrueType hiding (CompositeScaling(..))
-import Data.Time.Clock
 import Data.Typeable
 import Data.ByteString.Char8 (ByteString)
-import Control.Concurrent.Async
-import Data.IntMap (IntMap)
-import Data.Map (Map)
-
+import Control.Lens
 --------------------------------------------------------------------------------
 -- Text
 --------------------------------------------------------------------------------
@@ -54,7 +54,6 @@ data FillResult = FillResultColor [V4 Float]
 --------------------------------------------------------------------------------
 data LineJoin = LineJoinMiter
               | LineJoinBevel
-              -- | LineJoinRound
               deriving (Show, Eq)
 data EndCap = EndCapButt
             | EndCapBevel
@@ -91,24 +90,27 @@ data Triangle a = Triangle a a a deriving (Show, Eq)
 data Line a = Line a a deriving (Show, Eq)
 data Point a = Point a
 --------------------------------------------------------------------------------
--- Application Resources
---------------------------------------------------------------------------------
-data Resources = Resources { rsrcFonts     :: Async FontCache
-                           , rsrcRenderings :: RenderCache
-                           , rsrcSources   :: RenderSources
-                           , rsrcWindow    :: Window
-                           , rsrcDpi       :: Dpi
-                           , rsrcUTC       :: UTCTime
-                           } deriving (Typeable)
---------------------------------------------------------------------------------
 -- Special Rendering
 --------------------------------------------------------------------------------
 type ClippingArea = (V2 Int, V2 Int)
 --------------------------------------------------------------------------------
+-- Affine Transformation
+--------------------------------------------------------------------------------
+data Transform = Transform { tfrmTranslation :: Position
+                           , tfrmScale       :: Scale
+                           , tfrmRotation    :: Rotation
+                           } deriving (Show, Typeable)
+
+instance Monoid Transform where
+    mempty = Transform zero (V2 1 1) 0
+    (Transform t1 s1 r1) `mappend` (Transform t2 s2 r2) = Transform (t1 + t2) (s1 * s2) (r1 + r2)
+
+type Position = V2 Float
+type Scale = V2 Float
+type Rotation = Float
+--------------------------------------------------------------------------------
 -- General Rendering
 --------------------------------------------------------------------------------
-type RenderCache = IntMap Rendering
-
 runRendering :: Transform -> Rendering -> IO ()
 runRendering t (Rendering f _) = f t
 
@@ -124,46 +126,31 @@ data Rendering = Rendering RenderFunction CleanupFunction
 type RenderFunction = Transform -> IO ()
 
 type CleanupFunction = IO ()
-
-data GeomRenderSource = GRS RenderSource
-data BezRenderSource = BRS RenderSource
-data MaskRenderSource = MRS RenderSource
-type RenderSources = Map RenderDef RenderSource
-
-data RenderSource = RenderSource { rsProgram    :: ShaderProgram
-                                 , rsAttributes :: [(String, GLint)]
-                                 } deriving (Show)
-
-data RenderDef = RenderDefFP { rdShaderPaths :: [(String, GLuint)]
-                             -- ^ [("path/to/shader.vert", GL_VERTEX_SHADER)]
-                             , rdUniforms :: [String]
-                             -- ^ ["projection", "modelview", ..]
-                             }
-               | RenderDefBS { rdShaderSrcs :: [(ByteString, GLuint)]
-                             , rdUniforms :: [String]
-                             } deriving (Show, Eq, Ord)
 --------------------------------------------------------------------------------
--- Affine Transformation
---------------------------------------------------------------------------------
-instance Monoid Transform where
-    mempty = Transform zero (V2 1 1) 0
-    (Transform t1 s1 r1) `mappend` (Transform t2 s2 r2) = Transform (t1 + t2) (s1 * s2) (r1 + r2)
-
-data Transform = Transform { tfrmTranslation :: Position
-                           , tfrmScale       :: Scale
-                           , tfrmRotation    :: Rotation
-                           } deriving (Show, Typeable)
-
-type Position = V2 Float
-type Scale = V2 Float
-type Rotation = Float
---------------------------------------------------------------------------------
--- OpenGL
+-- Shaders
 --------------------------------------------------------------------------------
 type ShaderProgram = GLuint
 
-data UniformUpdates = UniformUpdates { uuProjection :: Maybe GLint
-                                     , uuModelview  :: Maybe GLint
-                                     , uuSampler    :: (GLint, GLint)
-                                     , uuHasUV      :: (GLint, GLint)
-                                     }
+data Shader = Shader { shProgram :: ShaderProgram
+                     , shAttributes :: [(String, GLint)]
+                     } deriving (Show)
+
+data ShaderDef = ShaderDefFP { shShaderPaths :: [(String, GLuint)]
+                             -- ^ [("path/to/shader.vert", GL_VERTEX_SHADER)]
+                             , shUniforms :: [String]
+                             -- ^ ["projection", "modelview", ..]
+                             }
+               | ShaderDefBS { shShaderSrcs :: [(ByteString, GLuint)]
+                             , shUniforms :: [String]
+                             } deriving (Show, Eq, Ord)
+
+newtype PolylineShader = PRS Shader
+newtype GeomShader = GRS Shader
+newtype BezShader = BRS Shader
+newtype MaskShader = MRS Shader
+data SumShader = SRS { _shPolyline :: PolylineShader
+                     , _shGeometry :: GeomShader
+                     , _shBezier   :: BezShader
+                     , _shMask     :: MaskShader
+                     }
+makeLenses ''SumShader

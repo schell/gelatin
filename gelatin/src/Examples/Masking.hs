@@ -10,9 +10,10 @@ import Graphics.GL.Core33
 import Control.Concurrent (threadDelay)
 import Data.Bits
 
-masking :: Window -> GeomRenderSource -> BezRenderSource -> IO ()
-masking win grs _ = do
-    mrs <- loadMaskRenderSource
+masking :: Window -> SumShader -> IO ()
+masking win ss = do
+    let grs = _shGeometry ss
+    mrs <- loadMaskShader
 
     let vs = [V2 0 0, V2 100 0, V2 100 100, V2 0 100]
         cs = replicate 4 red

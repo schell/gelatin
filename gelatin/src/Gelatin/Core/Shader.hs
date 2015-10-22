@@ -1,18 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Gelatin.Core.Shader (
+    -- * Attribute layout locations
+    -- $layout
     positionLoc,
     colorLoc,
     uvLoc,
     bezLoc,
-    compileShader,
-    compileProgram,
+    normLoc,
+    miterLoc,
+    -- * Enabling and disabling attribs
+    onlyEnableAttribs,
+    -- * Shader source files
+    vertSourcePoly,
+    fragSourcePoly,
     vertSourceGeom,
     fragSourceGeom,
     vertSourceBezier,
     fragSourceBezier,
     vertSourceMask,
-    fragSourceMask
+    fragSourceMask,
+    -- * Shader compilation
+    compileShader,
+    compileProgram,
 ) where
 
 import Prelude hiding (init)
@@ -28,7 +38,10 @@ import Foreign.Marshal.Utils
 import Foreign.Storable
 import Data.ByteString.Char8 as B
 import Data.FileEmbed
-
+--------------------------------------------------------------------------------
+-- $layout
+-- Attributes layout locations are unique and global.
+--------------------------------------------------------------------------------
 positionLoc :: GLuint
 positionLoc = 0
 
@@ -41,6 +54,23 @@ uvLoc = 2
 bezLoc :: GLuint
 bezLoc = 3
 
+normLoc :: GLuint
+normLoc = 4
+
+miterLoc :: GLuint
+miterLoc = 5
+
+allLocs :: [GLuint]
+allLocs = [0..5]
+
+-- | Enables the provided attributes and disables all others.
+onlyEnableAttribs :: [GLuint] -> IO ()
+onlyEnableAttribs atts = do
+   mapM_ glDisableVertexAttribArray allLocs
+   mapM_ glEnableVertexAttribArray atts
+--------------------------------------------------------------------------------
+-- Shader compilation
+--------------------------------------------------------------------------------
 compileShader :: ByteString -> GLuint -> IO GLuint
 compileShader src sh = do
     shader <- glCreateShader sh
@@ -94,7 +124,14 @@ compileProgram shaders = do
 
     forM_ shaders glDeleteShader
     return program
+--------------------------------------------------------------------------------
+-- Shader sources
+--------------------------------------------------------------------------------
+vertSourcePoly :: ByteString
+vertSourcePoly = $(embedFile "shaders/line.vert")
 
+fragSourcePoly :: ByteString
+fragSourcePoly = $(embedFile "shaders/line.frag")
 
 vertSourceGeom :: ByteString
 vertSourceGeom = $(embedFile "shaders/2d.vert")

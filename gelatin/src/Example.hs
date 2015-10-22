@@ -3,14 +3,16 @@ module Main where
 import System.Environment
 import Gelatin.Core.Rendering
 import Graphics.UI.GLFW
+import Examples.ExpandedPolylines
 import Examples.PolylineTest
 import Examples.PolylineWinding
 import Examples.Masking
 import Examples.Text
 import Examples.ClipTexture
 
-examples :: [(String, Window -> GeomRenderSource -> BezRenderSource -> IO ())]
-examples = [("polylineTest", polylineTest)
+examples :: [(String, Window -> SumShader -> IO ())]
+examples = [("expandedPolylines", expandedPolylines)
+           ,("polylineTest", polylineTest)
            ,("polylineWinding", polylineWinding)
            ,("masking", masking)
            ,("text", text)
@@ -22,9 +24,8 @@ main = do
     name:_ <- getArgs
     True   <- initGelatin
     win    <- newWindow 800 600 "Syndeca Mapper" Nothing Nothing
-    grs    <- loadGeomRenderSource
-    brs    <- loadBezRenderSource
+    shaders<- loadShaders
 
     let Just example = lookup name examples
 
-    example win grs brs
+    example win shaders

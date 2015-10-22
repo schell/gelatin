@@ -12,8 +12,10 @@ import Control.Concurrent.Async
 import Control.Monad
 import Data.Bits
 
-text :: Window -> GeomRenderSource -> BezRenderSource -> IO ()
-text win grs brs = do
+text :: Window -> SumShader -> IO ()
+text win ss = do
+    let grs = _shGeometry ss
+        brs = _shBezier ss
     afc  <- compileFontCache
     fc   <- wait afc
     Just arial <- withFont fc (FontDescriptor "Arial" $ FontStyle False False)

@@ -10,8 +10,10 @@ import Graphics.GL.Core33
 import Control.Concurrent (threadDelay)
 import Data.Bits
 
-clippingTexture :: Window -> GeomRenderSource -> BezRenderSource -> IO ()
-clippingTexture win grs brs = do
+clippingTexture :: Window -> SumShader -> IO ()
+clippingTexture win ss = do
+    let grs = _shGeometry ss
+        brs = _shBezier ss
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
