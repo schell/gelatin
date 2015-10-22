@@ -98,28 +98,29 @@ newWindow ww wh ws mmon mwin = do
 expandedPolylineRendering :: Window -> PolylineShader -> Float
                           -> [V2 Float] -> [V4 Float] -> IO Rendering
 expandedPolylineRendering win psh thickness verts colors
-    | thickness <= 1 = expandedPolylineRendering win psh 1.5 verts $ map (fmap (thickness * 1.5 *)) colors
     | (v1:v2:_) <- verts
     , (c1:_:_) <- colors = do
     let v3:v3n:_ = reverse verts
         c3:_:_ = reverse $ take (length verts) colors
+        -- clamp the lower bound of our thickness to 1
+        absthick = max thickness 1
 
         -- if the polyline is closed return a miter with the last point
         startCap = ([v1,v1], [c1,c1], [n,n], [m,-m])
             where Join n m = if v1 == v3
-                             then R.join (thickness/2) v3n v1 v2
-                             else R.capJoin (thickness/2) v1 v2
+                             then R.join (absthick/2) v3n v1 v2
+                             else R.capJoin (absthick/2) v1 v2
         endCap = ([v3,v3], [c3,c3], [n,n], [m,-m])
             where Join n m = if v1 == v3
-                             then R.join (thickness/2) v3n v1 v2
-                             else R.capJoin (thickness/2) v3n v3
+                             then R.join (absthick/2) v3n v1 v2
+                             else R.capJoin (absthick/2) v3n v3
 
         vcs  = zip verts colors :: [(V2 Float, V4 Float)]
         tris = startCap : zipWith3 strip vcs (drop 1 vcs) (drop 2 vcs)
                         ++ [endCap]
         -- Expand the line into a triangle strip
         strip (a, _) (b, bc) (c, _) = ([b, b], [bc, bc], [n, n], [m, -m])
-            where Join n m = R.join (thickness/2) a b c
+            where Join n m = R.join (absthick/2) a b c
         vertList  = concatMap (\(a,_,_,_) -> a) tris
         colorList = concatMap (\(_,a,_,_) -> a) tris
         normList  = concatMap (\(_,_,a,_) -> a) tris
@@ -140,6 +141,8 @@ expandedPolylineRendering win psh thickness verts colors
         let num = floor $ fromIntegral (length vs) / (2 :: Double)
             r t = do withUniform "projection" srcs $ setOrthoWindowProjection win
                      withUniform "modelview" srcs $ setModelview t
+                     -- set the thickness uniform with the actual thickness
+                     -- so the shader knows how to anti-alias fragments
                      withUniform "thickness" srcs $ \p u -> do
                          glUseProgram p
                          glUniform1f u thickness
