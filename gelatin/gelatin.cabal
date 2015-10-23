@@ -90,6 +90,7 @@ library
                        directory >=1.2,
                        containers >=0.5,
                        vector >=0.10,
+                       cubicbezier >= 0.4 && < 0.5,
                        lens,
                        file-embed >= 0.0.8.2,
                        bytestring
