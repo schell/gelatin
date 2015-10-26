@@ -1,12 +1,20 @@
+// Inspired by
+// Nicolas Rougier. Shader-Based Antialiased Dashed Stroked Polylines.
+// Journal of Computer Graphics Techniques, Williams College, 2013, 2 (2), pp.91-107.
+// <http://jcgt.org/published/0002/02/08/>. <hal-00907326>
 #version 330 core
 
 in vec4 fcolor;
 in vec2 fuv;
 out vec4 fragColor;
 
+// The thickness of the line
 uniform float thickness;
+// The length of the antialiasing/feather effect
 uniform float feather;
+// The total length of the line, i.e. the sum of all segment lengths
 uniform float sumlength;
+// The start and end cap type.
 uniform vec2 cap;
 
 float capNone = 0;
@@ -48,8 +56,6 @@ void main() {
     } else if (u > sumlength) {
         // fragment is in the end cap
         d = capd(cap.y, u - l, dy, t);
-    } else {
-        // fragment is in the body
     }
 
     d -= t;

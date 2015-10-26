@@ -1,12 +1,9 @@
--- | @see http://www.antigrain.com/research/adaptive_bezier/index.html
--- and http://www.antigrain.com/__code/src/agg_curves.cpp.html
-module Gelatin.Core.Rendering.Bezier where
+module Gelatin.Core.Rendering.Bezier (
+    subdivideAdaptive
+) where
 
 import Gelatin.Core.Rendering.Types
 import Linear
-
-curveDistanceEpsilon :: Double
-curveDistanceEpsilon = 1e-30
 
 curveCollinearityEpsilon :: Double
 curveCollinearityEpsilon = 1e-30
@@ -17,23 +14,12 @@ curveAngleToleranceEpsilon = 0.01
 curveRecursionLimit :: Int
 curveRecursionLimit = 32
 
-
---subdivideAdaptive_ :: RealFloat a => Double -> Bezier (V2 a) -> [V2 a]
---subdivideAdaptive_ mScale (Bezier _ a@(V2 x1 y1) b@(V2 x2 y2) c@(V2 x3 y3)) =
---    let V2 mStartX mStartY = a
---        V2 mEndX mEndY = c
---        d1@(V2 dx1 dy1) = b - a
---        d2@(V2 dx2 dy2) = c - b
---        len = norm d1 + norm d2
---        mNumSteps = max (round $ realToFrac len * 0.25 * mScale) 4 :: Int
---        subdivideStep = 1.0 / fromIntegral mNumSteps
---        subdivideStep2 = subdivideStep * subdivideStep
---        tmpx = (x1 - x2 * 2.0 + x3) * subdivideStep2
---        tmpy = (y1 - y2 * 2.0 + y3) * subdivideStep2
---    in []
-
-subdivideAdaptive :: RealFloat a => a -> a -> Bezier (V2 a) -> [V2 a]
-subdivideAdaptive mScale mAngle (Bezier _ va vb vc) =
+-- | Adaptively subdivide the bezier into a series of points (line segments).
+-- i.e. Generate more points along the part of the curve with greater curvature.
+-- @see http://www.antigrain.com/research/adaptive_bezier/index.html
+-- and http://www.antigrain.com/__code/src/agg_curves.cpp.html
+subdivideAdaptive :: RealFloat a => a -> a -> QuadraticBezier (V2 a) -> [V2 a]
+subdivideAdaptive mScale mAngle (QuadraticBezier va vb vc) =
     let mDistanceToleranceSquare = (0.5 / mScale) ** 2
     in va : subdivide mDistanceToleranceSquare mAngle 0 va vb vc ++ [vc]
 

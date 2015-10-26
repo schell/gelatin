@@ -22,6 +22,8 @@ module Gelatin.Core.Rendering.Types (
     Point(..),
     Line(..),
     Bezier(..),
+    QuadraticBezier(..),
+    CubicBezier(..),
     Triangle(..),
     FontString(..),
     LineCap(..),
@@ -73,9 +75,13 @@ data Joint = Cap (V2 Float) [V2 Float]
 --------------------------------------------------------------------------------
 -- Drawing Primitives
 --------------------------------------------------------------------------------
-data Primitive a = PrimitiveBez (Bezier a)
-                 | PrimitiveTri (Triangle a)
-                 deriving (Show, Eq)
+data Bezier a = Bezier Ordering a a a deriving (Show, Eq)
+data QuadraticBezier a = QuadraticBezier a a a deriving (Show, Eq)
+data CubicBezier a = CubicBezier a a a a deriving (Show, Eq)
+newtype NBezier a = NBezier [a] deriving (Show, Eq)
+data Triangle a = Triangle a a a deriving (Show, Eq)
+data Line a = Line a a deriving (Show, Eq)
+data Point a = Point a
 
 instance Functor Triangle where
     fmap f (Triangle a b c) = Triangle (f a ) (f b) (f c)
@@ -83,16 +89,18 @@ instance Functor Triangle where
 instance Functor Bezier where
     fmap f (Bezier o a b c) = Bezier o (f a) (f b) (f c)
 
+instance Functor QuadraticBezier where
+    fmap f (QuadraticBezier a b c) = QuadraticBezier (f a) (f b) (f c)
+
+instance Functor CubicBezier where
+    fmap f (CubicBezier a b c d) = CubicBezier (f a) (f b) (f c) (f d)
+
 instance Functor Line where
     fmap f (Line a b) = Line (f a) (f b)
 
 instance Functor Point where
     fmap f (Point v) = Point $ f v
 
-data Bezier a = Bezier Ordering a a a deriving (Show, Eq)
-data Triangle a = Triangle a a a deriving (Show, Eq)
-data Line a = Line a a deriving (Show, Eq)
-data Point a = Point a
 --------------------------------------------------------------------------------
 -- Special Rendering
 --------------------------------------------------------------------------------
