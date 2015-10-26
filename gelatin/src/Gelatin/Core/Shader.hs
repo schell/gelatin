@@ -9,11 +9,16 @@ module Gelatin.Core.Shader (
     bezLoc,
     normLoc,
     miterLoc,
+    dirLoc,
+    nextLoc,
+    prevLoc,
     -- * Enabling and disabling attribs
     onlyEnableAttribs,
     -- * Shader source files
     vertSourcePoly,
     fragSourcePoly,
+    vertSourceProjPoly,
+    fragSourceProjPoly,
     vertSourceGeom,
     fragSourceGeom,
     vertSourceBezier,
@@ -60,8 +65,17 @@ normLoc = 4
 miterLoc :: GLuint
 miterLoc = 5
 
+dirLoc :: GLuint
+dirLoc = 6
+
+nextLoc :: GLuint
+nextLoc = 7
+
+prevLoc :: GLuint
+prevLoc = 8
+
 allLocs :: [GLuint]
-allLocs = [0..5]
+allLocs = [0..8]
 
 -- | Enables the provided attributes and disables all others.
 onlyEnableAttribs :: [GLuint] -> IO ()
@@ -127,6 +141,12 @@ compileProgram shaders = do
 --------------------------------------------------------------------------------
 -- Shader sources
 --------------------------------------------------------------------------------
+vertSourceProjPoly :: ByteString
+vertSourceProjPoly = $(embedFile "shaders/projected-line.vert")
+
+fragSourceProjPoly :: ByteString
+fragSourceProjPoly = $(embedFile "shaders/projected-line.frag")
+
 vertSourcePoly :: ByteString
 vertSourcePoly = $(embedFile "shaders/line.vert")
 

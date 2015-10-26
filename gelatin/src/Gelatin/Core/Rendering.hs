@@ -16,6 +16,7 @@ module Gelatin.Core.Rendering (
     loadTextureUnit,
     unloadTexture,
     loadImageAsTexture,
+    projectedPolylineRendering,
     expandedPolylineRendering,
     filledTriangleRendering,
     colorRendering,
@@ -94,6 +95,93 @@ newWindow ww wh ws mmon mwin = do
 --------------------------------------------------------------------------------
 -- Renderings
 --------------------------------------------------------------------------------
+-- | Creates and returns a renderer that renders an expanded 2d polyline
+-- projected in 3d space.
+projectedPolylineRendering :: Window -> ProjectedPolylineShader -> Float
+                           -> Float -> (LineCap,LineCap) -> [V2 Float]
+                           -> [V4 Float] -> IO Rendering
+projectedPolylineRendering win psh thickness feather (capx,capy) verts colors
+    | (v1:v2:_) <- verts
+    , (c1:_:_) <- colors = do
+    let v3:v3n:_ = reverse verts
+        c3:_:_ = reverse $ take (length verts) colors
+        -- clamp the lower bound of our thickness to 1
+        absthick = max thickness 1
+        d = fromIntegral (ceiling $ absthick + 2.5 * feather :: Integer)
+        lens = 0 : (zipWith distance verts $ drop 1 verts)
+        totalLen = sum lens
+        totalEnd = totalLen + d
+        seqfunc (total,ts) len = (total + len,ts ++ [total + len])
+        seqLens  = snd $ foldl seqfunc (0,[]) lens
+        -- if the polyline is closed return a miter with the last point
+        startCap = ([cap,cap], [c1,c1], uvs, [v2,v2],[prev,prev])
+            where (uvs,cap,prev) = if v1 == v3
+                                   -- no cap
+                                   then ([V2 0 d, V2 0 (-d)],v1,v3n)
+                                   -- cap
+                                   else let c = d *^ (signorm $ v2 - v1)
+                                        in ([V2 (-d) d, V2 (-d) (-d)],v1 - c, v1 - 2*c)
+
+        endCap = ([cap,cap], [c3,c3], uvs,[next,next],[v3n,v3n])
+            where (uvs,cap,next) = if v1 == v3
+                                   -- no cap
+                                   then ([V2 totalLen d, V2 totalLen (-d)], v3, v2)
+                                   -- cap
+                                   else let c = d *^ (signorm $ v3 - v3n)
+                                        in ([V2 totalEnd d, V2 totalEnd (-d)], v3 + c, v3 + 2*c)
+
+        vcs  = zip3 verts colors seqLens :: [(V2 Float, V4 Float, Float)]
+        tris = startCap : zipWith3 strip vcs (drop 1 vcs) (drop 2 vcs)
+                        ++ [endCap]
+        -- Expand the line into a triangle strip
+        strip (a,_,_) (b,bc,l) (c,_,_) = ([b,b],[bc,bc],[V2 l d,V2 l (-d)],[c,c],[a,a])
+        vToGL :: Foldable f => [f Float] -> [GLfloat]
+        vToGL = map realToFrac . concatMap F.toList
+        vs_ = concatMap (\(a,_,_,_,_) -> a) tris
+        cs_ = concatMap (\(_,a,_,_,_) -> a) tris
+        us_ = concatMap (\(_,_,a,_,_) -> a) tris
+        ns_ = concatMap (\(_,_,_,a,_) -> a) tris
+        ps_ = concatMap (\(_,_,_,_,a) -> a) tris
+        vs  = vToGL vs_
+        cs  = vToGL cs_
+        us  = vToGL us_
+        ns  = vToGL ns_
+        ps  = vToGL ps_
+        PPRS src = psh
+        srcs = [src]
+
+    withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, uvbuf, nbuf, pbuf] -> do
+        onlyEnableAttribs [positionLoc, colorLoc, uvLoc, nextLoc, prevLoc]
+        bufferAttrib positionLoc 2 vbuf vs
+        bufferAttrib colorLoc 4 cbuf cs
+        bufferAttrib uvLoc 2 uvbuf us
+        bufferAttrib nextLoc 2 nbuf ns
+        bufferAttrib prevLoc 2 pbuf ps
+        glBindVertexArray 0
+        let num = fromIntegral $ length vs_
+            r t = do withUniform "projection" srcs $ setOrthoWindowProjection win
+                     withUniform "modelview" srcs $ setModelview t
+                     withUniform "thickness" srcs $ \p u -> do
+                         glUseProgram p
+                         glUniform1f u thickness
+                     withUniform "feather" srcs $ \p u -> do
+                         glUseProgram p
+                         glUniform1f u feather
+                     withUniform "sumlength" srcs $ \p u -> do
+                         glUseProgram p
+                         glUniform1f u totalLen
+                     withUniform "cap" srcs $ \p u -> do
+                         glUseProgram p
+                         let [x,y] = map (fromIntegral . fromEnum) [capx,capy]
+                         glUniform2f u x y
+                     -- set the thickness uniform with the actual thickness
+                     -- so the shader knows how to anti-alias fragments
+                     drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
+            c = do withArray bufs $ glDeleteBuffers 5
+                   withArray [vao] $ glDeleteVertexArrays 1
+        return $ Rendering r c
+    | otherwise = return mempty
+
 -- | Creates and returns a renderer that renders an expanded 2d polyline.
 expandedPolylineRendering :: Window -> PolylineShader -> Float
                           -> [V2 Float] -> [V4 Float] -> IO Rendering
@@ -425,10 +513,20 @@ orthoWindowProjection window = do
 --------------------------------------------------------------------------------
 -- | Compile all shader programs and return a "sum renderer".
 loadShaders :: IO SumShader
-loadShaders = SRS <$> loadPolylineShader
+loadShaders = SRS <$> loadProjectedPolylineShader
+                  <*> loadPolylineShader
                   <*> loadGeomShader
                   <*> loadBezShader
                   <*> loadMaskShader
+
+-- | Compile a shader program and link attributes for rendering screen space
+-- projected expanded polylines.
+loadProjectedPolylineShader :: IO ProjectedPolylineShader
+loadProjectedPolylineShader = do
+    let def = ShaderDefBS[(vertSourceProjPoly, GL_VERTEX_SHADER)
+                         ,(fragSourceProjPoly, GL_FRAGMENT_SHADER)
+                         ] ["projection", "modelview", "thickness", "feather", "sumlength", "cap"]
+    PPRS <$> loadShader def
 
 -- | Compile a shader program and link attributes for rendering expanded
 -- polylines.

@@ -20,24 +20,24 @@ polygonExpand t ps = trace (show (length ps, length vs, length poly)) poly
                       _   -> []
 
 -- | The polyline outline of another polyline drawn at a given thickness.
-outlinePolyline :: EndCap -> LineJoin -> Float -> [V2 Float] -> [V2 Float]
-outlinePolyline c j t ps = scap ++ ptans ++ ecap ++ reverse ntans ++ h
-    where js = joints c j t ps
-          (ptans,ntans) = both concat $ unzip $ map tangentPoints js
-          both f (a,b) = (f a, f b)
-          scap = case js of
-                     (Cap _ xs:_) -> reverse xs
-                     _            -> []
-          ecap = case reverse js of
-                     (Cap _ xs:_) -> reverse xs
-                     _            -> []
+--outlinePolyline :: LineCap -> LineJoin -> Float -> [V2 Float] -> [V2 Float]
+--outlinePolyline c j t ps = scap ++ ptans ++ ecap ++ reverse ntans ++ h
+--    where js = joints c j t ps
+--          (ptans,ntans) = both concat $ unzip $ map tangentPoints js
+--          both f (a,b) = (f a, f b)
+--          scap = case js of
+--                     (Cap _ xs:_) -> reverse xs
+--                     _            -> []
+--          ecap = case reverse js of
+--                     (Cap _ xs:_) -> reverse xs
+--                     _            -> []
+--
+--          h = case scap of
+--                  h':_ -> [h']
+--                  _    -> []
 
-          h = case scap of
-                  h':_ -> [h']
-                  _    -> []
-
-polyline :: EndCap -> LineJoin -> Float -> [V2 Float] -> [Triangle (V2 Float)]
-polyline c j t ps = triangulate $ joints c j t ps
+--polyline :: LineCap -> LineJoin -> Float -> [V2 Float] -> [Triangle (V2 Float)]
+--polyline c j t ps = triangulate $ joints c j t ps
 
 triangulate :: [Joint] -> [Triangle (V2 Float)]
 -- start
@@ -65,20 +65,20 @@ tangentPoints (Elbow Clockwise (p,_) ps) = ([p],ps)
 tangentPoints (Elbow CounterCW (_,n) ps) = (ps,[n])
 
 exitLine :: Joint -> (V2 Float, V2 Float)
-exitLine (Cap _ ps) = (head ps, head $ reverse ps)
+exitLine (Cap _ ps) = (head ps, last ps)
 exitLine (Elbow _ l []) = l
-exitLine (Elbow Clockwise (p,_) ps) = (p, head $ reverse ps)
-exitLine (Elbow CounterCW (_,n) ps) = (head $ reverse ps, n)
+exitLine (Elbow Clockwise (p,_) ps) = (p, last ps)
+exitLine (Elbow CounterCW (_,n) ps) = (last ps, n)
 
 entryLine :: Joint -> (V2 Float, V2 Float)
-entryLine (Cap _ ps) = (head $ reverse ps, head ps)
+entryLine (Cap _ ps) = (last ps, head ps)
 entryLine (Elbow _ l []) = l
 entryLine (Elbow Clockwise (p,_) ps) = (p, head ps)
 entryLine (Elbow CounterCW (_,n) ps) = (head ps, n)
 
 triangulateElbow :: Joint -> [Triangle (V2 Float)]
-triangulateElbow (Elbow Clockwise (p,_) ps) = map (uncurry $ Triangle p) $ zip ps $ tail ps
-triangulateElbow (Elbow CounterCW (_,n) ps) = map (uncurry $ Triangle n) $ zip ps $ tail ps
+triangulateElbow (Elbow Clockwise (p,_) ps) = zipWith (Triangle p) ps (tail ps)
+triangulateElbow (Elbow CounterCW (_,n) ps) = zipWith (Triangle n) ps (tail ps)
 triangulateElbow _ = []
 
 triangulateArm :: Joint -> Joint -> [Triangle (V2 Float)]
@@ -88,34 +88,34 @@ triangulateArm j j' = [Triangle a b c, Triangle b c d]
 
 triangulateCap :: Joint -> [Triangle (V2 Float)]
 -- This is a butt cap so do nothing.
-triangulateCap (Cap p ps) = map (uncurry $ Triangle p) $ zip ps $ tail ps
+triangulateCap (Cap p ps) = zipWith (Triangle p) ps (tail ps)
 triangulateCap _ = []
 
-joints :: EndCap -> LineJoin -> Float -> [V2 Float] -> [Joint]
-joints _ _ _ [] = []
-joints _ _ _ [_] = []
-joints c j t ps@(a:b:_) = start : mid ++ [end]
-    where start = capFunc c t a b
-          end   = capFunc c t z y
-          mid   = miters j t ps
-          [z,y] = take 2 $ reverse ps
+--joints :: LineCap -> LineJoin -> Float -> [V2 Float] -> [Joint]
+--joints _ _ _ [] = []
+--joints _ _ _ [_] = []
+--joints c j t ps@(a:b:_) = start : mid ++ [end]
+--    where start = capFunc c t a b
+--          end   = capFunc c t z y
+--          mid   = miters j t ps
+--          [z,y] = take 2 $ reverse ps
 
-capFunc :: EndCap -> Float -> V2 Float -> V2 Float -> Joint
-capFunc EndCapButt t a b = Cap a [lp,hp]
-    where (lp,hp) = miterLine (capJoin t a b) a
-capFunc EndCapBevel t a b = Cap a [lp,p,hp]
-    where (lp,hp) = miterLine (capJoin t a b) a
-          p       = a + (signorm $ a - b) ^* t
-capFunc EndCapSquare t a b = Cap a [lp,p'',p',hp]
-    where (lp,hp) = miterLine (capJoin t a b) a
-          p       = a + (signorm $ a - b) ^* t
-          p'      = p + ((signorm $ hp - a) ^* t)
-          p''     = p + ((signorm $ lp - a) ^* t)
-capFunc EndCapRound t a b = Cap a ps
-    where ps     = map f [(pi/2) + r + (d * pi/180) | d <- [0..180]]
-          V2 x y = signorm $ b - a
-          r      = atan2 y x
-          f th   = a + (V2 (cos th) (sin th) ^* t)
+--capFunc :: LineCap -> Float -> V2 Float -> V2 Float -> Joint
+--capFunc LineCapButt t a b = Cap a [lp,hp]
+--    where (lp,hp) = miterLine (capJoin t a b) a
+--capFunc LineCapBevel t a b = Cap a [lp,p,hp]
+--    where (lp,hp) = miterLine (capJoin t a b) a
+--          p       = a + (signorm $ a - b) ^* t
+--capFunc LineCapSquare t a b = Cap a [lp,p'',p',hp]
+--    where (lp,hp) = miterLine (capJoin t a b) a
+--          p       = a + (signorm $ a - b) ^* t
+--          p'      = p + ((signorm $ hp - a) ^* t)
+--          p''     = p + ((signorm $ lp - a) ^* t)
+--capFunc LineCapRound t a b = Cap a ps
+--    where ps     = map f [(pi/2) + r + (d * pi/180) | d <- [0..180]]
+--          V2 x y = signorm $ b - a
+--          r      = atan2 y x
+--          f th   = a + (V2 (cos th) (sin th) ^* t)
 
 miters :: LineJoin -> Float -> [V2 Float] -> [Joint]
 miters j t (a:b:c:ps) = miterFunc j t a b c : (miters j t $ b:c:ps)
@@ -185,7 +185,7 @@ miterLine (Join v l) p = (ptan,ntan)
 join :: Float -> V2 Float -> V2 Float -> V2 Float -> Join
 join t a b c = Join v ln
     where tgnt = tangentOf a b c
-          -- The normal
+          -- The extrusion vector
           v = perp tgnt
           -- The length of the miter
           ln = min d $ t / (v `dot` n)

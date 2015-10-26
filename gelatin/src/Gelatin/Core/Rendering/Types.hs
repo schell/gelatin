@@ -7,12 +7,14 @@ module Gelatin.Core.Rendering.Types (
     ShaderDef(..),
     Shader(..),
     PolylineShader(..),
+    ProjectedPolylineShader(..),
     GeomShader(..),
     BezShader(..),
     MaskShader(..),
     SumShader(..),
-    shBezier,
+    shProjectedPolyline,
     shPolyline,
+    shBezier,
     shMask,
     shGeometry,
     Transform(..),
@@ -22,7 +24,7 @@ module Gelatin.Core.Rendering.Types (
     Bezier(..),
     Triangle(..),
     FontString(..),
-    EndCap(..),
+    LineCap(..),
     LineJoin(..),
     Joint(..),
     Winding(..),
@@ -55,11 +57,13 @@ data FillResult = FillResultColor [V4 Float]
 data LineJoin = LineJoinMiter
               | LineJoinBevel
               deriving (Show, Eq)
-data EndCap = EndCapButt
-            | EndCapBevel
-            | EndCapSquare
-            | EndCapRound
-            deriving (Show, Eq)
+data LineCap = LineCapNone
+             | LineCapButt
+             | LineCapSquare
+             | LineCapRound
+             | LineCapTriOut
+             | LineCapTriIn
+             deriving (Show, Eq, Enum)
 data Winding = Clockwise
              | CounterCW
              deriving (Show, Eq)
@@ -145,10 +149,12 @@ data ShaderDef = ShaderDefFP { shShaderPaths :: [(String, GLuint)]
                              } deriving (Show, Eq, Ord)
 
 newtype PolylineShader = PRS Shader
+newtype ProjectedPolylineShader = PPRS Shader
 newtype GeomShader = GRS Shader
 newtype BezShader = BRS Shader
 newtype MaskShader = MRS Shader
-data SumShader = SRS { _shPolyline :: PolylineShader
+data SumShader = SRS { _shProjectedPolyline :: ProjectedPolylineShader
+                     , _shPolyline :: PolylineShader
                      , _shGeometry :: GeomShader
                      , _shBezier   :: BezShader
                      , _shMask     :: MaskShader
