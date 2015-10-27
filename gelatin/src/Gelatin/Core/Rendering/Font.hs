@@ -14,7 +14,7 @@ module Gelatin.Core.Rendering.Font (
 ) where
 
 import Gelatin.Core.Rendering.Types
-import Gelatin.Core.Rendering.Geometrical
+import Gelatin.Core.Rendering.Bezier
 import Prelude hiding (init)
 import Control.Concurrent.Async
 import Linear

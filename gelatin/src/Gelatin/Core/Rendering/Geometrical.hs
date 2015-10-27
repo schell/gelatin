@@ -1,8 +1,6 @@
 module Gelatin.Core.Rendering.Geometrical (
-    bez,
     toLines,
     toArrows,
-    toBeziers,
     trisToComp,
     triPoints,
     transform,
@@ -36,12 +34,6 @@ toArrows (a:b:cs) = arrow ++ toArrows (b:cs)
                   w = 3 -- head width
 toArrows _ = []
 
-toBeziers :: (Fractional a, Ord a) => [V2 a] -> [Bezier (V2 a)]
-toBeziers (a:b:c:ps) = bez a b c : toBeziers (c:ps)
-toBeziers _ = []
-
-bez :: (Ord a, Fractional a) => V2 a -> V2 a -> V2 a -> Bezier (V2 a)
-bez a b c = Bezier (compare (triangleArea a b c) 0) a b c
 
 trisToComp :: [Triangle (V2 a)] -> [V2 a]
 trisToComp = concatMap triPoints
@@ -61,7 +53,7 @@ toM44 (Transform (V2 x y) (V2 w h) r) = mv
           rot = if r /= 0 then mat4Rotate r rxy else identity
 
 transformPoly :: Transform -> Poly -> Poly
-transformPoly t p = map (transformV2 t) p
+transformPoly t = map (transformV2 t)
 
 transformV2 :: Transform -> V2 Float -> V2 Float
 transformV2 t (V2 x y) = V2 x' y'

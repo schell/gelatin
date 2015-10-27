@@ -17,6 +17,8 @@ future work
 -----------
 * lots of cleanup (API refinement, etc)
 * cubic beziers
+* dashed lines
+* textured lines
 * 3d
 
 [1]:https://www.dropbox.com/s/gnxb9bhkww2cgr5/Resolution-Independent-Curve-Rendering-using-Programmable-Graphics-Hardware.pdf?dl=0

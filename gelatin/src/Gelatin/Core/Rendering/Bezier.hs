@@ -1,9 +1,52 @@
 module Gelatin.Core.Rendering.Bezier (
-    subdivideAdaptive
+    bez,
+    bez3,
+    bez4,
+    toBeziers,
+    bez3ToBez,
+    bez4ToBez,
+    demoteCubic,
+    deCasteljau,
+    subdivideAdaptive,
+    subdivideAdaptive3,
+    subdivideAdaptive4
 ) where
 
 import Gelatin.Core.Rendering.Types
+import Gelatin.Core.Triangulation.Common
 import Linear
+
+-- | Turn a polyline into a list of bezier primitives.
+toBeziers :: (Fractional a, Ord a) => [V2 a] -> [Bezier (V2 a)]
+toBeziers (a:b:c:ps) = bez a b c : toBeziers (c:ps)
+toBeziers _ = []
+
+-- | Create a bezier primitive. The area of the triangle formed by the
+-- bezier's three points will be used to determine the orientation.
+bez :: (Ord a, Fractional a) => V2 a -> V2 a -> V2 a -> Bezier (V2 a)
+bez a b c = Bezier (compare (triangleArea a b c) 0) a b c
+
+-- | Create a quadratic bezier. This is an alias of 'QuadraticBezier'.
+bez3 :: V2 a -> V2 a -> V2 a -> QuadraticBezier (V2 a)
+bez3 = QuadraticBezier
+
+-- | Create a cubic bezier. This is an alias of 'CubicBezier'.
+bez4 :: V2 a -> V2 a -> V2 a -> V2 a -> CubicBezier (V2 a)
+bez4 = CubicBezier
+
+-- | Convert a quadratic bezier into a list of drawable bezier primitives.
+bez3ToBez :: (Ord a, Fractional a) => QuadraticBezier (V2 a) -> [Bezier (V2 a)]
+bez3ToBez (QuadraticBezier a b c) = [bez a b c]
+
+-- | Convert a cubic bezier into a list of drawable bezier primitives.
+bez4ToBez :: (Ord a, Fractional a) => CubicBezier (V2 a) -> [Bezier (V2 a)]
+bez4ToBez = concatMap bez3ToBez . demoteCubic
+
+-- | Compute the point at `t` along an N-bezier curve.
+deCasteljau :: (Additive f, R1 f, R2 f, Num a) => a -> [f a] -> f a
+deCasteljau _ [b] = b
+deCasteljau t coefs = deCasteljau t reduced
+  where reduced = zipWith (flip (lerp t)) coefs (tail coefs)
 
 curveCollinearityEpsilon :: Double
 curveCollinearityEpsilon = 1e-30
@@ -14,14 +57,56 @@ curveAngleToleranceEpsilon = 0.01
 curveRecursionLimit :: Int
 curveRecursionLimit = 32
 
--- | Adaptively subdivide the bezier into a series of points (line segments).
+-- | Approximate a cubic bezier with a list of four quadratic beziers.
+--
+-- <<docimages/demoteCubic.png>>
+demoteCubic :: Fractional a => CubicBezier (V2 a) -> [QuadraticBezier (V2 a)]
+demoteCubic (CubicBezier a b c d) = [q1,q2,q3,q4]
+    where mid = lerp 0.5
+          m1 = mid a b
+          m2 = mid b c
+          m3 = mid c d
+          m1m2 = mid m1 m2
+          m2m3 = mid m2 m3
+          mam1 = mid a m1
+          h1 = mid mam1 m1
+          p2 = mid m1m2 m2m3
+          m1m2p2 = mid m1m2 p2
+          h2 = mid m1m2 m1m2p2
+          mp2m2m3 = mid p2 m2m3
+          h3 = mid mp2m2m3 m2m3
+          mdm3 = mid d m3
+          h4 = mid mdm3 m3
+          p1 = mid h1 h2
+          --p2 = mid h2 h3
+          p3 = mid h3 h4
+          q1 = QuadraticBezier a h1 p1
+          q2 = QuadraticBezier p1 h2 p2
+          q3 = QuadraticBezier p2 h3 p3
+          q4 = QuadraticBezier p3 h4 d
+
+
+
+-- | Adaptively subdivide the quadratic bezier into a series of points (line
+-- segments).
 -- i.e. Generate more points along the part of the curve with greater curvature.
 -- @see http://www.antigrain.com/research/adaptive_bezier/index.html
 -- and http://www.antigrain.com/__code/src/agg_curves.cpp.html
-subdivideAdaptive :: RealFloat a => a -> a -> QuadraticBezier (V2 a) -> [V2 a]
+subdivideAdaptive,subdivideAdaptive3 :: RealFloat a
+                                     => a -> a -> QuadraticBezier (V2 a)
+                                     -> [V2 a]
+subdivideAdaptive3 = subdivideAdaptive
 subdivideAdaptive mScale mAngle (QuadraticBezier va vb vc) =
     let mDistanceToleranceSquare = (0.5 / mScale) ** 2
     in va : subdivide mDistanceToleranceSquare mAngle 0 va vb vc ++ [vc]
+
+-- | Adaptively subdivide the cubic bezier into a series of points (line
+-- segments).
+subdivideAdaptive4 :: RealFloat a => a -> a -> CubicBezier (V2 a) -> [V2 a]
+subdivideAdaptive4 s a = clean . concatMap (subdivideAdaptive s a) . demoteCubic
+    where clean [] = []
+          clean [x] = [x]
+          clean (x:y:zs) = if x == y then clean (y:zs) else x : clean (y:zs)
 
 subdivide :: RealFloat a
           => a -> a -> Int -> V2 a -> V2 a -> V2 a -> [V2 a]

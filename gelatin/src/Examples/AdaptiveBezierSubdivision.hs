@@ -5,6 +5,7 @@ import Linear
 import System.Exit
 import Gelatin.Core.Rendering
 import Gelatin.Core.Rendering.Bezier
+import Gelatin.Core.Rendering.Shape
 import Gelatin.Core.Color
 import Gelatin.Core.Triangulation.Common
 import Graphics.UI.GLFW hiding (init)
@@ -23,7 +24,7 @@ adaptiveBezierSubdivision win shaders = do
     let polysh = shaders^.shPolyline
         projsh = shaders^.shProjectedPolyline
         bezsh = shaders^.shBezier
-        bz = bez 0 (V2 200 25) (V2 0 50)
+        bz = bez3 0 (V2 200 25) (V2 0 50)
         testPoints = [0, V2 100 100, V2 150 100, 0]
         vs = subdivideAdaptive 0.1 0 bz
         vs1 = subdivideAdaptive 1 0 bz
@@ -32,18 +33,28 @@ adaptiveBezierSubdivision win shaders = do
         cmy = cycle [V4 0 1 1 1, V4 1 0 1 1, V4 1 1 0 1]
         cs = repeat $ V4 1 1 1 1
         ts = repeat $ Triangle 1 1 1
+        rts = repeat $ Triangle red red red
         lw = 5
+
+    -- Cubic beziers
+    let cubicBez = bez4 (V2 50 100) (V2 0 0) (V2 240 0) (V2 190 100)
+        cubic = subdivideAdaptive4 10 0 cubicBez
+
+    -- Shapes
+    let cornerBezs = demoteCubic $ corner 100 50
 
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
+    c <- colorBezRendering win (_shBezier shaders) (concatMap bez3ToBez cornerBezs) ts
+    w <- projectedPolylineRendering win projsh 5 1 (LineCapSquare,LineCapSquare) cubic cmy
     x <- projectedPolylineRendering win projsh 5 1 (LineCapTriIn,LineCapTriOut) testPoints cmy
     y <- projectedPolylineRendering win projsh 10 1 (LineCapTriIn,LineCapTriOut) (init testPoints) cmy
     z <- projectedPolylineRendering win projsh 10 10 (LineCapTriIn,LineCapTriOut) (init testPoints) cmy
     x' <- expandedPolylineRendering win polysh 5 testPoints cmy
     y' <- expandedPolylineRendering win polysh 10 (init testPoints) cmy
 
-    b <- colorBezRendering win bezsh [bz] ts
+    b <- colorBezRendering win bezsh (bez3ToBez bz) ts
 
     p <- expandedPolylineRendering win polysh lw vs cs
     p1 <- expandedPolylineRendering win polysh lw vs1 cs
@@ -61,6 +72,8 @@ adaptiveBezierSubdivision win shaders = do
           glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
           glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
 
+          render w $ Transform (V2 400 0) 1 0
+          render c $ Transform (V2 400 100) 1 0
           render x $ Transform 50 1 0
           render y $ Transform (V2 50 100) 1 0
           render z $ Transform (V2 70 90) 1 0

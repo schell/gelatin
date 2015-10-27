@@ -41,12 +41,14 @@ build-type:          Simple
 
 -- Extra files to be distributed with the package, such as examples or a
 -- README.
+extra-doc-files: docimages/*.png
 extra-source-files:    shaders/2d.frag,
                        shaders/2d.vert,
                        shaders/bezier.frag,
                        shaders/bezier.vert,
                        shaders/mask.frag,
-                       shaders/mask.vert
+                       shaders/mask.vert,
+                       docimages/*.png
 
 -- Constraint on the version of Cabal needed to build this package.
 cabal-version:       >=1.10
@@ -59,6 +61,7 @@ library
   ghc-options:         -Wall
   -- Modules exported by the library.
   exposed-modules:     Gelatin.Core.Rendering,
+                       Gelatin.Core.Rendering.Bezier,
                        Gelatin.Core.Rendering.Font,
                        Gelatin.Core.Rendering.Types,
                        Gelatin.Core.Rendering.Geometrical,
