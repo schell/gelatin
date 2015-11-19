@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Gelatin.Core.Rendering.Types (
     runRendering,
     cleanRendering,
@@ -17,7 +19,6 @@ module Gelatin.Core.Rendering.Types (
     shBezier,
     shMask,
     shGeometry,
-    Transform(..),
     ClippingArea,
     Point(..),
     Line(..),
@@ -31,16 +32,17 @@ module Gelatin.Core.Rendering.Types (
     Joint(..),
     Winding(..),
     Fill(..),
-    FillResult(..)
+    FillResult(..),
+    module T
 ) where
 
 import Linear as J hiding (rotate)
 import Prelude hiding (init)
 import Graphics.GL.Types
 import Graphics.Text.TrueType hiding (CompositeScaling(..))
-import Data.Typeable
 import Data.ByteString.Char8 (ByteString)
-import Control.Lens
+import Control.Lens hiding (transform)
+import Gelatin.Core.Rendering.Transform as T
 --------------------------------------------------------------------------------
 -- Text
 --------------------------------------------------------------------------------
@@ -101,25 +103,24 @@ instance Functor Line where
 instance Functor Point where
     fmap f (Point v) = Point $ f v
 
+instance Transformable Transform a => Transformable Transform (Line a) where
+    transform = fmap . transform
+
+instance Transformable Transform a => Transformable Transform (Triangle a) where
+    transform = fmap . transform
+
+instance Transformable Transform a => Transformable Transform (Bezier a) where
+    transform = fmap . transform
+
+instance Transformable Transform a => Transformable Transform (QuadraticBezier a) where
+    transform = fmap . transform
+
+instance Transformable Transform a => Transformable Transform (CubicBezier a) where
+    transform = fmap . transform
 --------------------------------------------------------------------------------
 -- Special Rendering
 --------------------------------------------------------------------------------
 type ClippingArea = (V2 Int, V2 Int)
---------------------------------------------------------------------------------
--- Affine Transformation
---------------------------------------------------------------------------------
-data Transform = Transform { tfrmTranslation :: Position
-                           , tfrmScale       :: Scale
-                           , tfrmRotation    :: Rotation
-                           } deriving (Show, Typeable)
-
-instance Monoid Transform where
-    mempty = Transform zero (V2 1 1) 0
-    (Transform t1 s1 r1) `mappend` (Transform t2 s2 r2) = Transform (t1 + t2) (s1 * s2) (r1 + r2)
-
-type Position = V2 Float
-type Scale = V2 Float
-type Rotation = Float
 --------------------------------------------------------------------------------
 -- General Rendering
 --------------------------------------------------------------------------------

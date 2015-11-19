@@ -1,7 +1,7 @@
 module Examples.AdaptiveBezierSubdivision where
 
 import GHC.Float
-import Linear
+import Linear hiding (rotate)
 import System.Exit
 import Gelatin.Core.Rendering
 import Gelatin.Core.Rendering.Bezier
@@ -14,9 +14,9 @@ import Graphics.Text.TrueType
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Monad
-import Control.Lens
+import Control.Lens hiding (transform)
 import Data.IORef
-import Data.Bits
+import Data.Bits hiding (rotate)
 import Data.Monoid
 
 adaptiveBezierSubdivision :: Window -> SumShader -> IO ()
@@ -41,12 +41,15 @@ adaptiveBezierSubdivision win shaders = do
         cubic = subdivideAdaptive4 10 0 cubicBez
 
     -- Shapes
-    let cornerBezs = demoteCubic $ corner 100 50
+    let cornerBezs = bez4ToBezInner $ corner 100 50
+        ellipseBezs = concatMap bez4ToBezOuter $
+                        transform (rotate (pi/4) mempty) $ ellipse 100 50
 
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
-    c <- colorBezRendering win (_shBezier shaders) (concatMap bez3ToBez cornerBezs) ts
+    c <- colorBezRendering win (_shBezier shaders) cornerBezs ts
+    e <- colorBezRendering win (_shBezier shaders) ellipseBezs ts
     w <- projectedPolylineRendering win projsh 5 1 (LineCapSquare,LineCapSquare) cubic cmy
     x <- projectedPolylineRendering win projsh 5 1 (LineCapTriIn,LineCapTriOut) testPoints cmy
     y <- projectedPolylineRendering win projsh 10 1 (LineCapTriIn,LineCapTriOut) (init testPoints) cmy
@@ -74,6 +77,7 @@ adaptiveBezierSubdivision win shaders = do
 
           render w $ Transform (V2 400 0) 1 0
           render c $ Transform (V2 400 100) 1 0
+          render e $ Transform (V2 400 200) 1 0
           render x $ Transform 50 1 0
           render y $ Transform (V2 50 100) 1 0
           render z $ Transform (V2 70 90) 1 0

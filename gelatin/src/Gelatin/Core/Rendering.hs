@@ -4,30 +4,44 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 module Gelatin.Core.Rendering (
     module R,
+    -- * Initialization
     initGelatin,
+    -- * Creating a window
     newWindow,
+    -- * Loading shaders
     loadShaders,
     loadPolylineShader,
     loadGeomShader,
     loadBezShader,
     loadMaskShader,
     loadShader,
+    -- * Loading textures
     loadTexture,
     loadTextureUnit,
     unloadTexture,
     loadImageAsTexture,
+    -- * Line rendering
     projectedPolylineRendering,
     expandedPolylineRendering,
-    filledTriangleRendering,
+    -- * Triangle rendering
     colorRendering,
-    colorBezRendering,
-    colorFontRendering,
     textureRendering,
     textureUnitRendering,
+    filledTriangleRendering,
+    -- * Bezier rendering
+    colorBezRendering,
+    textureBezRendering,
+    textureBezUnitRendering,
+    filledBezierRendering,
+    -- * Font rendering
+    colorFontRendering,
+    -- * Masking
     maskRendering,
-    transformRendering,
     stencilMask,
     alphaMask,
+    -- * Transforming a rendering
+    transformRendering,
+    -- * Utils
     toTexture,
     toTextureUnit,
     clipTexture,
@@ -252,10 +266,16 @@ filledTriangleRendering win gsh ts fill = do
     mfr <- getFillResult fill vs
     case mfr of
         Just (FillResultColor cs) -> colorRendering win gsh GL_TRIANGLES vs cs
-        Just (FillResultTexture _ uvs) -> textureRendering win gsh GL_TRIANGLES
-                                                                  vs uvs
+        Just (FillResultTexture tx uvs) -> do
+            Rendering r c <- textureRendering win gsh GL_TRIANGLES vs uvs
+            let r' t = do glActiveTexture GL_TEXTURE0
+                          glBindTexture GL_TEXTURE_2D tx
+                          r t
+                          glBindTexture GL_TEXTURE_2D 0
+            return $ Rendering r' c
         _ -> do putStrLn "Could not create a filledTriangleRendering."
-                return $ Rendering (const $ putStrLn "Non op renderer.") (return ())
+                return $ Rendering (const $ putStrLn "Non op renderer.")
+                                   (return ())
 
 -- | Applies a fill to a list of points to create a fill result. If the
 -- Fill is a texture then the texture's image will be loaded.
@@ -398,6 +418,77 @@ colorBezRendering window (BRS src) bs ts =
                 withUniform "modelview" srcs $ setModelview t
                 drawBuffer (shProgram src) vao GL_TRIANGLES num
         return $ Rendering renderFunction cleanupFunction
+
+-- | Creates and returns a renderer that renders the given textured beziers.
+textureBezUnitRendering :: Maybe GLint -> Window -> BezShader
+                        -> [Bezier (V2 Float)] -> [Triangle (V2 Float)] -> IO Rendering
+textureBezUnitRendering Nothing window sh bs ts =
+    textureBezUnitRendering (Just 0) window sh bs ts
+textureBezUnitRendering (Just u) window (BRS src) bs ts =
+    withVAO $ \vao -> withBuffers 3 $ \[pbuf, uvbuf, tbuf] -> do
+        let vs = concatMap (\(Bezier _ a b c) -> [a,b,c]) bs
+            uvs = concatMap (\(Triangle a b c) -> [a,b,c]) $ take (length bs) ts
+            f = map realToFrac . concatMap F.toList
+            uvs' = f uvs :: [GLfloat]
+            ps = f vs    :: [GLfloat]
+            ws = concatMap (\(Bezier w _ _ _) -> let w' = fromBool $ w == LT
+                                                 in [ 0, 0, w'
+                                                    , 0.5, 0, w'
+                                                    , 1, 1, w'
+                                                    ])
+                           bs :: [GLfloat]
+
+        onlyEnableAttribs [positionLoc, uvLoc, bezLoc]
+        bufferAttrib positionLoc 2 pbuf ps
+        bufferAttrib uvLoc 2 uvbuf uvs'
+        bufferAttrib bezLoc 3 tbuf ws
+        glBindVertexArray 0
+
+        let cleanupFunction = do
+                withArray [pbuf, tbuf, uvbuf] $ glDeleteBuffers 3
+                withArray [vao] $ glDeleteVertexArrays 1
+            num = fromIntegral $ length vs
+            srcs = [src]
+            renderFunction t = do
+                withUniform "hasUV" srcs $ \p huv -> do
+                    glUseProgram p
+                    glUniform1i huv 1
+                withUniform "sampler" srcs $ \p smp -> do
+                    glUseProgram p
+                    glUniform1i smp u
+                withUniform "projection" srcs $ setOrthoWindowProjection window
+                withUniform "modelview" srcs $ setModelview t
+                drawBuffer (shProgram src) vao GL_TRIANGLES num
+        return $ Rendering renderFunction cleanupFunction
+
+-- | Creates and returns a renderer that renders textured beziers using the
+-- texture bound to GL_TEXTURE0.
+textureBezRendering :: Window -> BezShader -> [Bezier (V2 Float)]
+                    -> [Triangle (V2 Float)] -> IO Rendering
+textureBezRendering = textureBezUnitRendering Nothing
+
+-- | Creates and returns a renderer that renders a given string of
+-- triangles with the given filling.
+filledBezierRendering :: Window -> BezShader -> [Bezier (V2 Float)] -> Fill
+                      -> IO Rendering
+filledBezierRendering win sh bs (FillColor f) = do
+    let ts = map toTri bs
+        toTri (Bezier _ a b c) = f <$> Triangle a b c
+    colorBezRendering win sh bs ts
+filledBezierRendering win sh bs (FillTexture fp f) = do
+    let ts = map toTri bs
+        toTri (Bezier _ a b c) = f <$> Triangle a b c
+    mtex <- loadImageAsTexture fp
+    case mtex of
+        Just tx -> do Rendering r c <- textureBezRendering win sh bs ts
+                      let r' t = do glActiveTexture GL_TEXTURE0
+                                    glBindTexture GL_TEXTURE_2D tx
+                                    r t
+                                    glBindTexture GL_TEXTURE_2D 0
+                      return $ Rendering r' c
+        Nothing -> do putStrLn "Could not create a filledBezRendering."
+                      return $ Rendering (const $ putStrLn "Non op renderer.")
+                                   (return ())
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.

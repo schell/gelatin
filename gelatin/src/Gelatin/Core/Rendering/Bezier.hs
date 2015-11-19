@@ -4,7 +4,12 @@ module Gelatin.Core.Rendering.Bezier (
     bez4,
     toBeziers,
     bez3ToBez,
+    bez3ToBezInner,
+    bez3ToBezOuter,
     bez4ToBez,
+    bez4ToBezInner,
+    bez4ToBezOuter,
+    bez4sToPath,
     demoteCubic,
     deCasteljau,
     subdivideAdaptive,
@@ -34,13 +39,47 @@ bez3 = QuadraticBezier
 bez4 :: V2 a -> V2 a -> V2 a -> V2 a -> CubicBezier (V2 a)
 bez4 = CubicBezier
 
--- | Convert a quadratic bezier into a list of drawable bezier primitives.
+-- | Convert a quadratic bezier into a list of drawable bezier primitives
+-- and derives the winding (which determines drawing an inner or outer bez) from
+-- the order of control points.
 bez3ToBez :: (Ord a, Fractional a) => QuadraticBezier (V2 a) -> [Bezier (V2 a)]
 bez3ToBez (QuadraticBezier a b c) = [bez a b c]
+
+-- | Convert a quadratic bezier into a bezier primitive that fills outer.
+bez3ToBezOuter :: (Ord a, Fractional a)
+               => QuadraticBezier (V2 a) -> [Bezier (V2 a)]
+bez3ToBezOuter qbz =
+    case bez3ToBez qbz of
+        z@[Bezier GT _ _ _] -> z
+        [Bezier _ a b c] -> [bez c b a]
+        z -> z
+
+-- | Convert a quadratic bezier into a bezier primitive that fills inner.
+bez3ToBezInner :: (Ord a, Fractional a)
+               => QuadraticBezier (V2 a) -> [Bezier (V2 a)]
+bez3ToBezInner qbz =
+    case bez3ToBez qbz of
+        [Bezier GT a b c] -> [bez c b a]
+        b -> b
 
 -- | Convert a cubic bezier into a list of drawable bezier primitives.
 bez4ToBez :: (Ord a, Fractional a) => CubicBezier (V2 a) -> [Bezier (V2 a)]
 bez4ToBez = concatMap bez3ToBez . demoteCubic
+
+-- | Convert a cubic bezier into a list of drawable bezier primitives that
+-- fill the inner bezier.
+bez4ToBezInner :: (Ord a, Fractional a) => CubicBezier (V2 a) -> [Bezier (V2 a)]
+bez4ToBezInner = concatMap bez3ToBezInner . demoteCubic
+
+-- | Convert a cubic bezier into a list of drawable bezier primitives that
+-- fill the inner bezier.
+bez4ToBezOuter :: (Ord a, Fractional a) => CubicBezier (V2 a) -> [Bezier (V2 a)]
+bez4ToBezOuter = concatMap bez3ToBezOuter . demoteCubic
+
+-- | Convert a list of cubic beziers into a smooth path.
+bez4sToPath :: RealFloat a => a -> a -> [CubicBezier (V2 a)] -> [V2 a]
+bez4sToPath mScale mAngle bs =
+    cleanSeqDupes $ concatMap (subdivideAdaptive4 mScale mAngle) bs
 
 -- | Compute the point at `t` along an N-bezier curve.
 deCasteljau :: (Additive f, R1 f, R2 f, Num a) => a -> [f a] -> f a
@@ -85,8 +124,6 @@ demoteCubic (CubicBezier a b c d) = [q1,q2,q3,q4]
           q3 = QuadraticBezier p2 h3 p3
           q4 = QuadraticBezier p3 h4 d
 
-
-
 -- | Adaptively subdivide the quadratic bezier into a series of points (line
 -- segments).
 -- i.e. Generate more points along the part of the curve with greater curvature.
@@ -103,10 +140,15 @@ subdivideAdaptive mScale mAngle (QuadraticBezier va vb vc) =
 -- | Adaptively subdivide the cubic bezier into a series of points (line
 -- segments).
 subdivideAdaptive4 :: RealFloat a => a -> a -> CubicBezier (V2 a) -> [V2 a]
-subdivideAdaptive4 s a = clean . concatMap (subdivideAdaptive s a) . demoteCubic
-    where clean [] = []
-          clean [x] = [x]
-          clean (x:y:zs) = if x == y then clean (y:zs) else x : clean (y:zs)
+subdivideAdaptive4 s a = cleanSeqDupes . concatMap (subdivideAdaptive s a) . demoteCubic
+
+-- | Removes sequential duplicates from a list.
+cleanSeqDupes :: Eq a => [a] -> [a]
+cleanSeqDupes [] = []
+cleanSeqDupes [x] = [x]
+cleanSeqDupes (x:y:zs) = if x == y
+                         then cleanSeqDupes (y:zs)
+                         else x : cleanSeqDupes (y:zs)
 
 subdivide :: RealFloat a
           => a -> a -> Int -> V2 a -> V2 a -> V2 a -> [V2 a]
