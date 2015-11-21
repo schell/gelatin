@@ -6,6 +6,7 @@
 module Gelatin.Core.Rendering.Font (
     compileFontCache,
     fontGeom,
+    fontCurves,
     findFont,
     allFonts,
     withFontAsync,
@@ -19,6 +20,7 @@ import Prelude hiding (init)
 import Control.Concurrent.Async
 import Linear
 import Graphics.Text.TrueType
+import Data.List (intercalate)
 import qualified Data.Vector.Unboxed as UV
 
 compileFontCache :: IO (Async FontCache)
@@ -46,40 +48,38 @@ allFonts afcache = do
                     Left _ -> Nothing
                     Right fcache -> Just $ enumerateFonts fcache
 
-withFontAsync :: Async FontCache -> FontDescriptor -> (Font -> IO a) -> IO (Maybe a)
+withFontAsync :: Async FontCache -> FontDescriptor -> (Font -> IO a)
+              -> IO (Maybe a)
 withFontAsync afcache desc f = do
     mPath <- findFont afcache desc
     case mPath of
-        Nothing -> return Nothing
+        Nothing -> do putStrLn $ "could not find " ++ show desc
+                      mfds <- allFonts afcache
+                      case mfds of
+                          Nothing -> putStrLn "cache is loading or err'd"
+                          Just fds -> putStrLn $ intercalate "\n" $ map show fds
+                      return Nothing
         Just path -> do ef <- loadFontFile path
                         case ef of
                             Left err   -> putStrLn err >> return Nothing
                             Right font -> Just `fmap` f font
 
 withFont :: FontCache -> FontDescriptor -> (Font -> IO a) -> IO (Maybe a)
-withFont cache desc f = do
+withFont cache desc f =
     case findFontInCache cache desc of
         Nothing -> return Nothing
         Just fp -> do ef <- loadFontFile fp
                       case ef of
                           Left err   -> putStrLn err >> return Nothing
                           Right font -> Just `fmap` f font
-
-
 --------------------------------------------------------------------------------
 -- Decomposition into triangles and beziers
 --------------------------------------------------------------------------------
 -- | Ephemeral types for creating polygons from font outlines.
 -- Fonty gives us a [[Vector (Float, Float)]] for an entire string, which breaks down to
-type Contours = [Bezier (V2 Float)] -- Beziers
-type CharacterOutline = [Contours]
+type Contour = [Bezier (V2 Float)] -- Beziers
+type CharacterOutline = [Contour]
 type StringOutline = [CharacterOutline]
-
--- | Merges poly a into poly b by "cutting" a and inserting b.
---cutMerge :: Poly -> Poly -> Poly
---cutMerge as bs = (take (ndx + 1) as) ++ bs ++ [head bs] ++ (drop ndx as)
---    where (ndx, _) = head $ sortBy (\a b -> snd a `compare` snd b) $
---                         zip [0..] $ map (`distance` (head bs)) as
 
 fontGeom :: Dpi -> FontString -> ([Bezier (V2 Float)], [Triangle (V2 Float)])
 fontGeom dpi (FontString font px offset str) =
@@ -89,11 +89,18 @@ fontGeom dpi (FontString font px offset str) =
         ts  = concatMap (concatMap (concaveTriangles . onContourPoints)) bs
     in (concat $ concat bs,ts)
 
+fontCurves :: Dpi -> Font -> Float -> String -> [[[QuadraticBezier (V2 Float)]]]
+fontCurves dpi font px str =
+    let sz = pixelSizeInPointAtDpi px dpi
+        cs = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
+        bs = beziers cs
+    in fmap (fmap (fmap (\(Bezier _ a b c) -> bez3 a b c))) bs
+
 fromFonty :: (UV.Unbox b1, Functor f1, Functor f) => ([V2 b1] -> b) -> f (f1 (UV.Vector (b1, b1))) -> f (f1 b)
 fromFonty f = fmap $ fmap $ f . UV.toList . UV.map (uncurry V2)
 
 beziers :: [[UV.Vector (Float, Float)]] -> StringOutline
-beziers = fromFonty (toBeziers . (fmap (fmap realToFrac)))
+beziers = fromFonty (toBeziers . fmap (fmap realToFrac))
 
 -- | Turns a polygon into a list of triangles that can be rendered using the
 -- Concave Polygon Stencil Test
@@ -108,5 +115,5 @@ concaveTriangles (a:as) = tris a as
 -- outline.
 onContourPoints :: [Bezier a] -> [a]
 onContourPoints [] = []
-onContourPoints ((Bezier LT a b c):bs) = [a,b,c] ++ onContourPoints bs
-onContourPoints ((Bezier _ a _ c):bs) = [a,c] ++ onContourPoints bs
+onContourPoints (Bezier LT a b c :bs) = [a,b,c] ++ onContourPoints bs
+onContourPoints (Bezier _ a _ c :bs) = [a,c] ++ onContourPoints bs

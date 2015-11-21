@@ -14,7 +14,8 @@ module Gelatin.Core.Rendering.Bezier (
     deCasteljau,
     subdivideAdaptive,
     subdivideAdaptive3,
-    subdivideAdaptive4
+    subdivideAdaptive4,
+    cleanSeqDupes
 ) where
 
 import Gelatin.Core.Rendering.Types
