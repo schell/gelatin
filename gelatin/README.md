@@ -5,10 +5,10 @@ gelatin
 
 features
 --------
-* colored/textured triangles
+* colored or textured triangles
 * alpha masking
 * antialiased truetype font rendering
-* colored/textured, [resolution independent, antialiased quadratic beziers][1]
+* colored or textured, [resolution independent, antialiased quadratic and cubic beziers][1]
 * [adaptive quadratic bezier subdivision][2]
 * colored [antialiased thick polylines with multiple end caps][3] 
 
@@ -16,7 +16,6 @@ features
 future work
 -----------
 * lots of cleanup (API refinement, etc)
-* cubic beziers
 * dashed lines
 * textured lines
 * 3d
