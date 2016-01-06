@@ -34,8 +34,8 @@ promoteV2 (V2 x y) = V3 x y 0
 demoteV3 :: V3 a -> V2 a
 demoteV3 (V3 x y _) = V2 x y
 
-toM44 :: Transform -> M44 Float
-toM44 (Transform (V2 x y) (V2 w h) r) = mv
+toM44 :: RealFloat a => Transform -> M44 a
+toM44 (Transform (V2 x y) (V2 w h) r) = fmap (fmap realToFrac) mv
     where mv = mat4Translate txy !*! rot !*! mat4Scale sxy
           sxy = V3 w h 1
           txy = V3 x y 0
@@ -45,11 +45,11 @@ toM44 (Transform (V2 x y) (V2 w h) r) = mv
 transformPoly :: Transform -> [V2 Float] -> [V2 Float]
 transformPoly t = map (transformV2 t)
 
-transformV2 :: Transform -> V2 Float -> V2 Float
+transformV2 :: RealFloat a => Transform -> V2 a -> V2 a
 transformV2 t (V2 x y) = V2 x' y'
-    where V3 x' y' _ = transformV3 t $ V3 x y 1
+    where V3 x' y' _ = transformV3 t $ realToFrac <$> V3 x y 1
 
-transformV3 :: Transform -> V3 Float -> V3 Float
+transformV3 :: RealFloat a => Transform -> V3 a -> V3 a
 transformV3 t v = m41ToV3 $ toM44 t !*! v3ToM41 v
 
 v3ToM41 :: Num a => V3 a -> V4 (V1 a)
@@ -90,9 +90,8 @@ mat4Scale (V3 x y z) =
        (V4 0 0 0 1)
 
 
-instance Transformable Transform (V2 Float) where
+instance RealFloat a => Transformable Transform (V2 a) where
     transform = transformV2
 
-instance Transformable Transform (V3 Float) where
+instance RealFloat a => Transformable Transform (V3 a) where
     transform = transformV3
-

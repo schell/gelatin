@@ -9,8 +9,8 @@ module Gelatin.Core.Rendering.Font (
     fontCurves,
     findFont,
     allFonts,
-    withFontAsync,
-    withFont,
+    usingFontAsync,
+    usingFont,
     concaveTriangles
 ) where
 
@@ -48,9 +48,9 @@ allFonts afcache = do
                     Left _ -> Nothing
                     Right fcache -> Just $ enumerateFonts fcache
 
-withFontAsync :: Async FontCache -> FontDescriptor -> (Font -> IO a)
+usingFontAsync :: Async FontCache -> FontDescriptor -> (Font -> IO a)
               -> IO (Maybe a)
-withFontAsync afcache desc f = do
+usingFontAsync afcache desc f = do
     mPath <- findFont afcache desc
     case mPath of
         Nothing -> do putStrLn $ "could not find " ++ show desc
@@ -64,8 +64,8 @@ withFontAsync afcache desc f = do
                             Left err   -> putStrLn err >> return Nothing
                             Right font -> Just `fmap` f font
 
-withFont :: FontCache -> FontDescriptor -> (Font -> IO a) -> IO (Maybe a)
-withFont cache desc f =
+usingFont :: FontCache -> FontDescriptor -> (Font -> IO a) -> IO (Maybe a)
+usingFont cache desc f =
     case findFontInCache cache desc of
         Nothing -> return Nothing
         Just fp -> do ef <- loadFontFile fp

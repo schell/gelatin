@@ -18,11 +18,11 @@ text win ss = do
         brs = _shBezier ss
     afc  <- compileFontCache
     fc   <- wait afc
-    Just arial <- withFont fc (FontDescriptor "Arial" $ FontStyle False False)
+    Just arial <- usingFont fc (FontDescriptor "Arial" $ FontStyle False False)
                               return
-    Just bold  <- withFont fc (FontDescriptor "Arial" $ FontStyle True False)
+    Just bold  <- usingFont fc (FontDescriptor "Arial" $ FontStyle True False)
                               return
-    Just italic  <- withFont fc (FontDescriptor "Arial" $ FontStyle False True)
+    Just italic  <- usingFont fc (FontDescriptor "Arial" $ FontStyle False True)
                                 return
 
     glEnable GL_BLEND

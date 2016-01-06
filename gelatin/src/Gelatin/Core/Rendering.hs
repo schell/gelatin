@@ -127,9 +127,10 @@ projectedPolylineRendering win psh thickness feather (capx,capy) verts colors
         totalEnd = totalLen + d
         seqfunc (total,ts) len = (total + len,ts ++ [total + len])
         seqLens  = snd $ foldl seqfunc (0,[]) lens
+        isClosed = distance v1 v3 <= 0.00001
         -- if the polyline is closed return a miter with the last point
         startCap = ([cap,cap], [c1,c1], uvs, [v2,v2],[prev,prev])
-            where (uvs,cap,prev) = if v1 == v3
+            where (uvs,cap,prev) = if isClosed
                                    -- no cap
                                    then ([V2 0 d, V2 0 (-d)],v1,v3n)
                                    -- cap
@@ -137,7 +138,7 @@ projectedPolylineRendering win psh thickness feather (capx,capy) verts colors
                                         in ([V2 (-d) d, V2 (-d) (-d)],v1 - c, v1 - 2*c)
 
         endCap = ([cap,cap], [c3,c3], uvs,[next,next],[v3n,v3n])
-            where (uvs,cap,next) = if v1 == v3
+            where (uvs,cap,next) = if isClosed
                                    -- no cap
                                    then ([V2 totalLen d, V2 totalLen (-d)], v3, v2)
                                    -- cap

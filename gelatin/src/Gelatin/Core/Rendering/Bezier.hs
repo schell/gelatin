@@ -10,6 +10,7 @@ module Gelatin.Core.Rendering.Bezier (
     bez4ToBezInner,
     bez4ToBezOuter,
     bez4sToPath,
+    flipBez4,
     demoteCubic,
     deCasteljau,
     subdivideAdaptive,
@@ -39,6 +40,9 @@ bez3 = QuadraticBezier
 -- | Create a cubic bezier. This is an alias of 'CubicBezier'.
 bez4 :: V2 a -> V2 a -> V2 a -> V2 a -> CubicBezier (V2 a)
 bez4 = CubicBezier
+
+flipBez4 :: CubicBezier a -> CubicBezier a
+flipBez4 (CubicBezier a b c d) = CubicBezier d c b a
 
 -- | Convert a quadratic bezier into a list of drawable bezier primitives
 -- and derives the winding (which determines drawing an inner or outer bez) from
