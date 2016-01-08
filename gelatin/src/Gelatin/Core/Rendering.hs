@@ -22,7 +22,6 @@ module Gelatin.Core.Rendering (
     loadImageAsTexture,
     -- * Line rendering
     projectedPolylineRendering,
-    expandedPolylineRendering,
     -- * Triangle rendering
     colorRendering,
     textureRendering,
@@ -50,7 +49,6 @@ module Gelatin.Core.Rendering (
 
 import Gelatin.Core.Shader
 import Gelatin.Core.Rendering.Types as R
-import Gelatin.Core.Rendering.Polylines as R
 import Gelatin.Core.Rendering.Geometrical as R
 import Gelatin.Core.Rendering.Font as R
 import Linear
@@ -193,67 +191,6 @@ projectedPolylineRendering win psh thickness feather (capx,capy) verts colors
                      -- so the shader knows how to anti-alias fragments
                      drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
             c = do withArray bufs $ glDeleteBuffers 5
-                   withArray [vao] $ glDeleteVertexArrays 1
-        return $ Rendering r c
-    | otherwise = return mempty
-
--- | Creates and returns a renderer that renders an expanded 2d polyline.
-expandedPolylineRendering :: Window -> PolylineShader -> Float
-                          -> [V2 Float] -> [V4 Float] -> IO Rendering
-expandedPolylineRendering win psh thickness verts colors
-    | (v1:v2:_) <- verts
-    , (c1:_:_) <- colors = do
-    let v3:v3n:_ = reverse verts
-        c3:_:_ = reverse $ take (length verts) colors
-        -- clamp the lower bound of our thickness to 1
-        absthick = max thickness 1
-
-        -- if the polyline is closed return a miter with the last point
-        startCap = ([v1,v1], [c1,c1], [n,n], [m,-m])
-            where Join n m = if v1 == v3
-                             then R.join (absthick/2) v3n v1 v2
-                             else R.capJoin (absthick/2) v1 v2
-        endCap = ([v3,v3], [c3,c3], [n,n], [m,-m])
-            where Join n m = if v1 == v3
-                             then R.join (absthick/2) v3n v1 v2
-                             else R.capJoin (absthick/2) v3n v3
-
-        vcs  = zip verts colors :: [(V2 Float, V4 Float)]
-        tris = startCap : zipWith3 strip vcs (drop 1 vcs) (drop 2 vcs)
-                        ++ [endCap]
-        -- Expand the line into a triangle strip
-        strip (a, _) (b, bc) (c, _) = ([b, b], [bc, bc], [n, n], [m, -m])
-            where Join n m = R.join (absthick/2) a b c
-        vertList  = concatMap (\(a,_,_,_) -> a) tris
-        colorList = concatMap (\(_,a,_,_) -> a) tris
-        normList  = concatMap (\(_,_,a,_) -> a) tris
-        miterList = concatMap (\(_,_,_,a) -> a) tris
-        vs = map realToFrac $ concatMap F.toList vertList :: [GLfloat]
-        cs = map realToFrac $ concatMap F.toList colorList :: [GLfloat]
-        ns = map realToFrac $ concatMap F.toList normList :: [GLfloat]
-        ms = map realToFrac miterList :: [GLfloat]
-        PRS src = psh
-        srcs = [src]
-    withVAO $ \vao -> withBuffers 4 $ \[vbuf, cbuf, nbuf, mbuf] -> do
-        onlyEnableAttribs [positionLoc, colorLoc, normLoc, miterLoc]
-        bufferAttrib positionLoc 2 vbuf vs
-        bufferAttrib colorLoc 4 cbuf cs
-        bufferAttrib normLoc 2 nbuf ns
-        bufferAttrib miterLoc 1 mbuf ms
-        glBindVertexArray 0
-        let num = floor $ fromIntegral (length vs) / (2 :: Double)
-            r t = do withUniform "projection" srcs $ setOrthoWindowProjection win
-                     withUniform "modelview" srcs $ setModelview t
-                     -- set the thickness uniform with the actual thickness
-                     -- so the shader knows how to anti-alias fragments
-                     withUniform "thickness" srcs $ \p u -> do
-                         glUseProgram p
-                         glUniform1f u thickness
-                     withUniform "opacity" srcs $ \p u -> do
-                         glUseProgram p
-                         glUniform1f u 1.0
-                     drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
-            c = do withArray [vbuf, cbuf, nbuf, mbuf] $ glDeleteBuffers 4
                    withArray [vao] $ glDeleteVertexArrays 1
         return $ Rendering r c
     | otherwise = return mempty

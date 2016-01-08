@@ -1,8 +1,6 @@
 module Gelatin.Core.Rendering.Geometrical (
     toLines,
     toArrows,
-    trisToComp,
-    triPoints
 ) where
 
 import Gelatin.Core.Triangulation.Common
@@ -26,10 +24,6 @@ toArrows (a:b:cs) = arrow ++ toArrows (b:cs)
 toArrows _ = []
 
 
-trisToComp :: [Triangle (V2 a)] -> [V2 a]
-trisToComp = concatMap triPoints
 
-triPoints :: Triangle (V2 a) -> [V2 a]
-triPoints (Triangle a b c) = [a, b, c]
 
 

@@ -1,14 +1,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Gelatin.Core.Rendering.Transform where
+module Gelatin.Core.Transform where
 
-import Data.Typeable
 import Linear
 
 class Transformable a b where
     -- | Transform a type using the transform type.
     transform :: a -> b -> b
-
 
 instance Transformable a b => Transformable a [b] where
     transform = map . transform
@@ -22,7 +20,7 @@ type Rotation = Float
 data Transform = Transform { tfrmTranslation :: Position
                            , tfrmScale       :: Scale
                            , tfrmRotation    :: Rotation
-                           } deriving (Show, Typeable)
+                           } deriving (Show)
 
 instance Monoid Transform where
     mempty = Transform zero (V2 1 1) 0

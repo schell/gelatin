@@ -2,7 +2,18 @@ module Gelatin.Core.Color where
 
 import Linear
 import Data.Bits
-import Gelatin.Core.Rendering.Types (Fill(..))
+
+type Color = V4 Float
+
+data Fill = FillColor (V2 Float -> V4 Float)
+          | FillTexture FilePath (V2 Float -> V2 Float)
+
+data FillResult t = FillResultColor [V4 Float]
+                  | FillResultTexture t [V2 Float]
+
+instance Show Fill where
+    show (FillColor _) = "FillColor"
+    show (FillTexture p _) = "FillTexture " ++ show p
 
 solid :: V4 Float -> Fill
 solid = FillColor . const
@@ -16,8 +27,9 @@ red = V4 (255/255) (0/255) (0/255) 1
 orange :: (Num a, Fractional a) => V4 a
 orange = V4 (255/255) (165/255) (0/255) 1
 
-yellow :: (Num a, Fractional a) => V4 a
+yellow,canary :: (Num a, Fractional a) => V4 a
 yellow = V4 (255/255) (255/255) (0/255) 1
+canary = yellow
 
 olive :: (Num a, Fractional a) => V4 a
 olive = V4 (128/255) (128/255) (0/255) 1
@@ -437,10 +449,10 @@ transparent :: (Num a, Fractional a) => V4 a
 transparent = V4 0 0 0 0
 
 alpha :: (Num a, Fractional a) => V4 a -> a -> V4 a
-alpha (V4 r g b _) a = V4 r g b a
+alpha (V4 r g b _) = V4 r g b
 
 hex :: (Num b, Fractional b) => Int -> V4 b
-hex n = fmap ((/255) . fromIntegral) $ V4 r g b a
+hex n = ((/255) . fromIntegral) <$> V4 r g b a
     where r = n `shiftR` 24
           g = n `shiftR` 16 .&. 0xFF
           b = n `shiftR` 8 .&. 0xFF

@@ -1,7 +1,7 @@
-module Gelatin.Core.Rendering.Shape where
+module Gelatin.Core.Shape where
 
-import Gelatin.Core.Rendering.Types
-import Gelatin.Core.Rendering.Bezier
+import Gelatin.Core.Bezier
+import Gelatin.Core.Transform
 import Linear
 
 kappa :: Fractional a => a
@@ -40,6 +40,9 @@ acuteArc start size = CubicBezier a b c d
 curveEpsilon :: Fractional a => a
 curveEpsilon = 0.00001
 
+-- | Create a list of cubic beziers representing an arc along an ellipse with
+-- width `w`, height `h` and total angle `stop - start` radians, beginning
+-- `start` radians above the x-axis.
 arc,arc' :: RealFloat a => a -> a -> a -> a -> [CubicBezier (V2 a)]
 arc w h start stop = if stop - start >= 2*pi
                      then close $ arc' w h start (start + 2*pi)
@@ -56,5 +59,17 @@ arc' w h start stop
               s = fmap realToFrac $ V2 w h
               a = transform (Transform 0 s 0) $ acuteArc start arcToDraw
 
+-- | Create a list of cubic beziers that represent an entire closed
+-- ellipse.
 ellipse :: RealFloat a => a -> a -> [CubicBezier (V2 a)]
 ellipse xr yr = arc xr yr 0 (2*pi)
+
+-- | Create a closed box path.
+box :: Fractional a => V2 a -> [V2 a]
+box (V2 w h) = poly
+    where poly = [V2 x1 y1, V2 x2 y1, V2 x2 y2, V2 x1 y2, V2 x1 y1]
+          (hw,hh) = (w/2,h/2)
+          x1 = -hw
+          x2 = hw
+          y1 = -hh
+          y2 = hh

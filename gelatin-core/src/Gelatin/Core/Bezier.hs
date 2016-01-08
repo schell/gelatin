@@ -1,4 +1,9 @@
-module Gelatin.Core.Rendering.Bezier (
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
+module Gelatin.Core.Bezier (
+    Bezier(..),
+    QuadraticBezier(..),
+    CubicBezier(..),
     bez,
     bez3,
     bez4,
@@ -19,9 +24,34 @@ module Gelatin.Core.Rendering.Bezier (
     cleanSeqDupes
 ) where
 
-import Gelatin.Core.Rendering.Types
-import Gelatin.Core.Triangulation.Common
+import Gelatin.Core.Transform
 import Linear
+
+data Bezier a = Bezier Ordering a a a deriving (Show, Eq)
+
+data QuadraticBezier a = QuadraticBezier a a a deriving (Show, Eq)
+
+data CubicBezier a = CubicBezier a a a a deriving (Show, Eq)
+
+newtype NBezier a = NBezier [a] deriving (Show, Eq)
+
+instance Functor Bezier where
+    fmap f (Bezier o a b c) = Bezier o (f a) (f b) (f c)
+
+instance Functor QuadraticBezier where
+    fmap f (QuadraticBezier a b c) = QuadraticBezier (f a) (f b) (f c)
+
+instance Functor CubicBezier where
+    fmap f (CubicBezier a b c d) = CubicBezier (f a) (f b) (f c) (f d)
+
+instance Transformable Transform a => Transformable Transform (Bezier a) where
+    transform = fmap . transform
+
+instance Transformable Transform a => Transformable Transform (QuadraticBezier a) where
+    transform = fmap . transform
+
+instance Transformable Transform a => Transformable Transform (CubicBezier a) where
+    transform = fmap . transform
 
 -- | Turn a polyline into a list of bezier primitives.
 toBeziers :: (Fractional a, Ord a) => [V2 a] -> [Bezier (V2 a)]
@@ -32,6 +62,8 @@ toBeziers _ = []
 -- bezier's three points will be used to determine the orientation.
 bez :: (Ord a, Fractional a) => V2 a -> V2 a -> V2 a -> Bezier (V2 a)
 bez a b c = Bezier (compare (triangleArea a b c) 0) a b c
+    where triangleArea (V2 x2 y2) (V2 x0 y0) (V2 x1 y1) =
+            (x1-x0)*(y2-y0)-(x2-x0)*(y1-y0)
 
 -- | Create a quadratic bezier. This is an alias of 'QuadraticBezier'.
 bez3 :: V2 a -> V2 a -> V2 a -> QuadraticBezier (V2 a)
