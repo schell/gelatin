@@ -19,10 +19,8 @@ instance Transformable Transform (Path (V2 Float)) where
 
 instance Hashable a => Hashable (Path a)
 
-instance BoundedByBox (Path (V2 Float)) where
-    type BoundingBoxR (Path (V2 Float)) = ()
-    type BoundingBox (Path (V2 Float)) = (V2 Float, V2 Float)
-    boundingBox _ (Path ps) = boundingBox () ps
+pathBounds :: Path (V2 Float) -> BBox
+pathBounds = polyBounds . unPath
 
 newtype Size = Size (V2 Float)
 

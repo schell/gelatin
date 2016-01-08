@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Gelatin.Core.Primitives where
 
 import Gelatin.Core.Bezier
@@ -7,6 +8,7 @@ import Gelatin.Core.Color
 import Gelatin.Core.Stroke
 import Data.Hashable
 import Linear
+import GHC.Generics
 
 --------------------------------------------------------------------------------
 -- Paths
@@ -92,3 +94,6 @@ path2ConcavePoly (Path vs)
 
 data R2Primitives f = R2PathPrimitives (Stroked (PathPrimitives f))
                     | R2FillPrimitives (FillPrimitives f)
+                    deriving (Generic)
+
+instance Hashable f => Hashable (R2Primitives f)

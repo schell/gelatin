@@ -28,10 +28,8 @@ instance Functor Triangle where
 instance Transformable Transform a => Transformable Transform (Triangle a) where
     transform = fmap . transform
 
-instance BoundedByBox (Triangle (V2 Float)) where
-    type BoundingBoxR (Triangle (V2 Float)) = ()
-    type BoundingBox (Triangle (V2 Float)) = BBox
-    boundingBox _ (Triangle a b c) = boundingBox () [a,b,c]
+triBounds :: Triangle (V2 Float) -> BBox
+triBounds (Triangle a b c) = polyBounds [a,b,c]
 --------------------------------------------------------------------------------
 -- Decomposing things into triangles
 --------------------------------------------------------------------------------

@@ -190,3 +190,6 @@ compileString (Free (WithTransform t p n)) = do
 compileString (Free (WithFont f p n)) = do
     s <- local (+1) $ compileString $ fromF p
     compileLine n $ "withFont " ++ show f ++ "\n" ++ s
+
+showPic :: Show f => Picture f () -> String
+showPic pic = runReader (compileString $ fromF pic) 0

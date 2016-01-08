@@ -10,7 +10,6 @@ import Control.Monad.Free
 import Control.Monad.Free.Church
 import Control.Monad.Reader
 import Control.Arrow (second)
-import Data.Renderable
 import Gelatin.Core as Core
 import Linear
 import Data.Hashable
@@ -128,61 +127,52 @@ rotate r = withTransform (Transform 0 1 r)
 --------------------------------------------------------------------------------
 -- Measuring pictures
 --------------------------------------------------------------------------------
-instance FontClass f => BoundedByBox (Free (PictureCmd f) ()) where
-    type BoundingBoxR (Free (PictureCmd f) ()) = CompileData f
-    type BoundingBox (Free (PictureCmd f) ()) = BBox
-    boundingBox _ (Pure ()) = (0,0)
-    boundingBox cd (Free (Blank n)) = boundingBox cd n
-    boundingBox cd (Free (Polyline vs n)) =
+boundingBox :: FontClass f => CompileData f -> Free (PictureCmd f) () -> (V2 Float, V2 Float)
+boundingBox _ (Pure ()) = (0,0)
+boundingBox cd (Free (Blank n)) = boundingBox cd n
+boundingBox cd (Free (Polyline vs n)) =
+    let t = cdTransform cd
+        vs' = transform t vs
+    in boundsBounds [polyBounds vs', boundingBox cd n]
+boundingBox cd (Free (Rectangle v n)) =
+    let t = cdTransform cd
+        vs = box v
+        vs' = transform t vs
+    in boundsBounds [polyBounds vs', boundingBox cd n]
+boundingBox cd (Free (Curve a b c n)) =
+    let t = cdTransform cd
+        vs = transform t $ subdivideAdaptive 100 0 $ bez3 a b c
+    in boundsBounds [polyBounds vs, boundingBox cd n]
+boundingBox cd (Free (Ellipse (V2 x y) n)) =
+    let t = cdTransform cd
+        vs = transform t $ bez4sToPath 100 0 $ Core.ellipse x y
+    in boundsBounds [polyBounds vs, boundingBox cd n]
+boundingBox cd (Free (Circle r n)) =
+    let t = cdTransform cd
+        vs = transform t $ bez4sToPath 100 0 $ Core.ellipse r r
+    in boundsBounds [polyBounds vs, boundingBox cd n]
+boundingBox cd (Free (Letters px str n))
+    | Just font <- cdFont cd =
         let t = cdTransform cd
-            vs' = transform t vs
-        in boundingBox () [boundingBox () vs', boundingBox cd n]
-    boundingBox cd (Free (Rectangle v n)) =
-        let t = cdTransform cd
-            vs = Path $ box v
-            vs' = transform t vs
-        in boundingBox () [boundingBox () vs', boundingBox cd n]
-    boundingBox cd (Free (Curve a b c n)) =
-        let t = cdTransform cd
-            vs = transform t $ subdivideAdaptive 100 0 $ bez3 a b c
-        in boundingBox () [boundingBox () vs, boundingBox cd n]
-    boundingBox cd (Free (Ellipse (V2 x y) n)) =
-        let t = cdTransform cd
-            vs = transform t $ bez4sToPath 100 0 $ Core.ellipse x y
-        in boundingBox () [boundingBox () vs, boundingBox cd n]
-    boundingBox cd (Free (Circle r n)) =
-        let t = cdTransform cd
-            vs = transform t $ bez4sToPath 100 0 $ Core.ellipse r r
-        in boundingBox () [boundingBox () vs, boundingBox cd n]
-    boundingBox cd (Free (Letters px str n))
-        | Just font <- cdFont cd =
-            let t = cdTransform cd
-                (V2 nx ny, V2 xx xy) = stringBoundingBox font 72 px str
-                vs = transform t [V2 nx ny, V2 xx xy]
-            in boundingBox () [boundingBox () vs, boundingBox cd n]
-        | otherwise = boundingBox cd n
-    boundingBox cd (Free (WithStroke _ p n)) =
-        boundingBox () [ boundingBox cd $ freePic p, boundingBox cd n ]
-    boundingBox cd (Free (WithFill _ p n)) =
-        boundingBox () [ boundingBox cd $ freePic p
-                       , boundingBox cd n
-                       ]
-    boundingBox cd (Free (WithTransform t p n)) =
-        let t' = cdTransform cd
-            cd' = cd{cdTransform = t `mappend` t'}
-        in boundingBox () [ boundingBox cd' $ freePic p, boundingBox cd n ]
-    boundingBox cd (Free (WithFont font p n)) =
-        let cd' = cd{cdFont = Just font}
-        in boundingBox () [boundingBox cd' $ freePic p, boundingBox cd n]
-
-instance FontClass f => BoundedByBox (Picture f ()) where
-    type BoundingBoxR (Picture f ()) = ()
-    type BoundingBox (Picture f ()) = BBox
-    boundingBox () p = boundingBox emptyCompileData $ freePic p
+            (V2 nx ny, V2 xx xy) = stringBoundingBox font 72 px str
+            vs = transform t [V2 nx ny, V2 xx xy]
+        in boundsBounds [polyBounds vs, boundingBox cd n]
+    | otherwise = boundingBox cd n
+boundingBox cd (Free (WithStroke _ p n)) =
+    boundsBounds [boundingBox cd $ freePic p, boundingBox cd n]
+boundingBox cd (Free (WithFill _ p n)) =
+    boundsBounds [boundingBox cd $ freePic p, boundingBox cd n]
+boundingBox cd (Free (WithTransform t p n)) =
+    let t' = cdTransform cd
+        cd' = cd{cdTransform = t `mappend` t'}
+    in boundsBounds [boundingBox cd' $ freePic p, boundingBox cd n]
+boundingBox cd (Free (WithFont font p n)) =
+    let cd' = cd{cdFont = Just font}
+    in boundsBounds [boundingBox cd' $ freePic p, boundingBox cd n]
 
 -- Returns the bounding box of the picture.
 pictureBounds :: FontClass f => Picture f () -> BBox
-pictureBounds = boundingBox ()
+pictureBounds = boundingBox emptyCompileData . freePic
 
 -- Returns the size of the picuter.
 pictureSize :: FontClass f => Picture f () -> V2 Float
@@ -193,6 +183,3 @@ pictureSize p =
 -- Returns the leftmost, uppermost point of the picture.
 pictureOrigin :: FontClass f => Picture f () -> V2 Float
 pictureOrigin = fst . pictureBounds
-
---instance Show (Picture f ()) where
---    show pic = runReader (compileString $ fromF pic) 0
