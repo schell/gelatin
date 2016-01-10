@@ -3,6 +3,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 module Gelatin.GL.Renderer (
+    -- * Renderer
+    GLRenderer,
     -- * Initialization
     initGelatin,
     -- * Creating a window
@@ -33,6 +35,7 @@ module Gelatin.GL.Renderer (
     -- * Font rendering
     FontString(..),
     colorFontRenderer,
+    fontCurves,
     -- * Masking
     maskRenderer,
     stencilMask,
