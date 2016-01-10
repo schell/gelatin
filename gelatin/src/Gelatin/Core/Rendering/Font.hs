@@ -73,7 +73,7 @@ usingFont cache desc f =
                           Left err   -> putStrLn err >> return Nothing
                           Right font -> Just `fmap` f font
 --------------------------------------------------------------------------------
--- Decomposition into triangles and beziers
+-- Font decomposition into triangles and beziers
 --------------------------------------------------------------------------------
 -- | Ephemeral types for creating polygons from font outlines.
 -- Fonty gives us a [[Vector (Float, Float)]] for an entire string, which breaks down to
