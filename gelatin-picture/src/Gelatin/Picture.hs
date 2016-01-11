@@ -16,7 +16,7 @@ import Data.Hashable
 import GHC.Generics
 
 class FontClass f where
-    stringBoundingBox :: f -> Float -> Float -> String -> (V2 Float, V2 Float)
+    stringBoundingBox :: f -> Int -> Float -> String -> (V2 Float, V2 Float)
 
 --type ControlPoint = V2 Float
 

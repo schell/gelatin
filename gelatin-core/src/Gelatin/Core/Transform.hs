@@ -56,19 +56,6 @@ v3ToM41 (V3 x y z) = V4 (V1 x) (V1 y) (V1 z) (V1 1)
 m41ToV3 :: V4 (V1 a) -> V3 a
 m41ToV3 (V4 (V1 x) (V1 y) (V1 z) _) = V3 x y z
 
-scale :: RealFrac a => a -> a -> Transform -> Transform
-scale sx sy t@Transform{tfrmScale = V2 x y} =
-    t{tfrmScale = V2 (sx'*x) (sy'*y)}
-        where [sx',sy'] = map realToFrac [sx,sy]
-
-translate :: RealFrac a => a -> a -> Transform -> Transform
-translate tx ty t@Transform{tfrmTranslation = V2 x y} =
-    t{tfrmTranslation = V2 (x+tx') (y+ty')}
-        where [tx',ty'] = map realToFrac [tx,ty]
-
-rotate :: RealFrac a => a -> Transform -> Transform
-rotate r' t@Transform{tfrmRotation = r} = t{tfrmRotation = r + realToFrac r'}
-
 rotateAbout :: (Num a, Epsilon a, Floating a) => V3 a -> a -> V3 a -> V3 a
 rotateAbout axis phi = m41ToV3 . (mat4Rotate phi axis !*!) . v3ToM41
 --------------------------------------------------------------------------------

@@ -58,7 +58,9 @@ cabal-version:       >=1.10
 
 library
   -- Modules exported by the library.
-  exposed-modules:     Gelatin.GLFW
+  exposed-modules:     Gelatin.GLFW,
+                       Gelatin.GL.Renderer,
+                       Gelatin.GL.Shader
 
   -- Modules included in this library but not exported.
   -- other-modules:
@@ -79,7 +81,8 @@ library
                        vector >= 0.11 && < 0.12,
                        directory >= 1.2 && < 1.3,
                        file-embed >= 0.0.8.2,
-                       renderable >= 0.1
+                       renderable >= 0.1,
+                       hashable >= 1.2 && < 1.3
 
 
   -- Directories containing source files.

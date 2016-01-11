@@ -1,39 +1,49 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
-module Gelatin.GLFW where
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
+module Gelatin.GLFW (
+    Rez(..),
+    startupGLFWBackend,
+    module G
+) where
 
+import Gelatin.Picture
+import Gelatin.PicturePrimitives
 import Gelatin.GL.Renderer
 import Gelatin.GL.Shader
-import Gelatin.Core
+import Gelatin.Core as G
 import Control.Monad
+import Control.Arrow (second)
 import Data.Renderable
-import Graphics.Text.TrueType
+import Data.Hashable
+import Graphics.Text.TrueType as TT
 import Graphics.UI.GLFW
 import Linear
+import System.Exit
+import GHC.Generics
 
 data Rez = Rez { rezShader :: SumShader
                , rezWindow :: Window
                }
 
-stringRenderer :: Window -> GeomShader -> BezShader -> Font
-                -> String -> Color -> (Float,Float) -> IO GLRenderer
-stringRenderer win geom bz font str fc xy = do
-    -- Some docs
-    let mult = 2 :: Float
-        movv = 1/4 :: Double
-        movh = 1/2 :: Double
-        px   = mult*16
-        fstr = FontString font px xy str
-        fc'  = fc `alpha` 0.25
-        t    = Transform 0 (V2 (1/mult) (1/mult)) 0
-    (c1, r1) <- colorFontRenderer win geom bz fstr $ const fc'
-    (c2, r2) <- colorFontRenderer win geom bz fstr $ const fc
-    let f t' = do r1 (translate (-movh) 0 t')
-                  r1 (translate movh 0 t')
-                  r1 (translate 0 movv t')
-                  r1 (translate 0 (-movv) t')
-                  r2 t'
-    return $ transformRenderer t (c1 >> c2, f)
+-- | Completes all initialization, creates a new window and returns
+-- the resource record. If any part of the process fails the program
+-- will exit with failure.
+startupGLFWBackend :: Int -- ^ Window width
+                   -> Int -- ^ Window height
+                   -> String -- ^ Window title
+                   -> Maybe Monitor -- ^ The monitor to fullscreen into
+                   -> Maybe Window -- ^ A window to share OpenGL contexts with
+                   -> IO Rez
+startupGLFWBackend ww wh ws mmon mwin = do
+    initd <- initGelatin
+    unless initd $ do putStrLn "could not initialize glfw"
+                      exitFailure
+    w  <- newWindow ww wh ws mmon mwin
+    sh <- loadShaders
+    return $ Rez sh w
 
 toPaths :: PathPrimitives Font -> [Path (V2 Float)]
 toPaths (Paths ps) = ps
@@ -57,7 +67,6 @@ instance Primitive (Stroked (PathPrimitives Font)) where
                 len = realToFrac $ length vs
             projectedPolylineRenderer win shader w f cp vs cs'
         return $ foldl appendRenderer emptyRenderer rs
-
 
 instance Primitive (FillPrimitives Font) where
     type PrimM (FillPrimitives Font) = IO
@@ -87,3 +96,27 @@ instance Primitive (FillPrimitives Font) where
             (c,f) <- filledTriangleRenderer win gsh ts fill
             return (c,\t -> stencilMask (f t) (f t))
         return $ foldl appendRenderer emptyRenderer rs
+
+instance Primitive (R2Primitives Font) where
+    type PrimM (R2Primitives Font) = IO
+    type PrimR (R2Primitives Font) = Rez
+    type PrimT (R2Primitives Font) = Transform
+    canAllocPrimitive _ _ = True
+    compilePrimitive rez (R2PathPrimitives sps) = compilePrimitive rez sps
+    compilePrimitive rez (R2FillPrimitives fps) = compilePrimitive rez fps
+
+deriving instance Generic FontStyle
+instance Hashable FontStyle
+deriving instance Generic FontDescriptor
+instance Hashable FontDescriptor
+
+instance Hashable Font where
+    hashWithSalt s = hashWithSalt s . descriptorOf
+
+instance Composite (Picture Font ()) [] IO Rez Transform where
+    composite = map (fmap Element) . pictureToR2Primitives
+
+instance FontClass Font where
+    stringBoundingBox font dpi px str = (V2 nx ny, V2 xx xy)
+        where BoundingBox nx ny xx xy _ =
+                TT.stringBoundingBox font dpi (PointSize px) str

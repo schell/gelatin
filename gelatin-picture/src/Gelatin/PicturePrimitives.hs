@@ -155,9 +155,6 @@ compilePrimitives p = compilePrimitives $ nextPicCmd p
 pictureToR2Primitives :: Picture f () -> [(Transform, R2Primitives f)]
 pictureToR2Primitives pic =
     runReader (compilePrimitives $ freePic pic) emptyCompileData
-
---instance Composite (Picture f ()) [] IO Rez Transform where
---    composite = pictureToR2Primitives
 --------------------------------------------------------------------------------
 -- Showing a picture as a string
 --------------------------------------------------------------------------------
