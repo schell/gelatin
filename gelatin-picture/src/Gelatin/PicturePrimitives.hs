@@ -1,13 +1,11 @@
 module Gelatin.PicturePrimitives where
 
-import Data.Renderable
 import Control.Arrow (second)
 import Control.Monad.Free
 import Control.Monad.Free.Church
 import Control.Monad.Reader
 import Gelatin.Core as Core
 import Gelatin.Picture
-import Linear
 
 --------------------------------------------------------------------------------
 -- Compiling pictures
@@ -19,6 +17,7 @@ nextPicCmd (Free (Blank n)) = n
 nextPicCmd (Free (Polyline _ n)) = n
 nextPicCmd (Free (Rectangle _ n)) = n
 nextPicCmd (Free (Curve _ _ _ n)) = n
+nextPicCmd (Free (Arc _ _ _ n)) = n
 nextPicCmd (Free (Ellipse _ n)) = n
 nextPicCmd (Free (Circle _ n)) = n
 nextPicCmd (Free (Letters _ _ n)) = n
@@ -52,6 +51,11 @@ compilePaths (Free (Curve a b c n)) = do
     t     <- asks cdTransform
     prims <- compilePaths n
     return $ (t, Paths [Path $ subdivideAdaptive 100 0 $ bez3 a b c]) : prims
+compilePaths (Free (Arc (V2 xr yr) start stop n)) = do
+    t     <- asks cdTransform
+    prims <- compilePaths n
+    let erc = concatMap (subdivideAdaptive4 100 0) $ Core.arc xr yr start stop
+    return $ (t, Paths [Path erc]) : prims
 compilePaths (Free (Ellipse (V2 x y) n)) = do
     t     <- asks cdTransform
     prims <- compilePaths n
@@ -96,11 +100,14 @@ compileFillPrims (Free (Polyline vs n)) = do
     return $ (t, FillPaths f [Path vs]) : prims
 compileFillPrims (Free (Rectangle sz n)) = do
     (t,f,prims) <- tfrmFillAndNext n
-    prims <- compileFillPrims n
     return $ (t, FillTriangles f $ sizeToTris $ Size sz) : prims
 compileFillPrims (Free (Curve a b c n)) = do
     (t,f,prims) <- tfrmFillAndNext n
     return $ (t, FillBeziers f [bez a b c]) : prims
+compileFillPrims (Free (Arc (V2 xr yr) start stop n)) = do
+    (t,f,prims) <- tfrmFillAndNext n
+    let erc = concatMap (subdivideAdaptive4 100 0) $ Core.arc xr yr start stop
+    return $ (t, FillPaths f [Path erc]) : prims
 compileFillPrims (Free (Ellipse (V2 x y) n)) = do
     (t,f,prims) <- tfrmFillAndNext n
     return $ (t, FillPaths f [Path $ bez4sToPath 100 0 $ Core.ellipse x y]) : prims
@@ -171,6 +178,7 @@ compileString (Free (Blank n)) = compileLine n "blank"
 compileString (Free (Polyline vs n)) = compileLine n $ "polyline " ++ show vs
 compileString (Free (Rectangle sz n)) = compileLine n $ "rectangle " ++ show sz
 compileString (Free (Curve a b c n)) = compileLine n $ unwords $ "curve" : map show [a,b,c]
+compileString (Free (Arc v a b n)) = compileLine n $ unwords $ "arc" : show v : map show [a,b]
 compileString (Free (Ellipse sz n)) = compileLine n $ "ellipse " ++ show sz
 compileString (Free (Circle u n)) = compileLine n $ "circle " ++ show u
 compileString (Free (Letters px s n)) =

@@ -6,21 +6,29 @@
 module Gelatin.GLFW (
     Rez(..),
     startupGLFWBackend,
-    module G
+    -- * Re-exports
+    module Picture,
+    module GL,
+    module GLFW,
+    module Fonty,
+    module Linear,
+    module Renderable
 ) where
 
-import Gelatin.Picture
-import Gelatin.PicturePrimitives
+import Gelatin.Picture as Picture
+import Gelatin.PicturePrimitives as Picture
 import Gelatin.GL.Renderer
 import Gelatin.GL.Shader
-import Gelatin.Core as G
 import Control.Monad
 import Control.Arrow (second)
-import Data.Renderable
+import Data.Renderable as Renderable
 import Data.Hashable
-import Graphics.Text.TrueType as TT
-import Graphics.UI.GLFW
-import Linear
+import Graphics.Text.TrueType as Fonty hiding (stringBoundingBox, _e)
+import qualified Graphics.Text.TrueType as TT
+import Graphics.UI.GLFW as GLFW hiding (init)
+import Graphics.GL.Types as GL
+import Graphics.GL.Core33 as GL
+import Linear hiding (rotate)
 import System.Exit
 import GHC.Generics
 
@@ -101,7 +109,8 @@ instance Primitive (R2Primitives Font) where
     type PrimM (R2Primitives Font) = IO
     type PrimR (R2Primitives Font) = Rez
     type PrimT (R2Primitives Font) = Transform
-    canAllocPrimitive _ _ = True
+    canAllocPrimitive rez (R2PathPrimitives sps) = canAllocPrimitive rez sps
+    canAllocPrimitive rez (R2FillPrimitives fps) = canAllocPrimitive rez fps
     compilePrimitive rez (R2PathPrimitives sps) = compilePrimitive rez sps
     compilePrimitive rez (R2FillPrimitives fps) = compilePrimitive rez fps
 
@@ -112,9 +121,6 @@ instance Hashable FontDescriptor
 
 instance Hashable Font where
     hashWithSalt s = hashWithSalt s . descriptorOf
-
-instance Composite (Picture Font ()) [] IO Rez Transform where
-    composite = map (fmap Element) . pictureToR2Primitives
 
 instance FontClass Font where
     stringBoundingBox font dpi px str = (V2 nx ny, V2 xx xy)

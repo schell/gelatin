@@ -4,39 +4,63 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
-module Gelatin.Picture where
+module Gelatin.Picture (
+    -- * Types
+    FontClass(..),
+    PictureCmd(..),
+    Picture,
+    -- * Creating pictures
+    blank,
+    line,
+    polyline,
+    rectangle,
+    curve,
+    arc,
+    ellipse,
+    circle,
+    letters,
+    withStroke,
+    withFill,
+    withTransform,
+    withFont,
+    move,
+    scale,
+    rotate,
+    -- * Querying pictures
+    pictureBounds,
+    pictureSize,
+    pictureOrigin,
+    -- * Compilation helpers
+    CompileData(..),
+    emptyCompileData,
+    freePic,
+    -- * Re-exports
+    module Core,
+    module Linear
+) where
 
 import Control.Monad.Free
 import Control.Monad.Free.Church
-import Control.Monad.Reader
-import Control.Arrow (second)
-import Gelatin.Core as Core
-import Linear
-import Data.Hashable
-import GHC.Generics
+import Gelatin.Core hiding (ellipse, arc)
+import qualified Gelatin.Core as Core
+import Linear hiding (rotate)
 
 class FontClass f where
     stringBoundingBox :: f -> Int -> Float -> String -> (V2 Float, V2 Float)
 
---type ControlPoint = V2 Float
-
---data PathCmd f where
---    CubicCurveTo :: ControlPoint -> ControlPoint -> V2 Float -> f -> PathCmd f
---    CurveTo :: ControlPoint -> V2 Float -> f -> PathCmd f
---    LineTo :: V2 Float -> f -> PathCmd f
---    MoveTo :: V2 Float -> f -> PathCmd f
---    ColorTo :: V4 Float -> f -> PathCmd f
 --------------------------------------------------------------------------------
 -- Picture
 --------------------------------------------------------------------------------
--- | Inspired by a language of pictures, from "Composing graphical user
--- interfaces in a purely functional language" Copyright 1998 by Sigbjørn Finne
+-- | API inspired by a language of pictures, from "Composing graphical user
+-- interfaces in a purely functional language" Copyright 1998 by Sigbjørn Finne.
+--
+-- Implementation inspired by Rasterific.
 data PictureCmd f n where
     Blank         :: n -> PictureCmd f n
     Polyline      :: [V2 Float] -> n -> PictureCmd f n
     Rectangle     :: V2 Float -> n -> PictureCmd f n
     Curve         :: V2 Float -> V2 Float -> V2 Float -> n -> PictureCmd f n
-    --Arc           :: V2 Float -> Float -> Float -> n PictureCmd f n
+    Arc           :: V2 Float -> Float -> Float -> n -> PictureCmd f n
     Ellipse       :: V2 Float -> n -> PictureCmd f n
     Circle        :: Float -> n -> PictureCmd f n
     Letters       :: Float -> String -> n -> PictureCmd f n
@@ -50,6 +74,7 @@ instance Functor (PictureCmd f) where
     fmap f (Polyline vs n) = Polyline vs $ f n
     fmap f (Rectangle v n) = Rectangle v $ f n
     fmap f (Curve a b c n) = Curve a b c $ f n
+    fmap f (Arc v a b n) = Arc v a b $ f n
     fmap f (Ellipse v n) = Ellipse v $ f n
     fmap f (Circle r n) = Circle r $ f n
     fmap f (Letters px s n) = Letters px s $ f n
@@ -95,6 +120,9 @@ rectangle sz = liftF $ Rectangle sz ()
 curve :: V2 Float -> V2 Float -> V2 Float -> Picture f ()
 curve a b c = liftF $ Curve a b c ()
 
+arc :: V2 Float -> Float -> Float -> Picture f ()
+arc sz start stop = liftF $ Arc sz start stop ()
+
 ellipse :: V2 Float -> Picture f ()
 ellipse sz = liftF $ Ellipse sz ()
 
@@ -127,7 +155,8 @@ rotate r = withTransform (Transform 0 1 r)
 --------------------------------------------------------------------------------
 -- Measuring pictures
 --------------------------------------------------------------------------------
-boundingBox :: FontClass f => CompileData f -> Free (PictureCmd f) () -> (V2 Float, V2 Float)
+boundingBox :: FontClass f
+            => CompileData f -> Free (PictureCmd f) () -> (V2 Float, V2 Float)
 boundingBox _ (Pure ()) = (0,0)
 boundingBox cd (Free (Blank n)) = boundingBox cd n
 boundingBox cd (Free (Polyline vs n)) =
@@ -142,6 +171,11 @@ boundingBox cd (Free (Rectangle v n)) =
 boundingBox cd (Free (Curve a b c n)) =
     let t = cdTransform cd
         vs = transform t $ subdivideAdaptive 100 0 $ bez3 a b c
+    in boundsBounds [polyBounds vs, boundingBox cd n]
+boundingBox cd (Free (Arc (V2 xr yr) start stop n)) =
+    let t = cdTransform cd
+        vs = transform t $ concatMap (subdivideAdaptive4 100 0) $
+                 Core.arc xr yr start stop
     in boundsBounds [polyBounds vs, boundingBox cd n]
 boundingBox cd (Free (Ellipse (V2 x y) n)) =
     let t = cdTransform cd

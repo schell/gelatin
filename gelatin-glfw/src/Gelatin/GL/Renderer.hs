@@ -50,7 +50,7 @@ module Gelatin.GL.Renderer (
 ) where
 
 import Gelatin.GL.Shader
-import Gelatin.Core
+import Gelatin.Picture
 import Linear
 import Graphics.Text.TrueType
 import Graphics.GL.Core33
@@ -137,7 +137,7 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
                                    -- no cap
                                    then ([V2 0 d, V2 0 (-d)],v1,v3n)
                                    -- cap
-                                   else let c = d *^ (signorm $ v2 - v1)
+                                   else let c = d *^ signorm (v2 - v1)
                                         in ([V2 (-d) d, V2 (-d) (-d)],v1 - c, v1 - 2*c)
 
         endCap = ([cap,cap], [c3,c3], uvs,[next,next],[v3n,v3n])
@@ -145,7 +145,7 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
                                    -- no cap
                                    then ([V2 totalLen d, V2 totalLen (-d)], v3, v2)
                                    -- cap
-                                   else let c = d *^ (signorm $ v3 - v3n)
+                                   else let c = d *^ signorm (v3 - v3n)
                                         in ([V2 totalEnd d, V2 totalEnd (-d)], v3 + c, v3 + 2*c)
 
         vcs  = zip3 verts colors seqLens :: [(V2 Float, V4 Float, Float)]
@@ -197,7 +197,7 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
                      drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
             c = do withArray bufs $ glDeleteBuffers 5
                    withArray [vao] $ glDeleteVertexArrays 1
-        return $ (c, r)
+        return (c, r)
     | otherwise = return emptyRenderer
 
 -- | Creates and returns a renderer that renders a given string of
@@ -211,13 +211,19 @@ filledTriangleRenderer win gsh ts fill = do
         Just (FillResultColor cs) -> colorRenderer win gsh GL_TRIANGLES vs cs
         Just (FillResultTexture tx uvs) -> do
             (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
-            let r' t = do glActiveTexture GL_TEXTURE0
-                          glBindTexture GL_TEXTURE_2D tx
-                          r t
-                          glBindTexture GL_TEXTURE_2D 0
-            return $ (c,r')
+            let r' t = bindTexAround tx $ r t
+            return (c, r')
         _ -> do putStrLn "Could not create a filledTriangleRenderer."
-                return $ (return (), const $ putStrLn "Non op renderer.")
+                return (return (), const $ putStrLn "Non op renderer.")
+
+-- | Binds the given texture to the zeroeth texture unit, runs the IO
+-- action and then unbinds the texture.
+bindTexAround :: GLuint -> IO () -> IO ()
+bindTexAround tx f = do
+    glActiveTexture GL_TEXTURE0
+    glBindTexture GL_TEXTURE_2D tx
+    f
+    glBindTexture GL_TEXTURE_2D 0
 
 -- | Applies a fill to a list of points to create a fill result. If the
 -- Fill is a texture then the texture's image will be loaded.
@@ -293,7 +299,7 @@ colorFontRenderer window gsh brs fstr clrf = do
 
     let s t  = stencilMask (fg t) (fg t)
         gs t = s t >> fb t
-    return $ (cg >> cb,gs)
+    return (cg >> cb,gs)
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
@@ -325,7 +331,7 @@ colorRenderer window gsh mode vs gs = do
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
-        return $ (cleanupFunction,renderFunction)
+        return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders a textured
 -- geometry using the texture bound to GL_TEXTURE0.
@@ -369,7 +375,7 @@ textureUnitRenderer (Just u) win gsh mode vs uvs = do
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
                 withArray [vao] $ glDeleteVertexArrays 1
-        return $ (cleanupFunction,renderFunction)
+        return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders the given colored beziers.
 colorBezRenderer :: Window -> BezShader -> [Bezier (V2 Float)]
@@ -406,7 +412,7 @@ colorBezRenderer window (BRS src) bs ts =
                 withUniform "projection" srcs $ setOrthoWindowProjection window
                 withUniform "modelview" srcs $ setModelview t
                 drawBuffer (shProgram src) vao GL_TRIANGLES num
-        return $ (cleanupFunction,renderFunction)
+        return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders the given textured beziers.
 textureBezUnitRenderer :: Maybe GLint -> Window -> BezShader
@@ -448,7 +454,7 @@ textureBezUnitRenderer (Just u) window (BRS src) bs ts =
                 withUniform "projection" srcs $ setOrthoWindowProjection window
                 withUniform "modelview" srcs $ setModelview t
                 drawBuffer (shProgram src) vao GL_TRIANGLES num
-        return $ (cleanupFunction,renderFunction)
+        return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders textured beziers using the
 -- texture bound to GL_TEXTURE0.
@@ -470,13 +476,10 @@ filledBezierRenderer win sh bs (FillTexture fp f) = do
     mtex <- loadImageAsTexture fp
     case mtex of
         Just tx -> do (c,r) <- textureBezRenderer win sh bs ts
-                      let r' t = do glActiveTexture GL_TEXTURE0
-                                    glBindTexture GL_TEXTURE_2D tx
-                                    r t
-                                    glBindTexture GL_TEXTURE_2D 0
-                      return $ (c,r')
+                      let r' t = bindTexAround tx $ r t
+                      return (c, r')
         Nothing -> do putStrLn "Could not create a filledBezRenderer."
-                      return $ (return (), const $ putStrLn "Non op renderer.")
+                      return (return (), const $ putStrLn "Non op renderer.")
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.
@@ -507,7 +510,7 @@ maskRenderer win (MRS src) mode vs uvs =
                     glUseProgram p
                     glUniform1i smp 1
                 drawBuffer (shProgram src) vao mode num
-        return $ (cleanup,render)
+        return (cleanup,render)
 
 -- | Creates a rendering that masks an IO () drawing computation with the alpha
 -- value of another.
@@ -528,7 +531,7 @@ alphaMask win mrs r2 r1 = do
                    glBindTexture GL_TEXTURE_2D 0
                    glActiveTexture GL_TEXTURE1
                    glBindTexture GL_TEXTURE_2D 0
-    return $ (c >> c', \t -> f' t >> f t >> f'' t)
+    return (c >> c', \t -> f' t >> f t >> f'' t)
 
 -- | Creates an IO () drawing computation that masks an IO () drawing
 -- computation with another using a stencil test.
