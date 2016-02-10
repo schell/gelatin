@@ -29,12 +29,13 @@ nextPicCmd (Free (WithFont _ _ n)) = n
 continuePaths :: Free (PictureCmd f) () -> Picture f ()
               -> Reader (CompileData f) [(Transform, PathPrimitives f)]
 continuePaths n p = do
-    prims <- compilePaths n
     paths <- compilePaths $ fromF p
+    prims <- compilePaths n
     return $ paths ++ prims
 
 -- Compiles a list of paths from a free picture command
-compilePaths :: Free (PictureCmd f) () -> Reader (CompileData f) [(Transform, PathPrimitives f)]
+compilePaths :: Free (PictureCmd f) () 
+             -> Reader (CompileData f) [(Transform, PathPrimitives f)]
 compilePaths (Pure ()) = return []
 compilePaths (Free (Blank n)) = ([] ++) <$> compilePaths n
 compilePaths (Free (Polyline vs n)) = do

@@ -26,6 +26,9 @@ instance Monoid Transform where
     mempty = Transform zero (V2 1 1) 0
     (Transform t1 s1 r1) `mappend` (Transform t2 s2 r2) = Transform (t1 + t2) (s1 * s2) (r1 + r2)
 
+invertTfrm :: Transform -> Transform
+invertTfrm (Transform v s r) = Transform (-1*v) ((1/) <$> s) (-1*r)
+
 promoteV2 :: Num a => V2 a -> V3 a
 promoteV2 (V2 x y) = V3 x y 0
 

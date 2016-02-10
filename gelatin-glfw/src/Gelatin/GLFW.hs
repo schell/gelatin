@@ -51,6 +51,10 @@ startupGLFWBackend ww wh ws mmon mwin = do
                       exitFailure
     w  <- newWindow ww wh ws mmon mwin
     sh <- loadShaders
+
+    glEnable GL_BLEND
+    glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+
     return $ Rez sh w
 
 toPaths :: PathPrimitives Font -> [Path (V2 Float)]
@@ -58,8 +62,8 @@ toPaths (Paths ps) = ps
 toPaths (PathText f px str) =
     let qs = fontCurves 72 f px str
         sub = subdivideAdaptive 100 0
-        mkPath = Path . cleanSeqDupes . concat . fmap sub
-        in concat $ fmap (fmap mkPath) qs
+        mkPath = Path . cleanSeqDupes . concatMap sub
+        in concatMap (fmap mkPath) qs
 
 instance Primitive (Stroked (PathPrimitives Font)) where
     type PrimM (Stroked (PathPrimitives Font)) = IO
