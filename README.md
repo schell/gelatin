@@ -1,3 +1,3 @@
 gelatin
 =======
-This is a collection of repos for real-time graphics using Haskell.
+This is a mega-repo for a real-time graphics renderer using Haskell.
