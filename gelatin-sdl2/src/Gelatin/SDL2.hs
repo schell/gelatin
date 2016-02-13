@@ -1,20 +1,20 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Gelatin.GLFW (
+module Gelatin.SDL2 (
     Rez(..),
     startupGLFWBackend,
     newWindow,
     -- * Re-exports
     module GL,
-    module GLFW,
+    module SDL,
 ) where
 
 import Gelatin.GL as GL
 import Control.Monad
 import Control.Arrow (second)
 import Data.Hashable
-import Graphics.UI.GLFW as GLFW
+import SDL as SDL
 import Linear hiding (rotate)
 import System.Exit
 import System.IO

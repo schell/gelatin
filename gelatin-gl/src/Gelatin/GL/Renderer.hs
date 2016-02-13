@@ -5,10 +5,7 @@
 module Gelatin.GL.Renderer (
     -- * Renderer
     GLRenderer,
-    -- * Initialization
-    initGelatin,
-    -- * Creating a window
-    newWindow,
+    Context(..),
     -- * Loading shaders
     loadShaders,
     loadGeomShader,
@@ -45,8 +42,7 @@ module Gelatin.GL.Renderer (
     -- * Utils
     toTexture,
     toTextureUnit,
-    clipTexture,
-    calculateDpi
+    clipTexture
 ) where
 
 import Gelatin.GL.Shader
@@ -55,7 +51,6 @@ import Linear
 import Graphics.Text.TrueType
 import Graphics.GL.Core33
 import Graphics.GL.Types
-import Graphics.UI.GLFW as GLFW hiding (Image(..))
 import Codec.Picture.Types
 import Codec.Picture (readImage)
 import Foreign.Marshal.Array
@@ -78,43 +73,17 @@ import GHC.Stack
 
 type GLRenderer = Renderer IO Transform
 
--- | Initializes the system. This must be called before creating a window.
--- Returns True when initialization was successful.
-initGelatin :: IO Bool
-initGelatin = do
-    setErrorCallback $ Just $ \_ -> hPutStrLn stderr
-    GLFW.init
-
--- | Creates a window. This can only be called after initializing with
--- `initGelatin`.
-newWindow :: Int -- ^ Width
-          -> Int -- ^ Height
-          -> String -- ^ Title
-          -> Maybe Monitor -- ^ The monitor to fullscreen into.
-          -> Maybe Window -- ^ A window to share OpenGL contexts with.
-          -> IO Window
-newWindow ww wh ws mmon mwin = do
-    defaultWindowHints
-    windowHint $ WindowHint'OpenGLDebugContext True
-    windowHint $ WindowHint'OpenGLProfile OpenGLProfile'Core
-    windowHint $ WindowHint'OpenGLForwardCompat True
-    windowHint $ WindowHint'ContextVersionMajor 3
-    windowHint $ WindowHint'ContextVersionMinor 3
-    windowHint $ WindowHint'DepthBits 16
-    mwin' <- createWindow ww wh ws mmon mwin
-    makeContextCurrent mwin'
-    case mwin' of
-        Nothing  -> do putStrLn "could not create window"
-                       exitFailure
-        Just win -> return win
-
+data Context = Context { ctxFramebufferSize :: IO (Int,Int) 
+                       , ctxWindowSize :: IO (Int,Int)
+                       , ctxScreenDpi :: IO Int
+                       }
 
 --------------------------------------------------------------------------------
 -- GLRenderers
 --------------------------------------------------------------------------------
 -- | Creates and returns a renderer that renders an expanded 2d polyline
 -- projected in 3d space.
-projectedPolylineRenderer :: Window -> ProjectedPolylineShader -> Float
+projectedPolylineRenderer :: Context -> ProjectedPolylineShader -> Float
                            -> Float -> (LineCap,LineCap) -> [V2 Float]
                            -> [V4 Float] -> IO GLRenderer
 projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
@@ -177,7 +146,7 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
         bufferAttrib prevLoc 2 pbuf ps
         glBindVertexArray 0
         let num = fromIntegral $ length vs_
-            r t = do withUniform "projection" srcs $ setOrthoWindowProjection win
+            r t = do withUniform "projection" srcs $ setOrthoContextProjection win
                      withUniform "modelview" srcs $ setModelview t
                      withUniform "thickness" srcs $ \p u -> do
                          glUseProgram p
@@ -202,7 +171,7 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
 
 -- | Creates and returns a renderer that renders a given string of
 -- triangles with the given filling.
-filledTriangleRenderer :: Window -> GeomShader -> [Triangle (V2 Float)]
+filledTriangleRenderer :: Context -> GeomShader -> [Triangle (V2 Float)]
                        -> Fill -> IO GLRenderer
 filledTriangleRenderer win gsh ts fill = do
     let vs = trisToComp ts
@@ -285,10 +254,10 @@ onContourPoints (Bezier _ a _ c :bs) = [a,c] ++ onContourPoints bs
 -- | TODO: textureFontRenderer and then fontRenderer.
 
 -- | Creates and returns a renderer that renders a given FontString.
-colorFontRenderer :: Window -> GeomShader -> BezShader
+colorFontRenderer :: Context -> GeomShader -> BezShader
                   -> FontString -> (V2 Float -> V4 Float) -> IO GLRenderer
 colorFontRenderer window gsh brs fstr clrf = do
-    dpi <- calculateDpi
+    dpi <- ctxScreenDpi window
     let (bs,ts) = fontGeom dpi fstr
         vs = concatMap (\(Triangle a b c) -> [a,b,c]) ts
         cs = map clrf vs
@@ -303,7 +272,7 @@ colorFontRenderer window gsh brs fstr clrf = do
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
-colorRenderer :: Window -> GeomShader -> GLuint -> [V2 Float]
+colorRenderer :: Context -> GeomShader -> GLuint -> [V2 Float]
               -> [V4 Float] -> IO GLRenderer
 colorRenderer window gsh mode vs gs = do
     let (GRS src) = gsh
@@ -325,7 +294,7 @@ colorRenderer window gsh mode vs gs = do
                 withUniform "hasUV" srcs $ \p huv -> do
                     glUseProgram p
                     glUniform1i huv 0
-                withUniform "projection" srcs $ setOrthoWindowProjection window
+                withUniform "projection" srcs $ setOrthoContextProjection window
                 withUniform "modelview" srcs $ setModelview t
                 drawBuffer (shProgram src) vao mode num
             cleanupFunction = do
@@ -335,13 +304,13 @@ colorRenderer window gsh mode vs gs = do
 
 -- | Creates and returns a renderer that renders a textured
 -- geometry using the texture bound to GL_TEXTURE0.
-textureRenderer :: Window -> GeomShader -> GLuint -> [V2 Float]
+textureRenderer :: Context -> GeomShader -> GLuint -> [V2 Float]
                 -> [V2 Float] -> IO GLRenderer
 textureRenderer = textureUnitRenderer Nothing
 
 -- | Creates and returns a renderer that renders the given textured
 -- geometry using the specified texture binding.
-textureUnitRenderer :: Maybe GLint -> Window -> GeomShader -> GLuint
+textureUnitRenderer :: Maybe GLint -> Context -> GeomShader -> GLuint
                     -> [V2 Float] -> [V2 Float] -> IO GLRenderer
 textureUnitRenderer Nothing w gs md vs uvs =
     textureUnitRenderer (Just 0) w gs md vs uvs
@@ -369,7 +338,7 @@ textureUnitRenderer (Just u) win gsh mode vs uvs = do
                 withUniform "sampler" srcs $ \p smp -> do
                     glUseProgram p
                     glUniform1i smp u
-                withUniform "projection" srcs $ setOrthoWindowProjection win
+                withUniform "projection" srcs $ setOrthoContextProjection win
                 withUniform "modelview" srcs $ setModelview tfrm
                 drawBuffer (shProgram src) vao mode num
             cleanupFunction = do
@@ -378,7 +347,7 @@ textureUnitRenderer (Just u) win gsh mode vs uvs = do
         return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders the given colored beziers.
-colorBezRenderer :: Window -> BezShader -> [Bezier (V2 Float)]
+colorBezRenderer :: Context -> BezShader -> [Bezier (V2 Float)]
                  -> [Triangle (V4 Float)] -> IO GLRenderer
 colorBezRenderer window (BRS src) bs ts =
     withVAO $ \vao -> withBuffers 3 $ \[pbuf, tbuf, cbuf] -> do
@@ -409,13 +378,13 @@ colorBezRenderer window (BRS src) bs ts =
                 withUniform "hasUV" srcs $ \p huv -> do
                     glUseProgram p
                     glUniform1i huv 0
-                withUniform "projection" srcs $ setOrthoWindowProjection window
+                withUniform "projection" srcs $ setOrthoContextProjection window
                 withUniform "modelview" srcs $ setModelview t
                 drawBuffer (shProgram src) vao GL_TRIANGLES num
         return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders the given textured beziers.
-textureBezUnitRenderer :: Maybe GLint -> Window -> BezShader
+textureBezUnitRenderer :: Maybe GLint -> Context -> BezShader
                         -> [Bezier (V2 Float)] -> [Triangle (V2 Float)] -> IO GLRenderer
 textureBezUnitRenderer Nothing window sh bs ts =
     textureBezUnitRenderer (Just 0) window sh bs ts
@@ -451,20 +420,20 @@ textureBezUnitRenderer (Just u) window (BRS src) bs ts =
                 withUniform "sampler" srcs $ \p smp -> do
                     glUseProgram p
                     glUniform1i smp u
-                withUniform "projection" srcs $ setOrthoWindowProjection window
+                withUniform "projection" srcs $ setOrthoContextProjection window
                 withUniform "modelview" srcs $ setModelview t
                 drawBuffer (shProgram src) vao GL_TRIANGLES num
         return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders textured beziers using the
 -- texture bound to GL_TEXTURE0.
-textureBezRenderer :: Window -> BezShader -> [Bezier (V2 Float)]
+textureBezRenderer :: Context -> BezShader -> [Bezier (V2 Float)]
                     -> [Triangle (V2 Float)] -> IO GLRenderer
 textureBezRenderer = textureBezUnitRenderer Nothing
 
 -- | Creates and returns a renderer that renders a given string of
 -- triangles with the given filling.
-filledBezierRenderer :: Window -> BezShader -> [Bezier (V2 Float)] -> Fill
+filledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)] -> Fill
                       -> IO GLRenderer
 filledBezierRenderer win sh bs (FillColor f) = do
     let ts = map toTri bs
@@ -483,7 +452,7 @@ filledBezierRenderer win sh bs (FillTexture fp f) = do
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.
-maskRenderer :: Window -> MaskShader -> GLuint -> [V2 Float]
+maskRenderer :: Context -> MaskShader -> GLuint -> [V2 Float]
              -> [V2 Float] -> IO GLRenderer
 maskRenderer win (MRS src) mode vs uvs =
     withVAO $ \vao -> withBuffers 2 $ \[pbuf, uvbuf] -> do
@@ -501,7 +470,7 @@ maskRenderer win (MRS src) mode vs uvs =
                          withArray [vao] $ glDeleteVertexArrays 1
             num = fromIntegral $ length vs
             render t = do
-                withUniform "projection" [src] $ setOrthoWindowProjection win
+                withUniform "projection" [src] $ setOrthoContextProjection win
                 withUniform "modelview" [src] $ setModelview t
                 withUniform "mainTex" [src] $ \p smp -> do
                     glUseProgram p
@@ -514,11 +483,11 @@ maskRenderer win (MRS src) mode vs uvs =
 
 -- | Creates a rendering that masks an IO () drawing computation with the alpha
 -- value of another.
-alphaMask :: Window -> MaskShader -> IO () -> IO () -> IO GLRenderer
+alphaMask :: Context -> MaskShader -> IO () -> IO () -> IO GLRenderer
 alphaMask win mrs r2 r1 = do
     mainTex <- toTextureUnit (Just GL_TEXTURE0) win r2
     maskTex <- toTextureUnit (Just GL_TEXTURE1) win r1
-    (w,h)   <- getWindowSize win
+    (w,h)   <- ctxWindowSize win
     let vs = map (fmap fromIntegral) [V2 0 0, V2 w 0, V2 w h, V2 0 h]
         uvs = [V2 0 1, V2 1 1, V2 1 0, V2 0 0]
     (c,f) <- maskRenderer win mrs GL_TRIANGLE_FAN vs uvs
@@ -569,9 +538,9 @@ withUniform :: String -> [Shader] -> (GLuint -> GLint -> IO ()) -> IO ()
 withUniform name srcs f = mapM_ update srcs
     where update (Shader p ls) = forM_ (lookup name ls) (f p)
 
-setOrthoWindowProjection :: Window -> GLuint -> GLint -> IO ()
-setOrthoWindowProjection window program pju = do
-    pj <- orthoWindowProjection window
+setOrthoContextProjection :: Context -> GLuint -> GLint -> IO ()
+setOrthoContextProjection window program pju = do
+    pj <- orthoContextProjection window
     glUseProgram program
     with pj $ glUniformMatrix4fv pju 1 GL_TRUE . castPtr
 
@@ -585,9 +554,9 @@ setModelview (Transform (V2 x y) (V2 w h) r) program uniform = do
     glUseProgram program
     with mv $ glUniformMatrix4fv uniform 1 GL_TRUE . castPtr
 
-orthoWindowProjection :: Window -> IO (M44 GLfloat)
-orthoWindowProjection window = do
-    (ww, wh) <- getWindowSize window
+orthoContextProjection :: Context -> IO (M44 GLfloat)
+orthoContextProjection window = do
+    (ww, wh) <- ctxWindowSize window
     let (hw,hh) = (fromIntegral ww, fromIntegral wh)
     return $ ortho 0 hw hh 0 0 1
 --------------------------------------------------------------------------------
@@ -699,10 +668,10 @@ loadJuicy (ImageCMYK8 i) = loadJuicy $ ImageRGB8 $ convertImage i
 loadJuicy (ImageCMYK16 i) = loadJuicy $ ImageRGB16 $ convertImage i
 
 
-toTexture :: Window -> IO () -> IO GLuint
+toTexture :: Context -> IO () -> IO GLuint
 toTexture = toTextureUnit Nothing
 
-toTextureUnit :: Maybe GLuint -> Window -> IO () -> IO GLuint
+toTextureUnit :: Maybe GLuint -> Context -> IO () -> IO GLuint
 toTextureUnit Nothing win r = toTextureUnit (Just GL_TEXTURE0) win r
 toTextureUnit (Just u) win r = do
     [fb] <- allocaArray 1 $ \ptr -> do
@@ -715,7 +684,7 @@ toTextureUnit (Just u) win r = do
         peekArray 1 ptr
     glActiveTexture u
     glBindTexture GL_TEXTURE_2D t
-    (w,h) <- getWindowSize win
+    (w,h) <- ctxWindowSize win
     let [w',h'] = map fromIntegral [w,h]
     glTexImage2D GL_TEXTURE_2D
                  0
@@ -737,7 +706,7 @@ toTextureUnit (Just u) win r = do
     then putStrLn "incomplete framebuffer!"
     else do glClearColor 0 0 0 0
             glClear GL_COLOR_BUFFER_BIT
-            --ww <- (fromIntegral . fst) <$> getWindowSize win
+            --ww <- (fromIntegral . fst) <$> ctxWindowSize win
 
             --let s = floor (fbw/ww :: Double)
             --print s
@@ -745,7 +714,7 @@ toTextureUnit (Just u) win r = do
             r
             glBindFramebuffer GL_FRAMEBUFFER 0
             with fb $ glDeleteFramebuffers 1
-            (fbw, fbh) <- getFramebufferSize win
+            (fbw, fbh) <- ctxFramebufferSize win
             glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
     return t
 
@@ -803,25 +772,6 @@ clipTexture rtex ((V2 x1 y1), (V2 x2 y2)) = do
     withArray [fbread,fbwrite] $ glDeleteFramebuffers 2
     glBindTexture GL_TEXTURE_2D 0
     return wtex
-
-calculateDpi :: IO Dpi
-calculateDpi = do
-    mMonitor <- getPrimaryMonitor
-
-    -- Calculate the dpi of the primary monitor.
-    case mMonitor of
-        -- I've choosen 128 as the default DPI because of my macbook 15"
-        Nothing -> return 128
-        Just m  -> do (w, h) <- getMonitorPhysicalSize m
-                      mvmode <- getVideoMode m
-                      case mvmode of
-                          Nothing -> return 128
-                          Just (VideoMode vw vh _ _ _ _) -> do
-                              let mm2 = fromIntegral $ w*h :: Double
-                                  px  = sqrt $ (fromIntegral vw :: Double)*(fromIntegral vh)
-                                  inches = sqrt $ mm2 / (25.4 * 25.4)
-                              let dpi = floor $ px / inches
-                              return dpi
 --------------------------------------------------------------------------------
 -- Buffering, Vertex Array Objects, Uniforms, etc.
 --------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 -- The name of the package.
-name:                gelatin-glfw
+name:                gelatin-sdl2
 
 -- The package version.  See the Haskell package versioning policy (PVP)
 -- for standards guiding when and how versions should be incremented.
@@ -13,14 +13,12 @@ name:                gelatin-glfw
 version:             0.0.0.1
 
 -- A short (one-line) description of the package.
-synopsis:            A GLFW backend for the gelatin-picture graphics DSL.
+synopsis:            A SDL2 backend for the gelatin-picture graphics DSL.
 
 -- A longer description of the package.
-description:         Using GLFW this package provides a backend to
+description:         Using SDL2 this package provides a backend to
                      gelatin-picture, a DSL for decribing two dimensional
-                     pictures. For writing full blown graphical applications
-                     please see jello-glfw.
-
+                     pictures.
 -- URL for the project homepage or repository.
 homepage:            https://github.com/schell/gelatin
 
@@ -50,7 +48,7 @@ cabal-version:       >=1.10
 
 library
   -- Modules exported by the library.
-  exposed-modules:     Gelatin.GLFW
+  exposed-modules:     Gelatin.SDL2
 
   -- Modules included in this library but not exported.
   -- other-modules:
@@ -61,7 +59,7 @@ library
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.8 && <4.9,
                        linear >= 1.20 && < 1.21,
-                       GLFW-b >= 1.4 && < 1.5,
+                       sdl2 >= 2.1 && < 2.2,
                        gelatin-gl >= 0.0 && < 0.1,
                        bytestring >= 0.10 && < 0.11,
                        vector >= 0.11 && < 0.12,

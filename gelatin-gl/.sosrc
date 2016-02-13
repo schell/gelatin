@@ -1,0 +1,6 @@
+- patterns:
+  - .*\.hs$
+  - stack.yaml
+  commands:
+  - stack build
+  - stack exec hlint \0

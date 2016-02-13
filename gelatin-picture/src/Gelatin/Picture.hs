@@ -51,7 +51,7 @@ class FontClass f where
 --------------------------------------------------------------------------------
 -- Picture
 --------------------------------------------------------------------------------
--- | API inspired by a language of pictures, from "Composing graphical user
+-- | EDSL inspired by a language of pictures, from "Composing graphical user
 -- interfaces in a purely functional language" Copyright 1998 by Sigbjørn Finne.
 --
 -- Implementation inspired by Rasterific.
