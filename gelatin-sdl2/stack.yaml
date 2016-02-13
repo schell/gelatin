@@ -11,5 +11,6 @@ packages:
 - location:
     git: https://github.com/schell/FontyFruity
     commit: 99c143ebb569c286aa5252587923f8c34423e969
-extra-deps: []
+extra-deps:
+- sdl2-2.1.1
 resolver: lts-5.2

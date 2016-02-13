@@ -2,89 +2,47 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Gelatin.SDL2 (
-    Rez(..),
-    startupGLFWBackend,
-    newWindow,
     -- * Re-exports
     module GL,
-    module SDL,
+    module SDL
 ) where
 
 import Gelatin.GL as GL
 import Control.Monad
 import Control.Arrow (second)
 import Data.Hashable
-import SDL as SDL
+import Data.Text as T
+import SDL hiding (glBindTexture,glUnbindTexture,Rectangle,Renderer)
 import Linear hiding (rotate)
 import System.Exit
 import System.IO
 import GHC.Generics
 
--- | Creates a window. This can only be called after initializing with
--- `initGelatin`.
-newWindow :: Int -- ^ Width
-          -> Int -- ^ Height
-          -> String -- ^ Title
-          -> Maybe Monitor -- ^ The monitor to fullscreen into.
-          -> Maybe Window -- ^ A window to share OpenGL contexts with.
-          -> IO Window
-newWindow ww wh ws mmon mwin = do
-    defaultWindowHints
-    windowHint $ WindowHint'OpenGLDebugContext True
-    windowHint $ WindowHint'OpenGLProfile OpenGLProfile'Core
-    windowHint $ WindowHint'OpenGLForwardCompat True
-    windowHint $ WindowHint'ContextVersionMajor 3
-    windowHint $ WindowHint'ContextVersionMinor 3
-    windowHint $ WindowHint'DepthBits 16
-    mwin' <- createWindow ww wh ws mmon mwin
-    makeContextCurrent mwin'
-    case mwin' of
-        Nothing  -> do putStrLn "could not create window"
-                       exitFailure
-        Just win -> return win
+startupSDL2Backend :: Int -> Int -> String -> IO (Rez, Window)
+startupSDL2Backend ww wh ws = do
+    initializeAll
 
-calculateDpi :: Window -> IO Dpi
-calculateDpi win = do
-    mMonitor <- getPrimaryMonitor
-    -- Calculate the dpi of the primary monitor.
-    case mMonitor of
-        -- I've choosen 128 as the default DPI because of my macbook 15"
-        --   -Schell
-        Nothing -> return 128
-        Just m  -> do (w, h) <- getMonitorPhysicalSize m
-                      mvmode <- getVideoMode m
-                      case mvmode of
-                          Nothing -> return 128
-                          Just (VideoMode vw vh _ _ _ _) -> do
-                              let mm2 = fromIntegral $ w*h :: Double
-                                  px  = sqrt $ (fromIntegral vw :: Double) 
-                                               * fromIntegral vh
-                                  inches = sqrt $ mm2 / (25.4 * 25.4)
-                              let dpi = floor $ px / inches
-                              return dpi
+    let openGL = defaultOpenGL{ glProfile = Compatibility Normal 3 3 
+                              }
+        window = defaultWindow{ windowInitialSize = V2 (fromIntegral ww) 
+                                                       (fromIntegral wh)
+                              , windowOpenGL = Just openGL
+                              , windowResizable = True
+                              }
+    w <- createWindow (T.pack ws) window
 
--- | Completes all initialization, creates a new window and returns
--- the resource record and the new window. If any part of the process fails the 
--- program will exit with failure.
-startupGLFWBackend :: Int -- ^ Window width
-                   -> Int -- ^ Window height
-                   -> String -- ^ Window title
-                   -> Maybe Monitor -- ^ The monitor to fullscreen into
-                   -> Maybe Window -- ^ A window to share OpenGL contexts with
-                   -> IO (Rez, Window)
-startupGLFWBackend ww wh ws mmon mwin = do
-    setErrorCallback $ Just $ \_ -> hPutStrLn stderr
-    initd <- GLFW.init
-    unless initd $ do putStrLn "could not initialize glfw"
-                      exitFailure
-    w  <- newWindow ww wh ws mmon mwin
+    glctx <- glCreateContext w
+
     sh <- loadShaders
 
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
-    let ctx = Context { ctxFramebufferSize = getFramebufferSize w
-                      , ctxWindowSize = getWindowSize w
-                      , ctxScreenDpi = calculateDpi w
+    let size =  do V2 x y <- get $ windowSize w 
+                   return (fromIntegral x, fromIntegral y)
+
+        ctx = Context { ctxFramebufferSize = size
+                      , ctxScreenDpi = return 128
+                      , ctxWindowSize = size                      
                       }
     return (Rez sh ctx, w)
