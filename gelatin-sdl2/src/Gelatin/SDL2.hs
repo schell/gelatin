@@ -4,7 +4,8 @@
 module Gelatin.SDL2 (
     -- * Re-exports
     module GL,
-    module SDL
+    module SDL,
+    startupSDL2Backend
 ) where
 
 import Gelatin.GL as GL
@@ -22,7 +23,7 @@ startupSDL2Backend :: Int -> Int -> String -> IO (Rez, Window)
 startupSDL2Backend ww wh ws = do
     initializeAll
 
-    let openGL = defaultOpenGL{ glProfile = Compatibility Normal 3 3 
+    let openGL = defaultOpenGL{ glProfile = Core Debug 3 3 
                               }
         window = defaultWindow{ windowInitialSize = V2 (fromIntegral ww) 
                                                        (fromIntegral wh)
