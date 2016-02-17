@@ -66,9 +66,9 @@ instance Primitive (FillPrimitives Font) where
         | FillColor f <- fill = do
             let gsh = shGeometry sh
                 bsh = shBezier sh
-            colorFontRenderer win gsh bsh (FontString font px (0,0) str) f
+            colorFontRenderer win gsh bsh (FontString font px (0,0) str) $ const f
         -- TODO: FillText with texture fill
-        | otherwise = return (return (), const $ return ())
+        -- | otherwise = return (return (), const $ return ())
     compilePrimitive (Rez sh win) (FillBeziers fill bs) = do
         let bsh = shBezier sh
         filledBezierRenderer win bsh bs fill

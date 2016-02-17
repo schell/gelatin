@@ -101,7 +101,7 @@ data CompileData f = CompileData { cdFont :: Maybe f
                                  }
 
 emptyCompileData :: CompileData f
-emptyCompileData = CompileData Nothing mempty $ FillColor $ const 0
+emptyCompileData = CompileData Nothing mempty $ FillColor 0 
 --------------------------------------------------------------------------------
 -- Creating Pictures
 --------------------------------------------------------------------------------

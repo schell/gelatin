@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Gelatin.Core.Primitives where
 
 import Gelatin.Core.Bezier
@@ -48,20 +49,18 @@ fillPrimsPoints (FillTriangles _ ts) = [trisToComp ts]
 fillPrimsPoints (FillPaths _ ps) = map unPath ps
 fillPrimsPoints _ = []
 
+instance Hashable Fill where
+    hashWithSalt s (FillColor c) = s `hashWithSalt` "FillColor" `hashWithSalt` c
+
 instance Hashable f => Hashable (FillPrimitives f) where
     hashWithSalt s (FillText f fd px str) =
-            s `hashWithSalt` show f `hashWithSalt` fd
+            s `hashWithSalt` f `hashWithSalt` fd
                 `hashWithSalt` px `hashWithSalt` str
     hashWithSalt s fp
         | FillColor f <- fillPrimsFill fp =
             s `hashWithSalt` fillPrimsString fp
-                `hashWithSalt` "FillColor"
-                    `hashWithSalt` map (map f) (fillPrimsPoints fp)
-        | FillTexture p f <- fillPrimsFill fp =
-            s `hashWithSalt` fillPrimsString fp
-                `hashWithSalt` p
-                    `hashWithSalt` p
-                        `hashWithSalt` map (map f) (fillPrimsPoints fp)
+                `hashWithSalt` f 
+                    `hashWithSalt` (fillPrimsPoints fp)
         | otherwise = s
 
 path2ConcavePoly :: Path a -> [Triangle a]

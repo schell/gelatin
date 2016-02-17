@@ -173,17 +173,18 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
 -- triangles with the given filling.
 filledTriangleRenderer :: Context -> GeomShader -> [Triangle (V2 Float)]
                        -> Fill -> IO GLRenderer
-filledTriangleRenderer win gsh ts fill = do
+filledTriangleRenderer win gsh ts (FillColor color) = do
     let vs = trisToComp ts
-    mfr <- getFillResult fill vs
-    case mfr of
-        Just (FillResultColor cs) -> colorRenderer win gsh GL_TRIANGLES vs cs
-        Just (FillResultTexture tx uvs) -> do
-            (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
-            let r' t = bindTexAround tx $ r t
-            return (c, r')
-        _ -> do putStrLn "Could not create a filledTriangleRenderer."
-                return (return (), const $ putStrLn "Non op renderer.")
+    colorRenderer win gsh GL_TRIANGLES vs $ take (length vs) $ cycle [color]
+    --mfr <- getFillResult fill vs
+    --case mfr of
+    --    Just (FillResultColor cs) -> colorRenderer win gsh GL_TRIANGLES vs cs
+    --    Just (FillResultTexture tx uvs) -> do
+    --        (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
+    --        let r' t = bindTexAround tx $ r t
+    --        return (c, r')
+    --    _ -> do putStrLn "Could not create a filledTriangleRenderer."
+    --            return (return (), const $ putStrLn "Non op renderer.")
 
 -- | Binds the given texture to the zeroeth texture unit, runs the IO
 -- action and then unbinds the texture.
@@ -196,9 +197,9 @@ bindTexAround tx f = do
 
 -- | Applies a fill to a list of points to create a fill result. If the
 -- Fill is a texture then the texture's image will be loaded.
-getFillResult :: Fill -> [V2 Float] -> IO (Maybe (FillResult GLuint))
-getFillResult (FillColor f) vs = return $ Just $ FillResultColor $ map f vs
-getFillResult (FillTexture fp f) vs = do
+getFillResult :: Gradient -> [V2 Float] -> IO (Maybe (FillResult GLuint))
+getFillResult (GradColor f) vs = return $ Just $ FillResultColor $ map f vs
+getFillResult (GradTexture fp f) vs = do
     mtex <- loadImageAsTexture fp
     return $ case mtex of
         Nothing  -> Nothing
@@ -437,18 +438,18 @@ filledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)] -> Fill
                       -> IO GLRenderer
 filledBezierRenderer win sh bs (FillColor f) = do
     let ts = map toTri bs
-        toTri (Bezier _ a b c) = f <$> Triangle a b c
+        toTri (Bezier _ a b c) = const f <$> Triangle a b c
     colorBezRenderer win sh bs ts
-filledBezierRenderer win sh bs (FillTexture fp f) = do
-    let ts = map toTri bs
-        toTri (Bezier _ a b c) = f <$> Triangle a b c
-    mtex <- loadImageAsTexture fp
-    case mtex of
-        Just tx -> do (c,r) <- textureBezRenderer win sh bs ts
-                      let r' t = bindTexAround tx $ r t
-                      return (c, r')
-        Nothing -> do putStrLn "Could not create a filledBezRenderer."
-                      return (return (), const $ putStrLn "Non op renderer.")
+--filledBezierRenderer win sh bs (FillTexture fp f) = do
+--    let ts = map toTri bs
+--        toTri (Bezier _ a b c) = f <$> Triangle a b c
+--    mtex <- loadImageAsTexture fp
+--    case mtex of
+--        Just tx -> do (c,r) <- textureBezRenderer win sh bs ts
+--                      let r' t = bindTexAround tx $ r t
+--                      return (c, r')
+--        Nothing -> do putStrLn "Could not create a filledBezRenderer."
+--                      return (return (), const $ putStrLn "Non op renderer.")
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.

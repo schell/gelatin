@@ -124,9 +124,8 @@ compileFillPrims (Free (Letters px s n)) = do
     return $ ps ++ prims
 compileFillPrims (Free (WithStroke _ p n)) =
     (++) <$> compileFillPrims (fromF p) <*> compileFillPrims n
-compileFillPrims (Free (WithFill f p n)) = do
-    fs <- local (\cd -> cd{cdFill = f}) $ compileFillPrims $ fromF p
-    (fs ++) <$> compileFillPrims n
+compileFillPrims (Free (WithFill _ p n)) = do
+    (++) <$> compileFillPrims (fromF p) <*> compileFillPrims n
 compileFillPrims (Free (WithTransform t p n)) = do
     t'    <- asks cdTransform
     prims <- local (\cd -> cd{cdTransform = t' `mappend` t}) (compileFillPrims $ fromF p)
