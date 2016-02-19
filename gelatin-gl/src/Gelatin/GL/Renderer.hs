@@ -33,6 +33,7 @@ module Gelatin.GL.Renderer (
     FontString(..),
     colorFontRenderer,
     fontCurves,
+    fontGeom,
     -- * Masking
     maskRenderer,
     stencilMask,
@@ -173,9 +174,12 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
 -- triangles with the given filling.
 filledTriangleRenderer :: Context -> GeomShader -> [Triangle (V2 Float)]
                        -> Fill -> IO GLRenderer
-filledTriangleRenderer win gsh ts (FillColor color) = do
+filledTriangleRenderer win gsh ts fill = do
     let vs = trisToComp ts
-    colorRenderer win gsh GL_TRIANGLES vs $ take (length vs) $ cycle [color]
+        colors = if null (fillColors fill) 
+                 then [fillColor fill] 
+                 else fillColors fill
+    colorRenderer win gsh GL_TRIANGLES vs $ take (length vs) $ cycle colors 
     --mfr <- getFillResult fill vs
     --case mfr of
     --    Just (FillResultColor cs) -> colorRenderer win gsh GL_TRIANGLES vs cs
@@ -197,13 +201,13 @@ bindTexAround tx f = do
 
 -- | Applies a fill to a list of points to create a fill result. If the
 -- Fill is a texture then the texture's image will be loaded.
-getFillResult :: Gradient -> [V2 Float] -> IO (Maybe (FillResult GLuint))
-getFillResult (GradColor f) vs = return $ Just $ FillResultColor $ map f vs
-getFillResult (GradTexture fp f) vs = do
-    mtex <- loadImageAsTexture fp
-    return $ case mtex of
-        Nothing  -> Nothing
-        Just tex -> Just $ FillResultTexture tex $ map f vs
+--getFillResult :: Gradient -> [V2 Float] -> IO (Maybe (FillResult GLuint))
+--getFillResult (GradColor f) vs = return $ Just $ FillResultColor $ map f vs
+--getFillResult (GradTexture fp f) vs = do
+--    mtex <- loadImageAsTexture fp
+--    return $ case mtex of
+--        Nothing  -> Nothing
+--        Just tex -> Just $ FillResultTexture tex $ map f vs
 --------------------------------------------------------------------------------
 -- Font decomposition into triangles and beziers
 --------------------------------------------------------------------------------
@@ -216,16 +220,16 @@ type Contour = [Bezier (V2 Float)] -- Beziers
 type CharacterOutline = [Contour]
 type StringOutline = [CharacterOutline]
 
-fontGeom :: Dpi -> FontString -> ([Bezier (V2 Float)], [Triangle (V2 Float)])
-fontGeom dpi (FontString font px offset str) =
+fontGeom :: Font -> Int -> Float -> String -> ([Bezier (V2 Float)], [Triangle (V2 Float)])
+fontGeom font dpi px str =
     let sz  = pixelSizeInPointAtDpi px dpi
-        cs  = getStringCurveAtPoint dpi offset [(font, sz, str)]
+        cs  = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
         bs  = beziers cs
         ts  = concatMap (concatMap (concaveTriangles . onContourPoints)) bs
     in (concat $ concat bs,ts)
 
-fontCurves :: Dpi -> Font -> Float -> String -> [[[QuadraticBezier (V2 Float)]]]
-fontCurves dpi font px str =
+fontCurves :: Font -> Int -> Float -> String -> [[[QuadraticBezier (V2 Float)]]]
+fontCurves font dpi px str =
     let sz = pixelSizeInPointAtDpi px dpi
         cs = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
         bs = beziers cs
@@ -254,13 +258,14 @@ onContourPoints (Bezier LT a b c :bs) = [a,b,c] ++ onContourPoints bs
 onContourPoints (Bezier _ a _ c :bs) = [a,c] ++ onContourPoints bs
 -- | TODO: textureFontRenderer and then fontRenderer.
 
--- | Creates and returns a renderer that renders a given FontString.
+-- | Creates and returns a renderer that renders some text with a font. 
 colorFontRenderer :: Context -> GeomShader -> BezShader
-                  -> FontString -> (V2 Float -> V4 Float) -> IO GLRenderer
-colorFontRenderer window gsh brs fstr clrf = do
-    dpi <- ctxScreenDpi window
-    let (bs,ts) = fontGeom dpi fstr
+                  -> FontData -> Int -> Float -> String 
+                  -> V4 Float -> IO GLRenderer
+colorFontRenderer window gsh brs fd dpi px str clr = do
+    let (bs,ts) = (fontStringGeom fd) dpi px str
         vs = concatMap (\(Triangle a b c) -> [a,b,c]) ts
+        clrf = const clr
         cs = map clrf vs
     (cg,fg) <- colorRenderer window gsh GL_TRIANGLES vs cs
 
@@ -436,9 +441,12 @@ textureBezRenderer = textureBezUnitRenderer Nothing
 -- triangles with the given filling.
 filledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)] -> Fill
                       -> IO GLRenderer
-filledBezierRenderer win sh bs (FillColor f) = do
+filledBezierRenderer win sh bs fill = do
     let ts = map toTri bs
-        toTri (Bezier _ a b c) = const f <$> Triangle a b c
+        toTri (Bezier _ a b c) = Triangle (colors !! 0) (colors !! 1) (colors !! 2) 
+        colors = cycle $ if null (fillColors fill) 
+                         then [fillColor fill] 
+                         else fillColors fill
     colorBezRenderer win sh bs ts
 --filledBezierRenderer win sh bs (FillTexture fp f) = do
 --    let ts = map toTri bs
@@ -727,7 +735,7 @@ type ClippingArea = (V2 Int, V2 Int)
 -- fact has bitten the author a number of times while clipping a texture
 -- created with `toTexture` and `toUnitTexture`.
 clipTexture :: GLuint -> ClippingArea -> IO GLuint
-clipTexture rtex ((V2 x1 y1), (V2 x2 y2)) = do
+clipTexture rtex (V2 x1 y1, V2 x2 y2) = do
     -- Create our framebuffers
     [fbread,fbwrite] <- allocaArray 2 $ \ptr -> do
         glGenFramebuffers 2 ptr
@@ -743,8 +751,8 @@ clipTexture rtex ((V2 x1 y1), (V2 x2 y2)) = do
     glActiveTexture GL_TEXTURE0
     glBindTexture GL_TEXTURE_2D wtex
     let [x1',y1',x2',y2',w',h'] = map fromIntegral
-                                      [x1,y1,x2,y2,(abs $ x2 - x1)
-                                                  ,(abs $ y2 - y1)]
+                                      [x1,y1,x2,y2,abs $ x2 - x1
+                                                  ,abs $ y2 - y1]
     glTexImage2D GL_TEXTURE_2D
                  0
                  GL_RGBA

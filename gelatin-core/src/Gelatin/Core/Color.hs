@@ -5,14 +5,6 @@ import Data.Bits
 
 type Color = V4 Float
 
-data Gradient = GradColor (V2 Float -> V4 Float)
-              | GradTexture FilePath (V2 Float -> V2 Float)
-
-data Fill = FillColor Color deriving (Show)
-
-data FillResult t = FillResultColor [V4 Float]
-                  | FillResultTexture t [V2 Float]
-
 maroon :: (Num a, Fractional a) => V4 a
 maroon = V4 (128/255) (0/255) (0/255) 1
 

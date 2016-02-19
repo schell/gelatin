@@ -13,10 +13,12 @@ name:                gelatin-core
 version:             0.0.0.1
 
 -- A short (one-line) description of the package.
-synopsis:            Shared types and computations for the gelatin rendering system.
+synopsis:            Shared types and computations for the gelatin rendering 
+                     system.
 
 -- A longer description of the package.
-description:         Shared types and computations for the gelatin rendering system.
+description:         Shared types and computations for the gelatin rendering 
+                     system.
 
 -- URL for the project homepage or repository.
 homepage:            https://github.com/schell/gelatin
@@ -55,10 +57,11 @@ library
   exposed-modules:     Gelatin.Core.Bezier,
                        Gelatin.Core.Bounds,
                        Gelatin.Core.Color,
+                       Gelatin.Core.Fill,
+                       Gelatin.Core.Font,
                        Gelatin.Core.Line,
                        Gelatin.Core.Path,
                        Gelatin.Core.Primitives,
-                       Gelatin.Core.Shape,
                        Gelatin.Core.Stroke,
                        Gelatin.Core.Transform,
                        Gelatin.Core.Triangle,

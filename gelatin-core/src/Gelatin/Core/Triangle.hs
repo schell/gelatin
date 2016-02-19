@@ -22,6 +22,9 @@ triPoints (Triangle a b c) = [a, b, c]
 bezToTri :: Bezier a -> Triangle a
 bezToTri (Bezier _ a b c) = Triangle a b c
 
+triToPath :: Triangle a -> Path a
+triToPath (Triangle a b c) = Path [a,b,c]
+
 instance Functor Triangle where
     fmap f (Triangle a b c) = Triangle (f a ) (f b) (f c)
 

@@ -11,11 +11,8 @@ data Stroke = Stroke { strokeColor    :: Color
                      , strokeWidth    :: Float
                      , strokeFeather  :: Float
                      , strokeLineCaps :: (LineCap,LineCap)
-                     } deriving (Show, Generic)
+                     } deriving (Show, Eq, Generic)
 instance Hashable Stroke
-
-data Stroked a = Stroked Stroke a deriving (Show, Generic)
-instance Hashable a => Hashable (Stroked a)
 
 data StrokeAttr = StrokeNone
                 | StrokeColor Color
@@ -23,7 +20,7 @@ data StrokeAttr = StrokeNone
                 | StrokeWidth Float
                 | StrokeFeather Float
                 | StrokeCaps (LineCap,LineCap)
-                deriving (Show)
+                deriving (Show, Eq, Generic)
 
 emptyStroke :: Stroke
 emptyStroke = Stroke 0 [] 2 1 (LineCapRound,LineCapRound)

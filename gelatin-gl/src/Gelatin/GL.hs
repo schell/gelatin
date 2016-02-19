@@ -5,13 +5,13 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Gelatin.GL (
     Rez(..),
+    fontyData,
     -- * Re-exports
     module G,
     module Picture,
     module GL,
-    module Fonty,
     module Linear,
-    module Renderable
+    module Renderable,
 ) where
 
 import Gelatin.Picture as Picture
@@ -22,8 +22,7 @@ import Control.Monad
 import Control.Arrow (second)
 import Data.Renderable as Renderable
 import Data.Hashable
-import Graphics.Text.TrueType as Fonty hiding (stringBoundingBox, _e)
-import qualified Graphics.Text.TrueType as TT
+import Graphics.Text.TrueType 
 import Graphics.GL.Types as GL
 import Graphics.GL.Core33 as GL
 import Linear hiding (rotate)
@@ -34,21 +33,15 @@ data Rez = Rez { rezShader  :: SumShader
                , rezContext :: Context
                }
 
-toPaths :: PathPrimitives Font -> [Path (V2 Float)]
-toPaths (Paths ps) = ps
-toPaths (PathText f px str) =
-    let qs = fontCurves 72 f px str
-        sub = subdivideAdaptive 100 0
-        mkPath = Path . cleanSeqDupes . concatMap sub
-        in concatMap (fmap mkPath) qs
+instance Primitive (Painted Primitives) where
+    type PrimM (Painted Primitives) = IO
+    type PrimR (Painted Primitives) = Rez
+    type PrimT (Painted Primitives) = Transform
+    canAllocPrimitive _ (Stroked _ p) = not $ null $ primToPaths p
+    canAllocPrimitive _ _ = True 
 
-instance Primitive (Stroked (PathPrimitives Font)) where
-    type PrimM (Stroked (PathPrimitives Font)) = IO
-    type PrimR (Stroked (PathPrimitives Font)) = Rez
-    type PrimT (Stroked (PathPrimitives Font)) = Transform
-    canAllocPrimitive _ (Stroked _ p) = not $ null $ toPaths p
     compilePrimitive (Rez sh win) (Stroked (Stroke c cs w f cp) p) = do
-        let ps = toPaths p
+        let ps = primToPaths p
             shader = shProjectedPolyline sh
         rs <- forM ps $ \(Path vs) -> do
             let cs' = if null cs then repeat c else gradient
@@ -57,25 +50,21 @@ instance Primitive (Stroked (PathPrimitives Font)) where
             projectedPolylineRenderer win shader w f cp vs cs'
         return $ foldl appendRenderer emptyRenderer rs
 
-instance Primitive (FillPrimitives Font) where
-    type PrimM (FillPrimitives Font) = IO
-    type PrimR (FillPrimitives Font) = Rez
-    type PrimT (FillPrimitives Font) = Transform
-    canAllocPrimitive _ _ = True
-    compilePrimitive (Rez sh win) (FillText fill font px str)
-        | FillColor f <- fill = do
+    compilePrimitive (Rez sh win) (Filled fill (TextPrims font dpi px str)) = do
             let gsh = shGeometry sh
                 bsh = shBezier sh
-            colorFontRenderer win gsh bsh (FontString font px (0,0) str) $ const f
-        -- TODO: FillText with texture fill
-        -- | otherwise = return (return (), const $ return ())
-    compilePrimitive (Rez sh win) (FillBeziers fill bs) = do
+                clr = if null (fillColors fill) 
+                      then fillColor fill
+                      else head $ fillColors fill
+            -- | TODO: Fix the fill situation. It sucks.
+            colorFontRenderer win gsh bsh font dpi px str clr
+    compilePrimitive (Rez sh win) (Filled fill (BezierPrims bs)) = do
         let bsh = shBezier sh
         filledBezierRenderer win bsh bs fill
-    compilePrimitive (Rez sh win) (FillTriangles fill ts) = do
+    compilePrimitive (Rez sh win) (Filled fill (TrianglePrims ts)) = do
         let gsh = shGeometry sh
         filledTriangleRenderer win gsh ts fill
-    compilePrimitive (Rez sh win) (FillPaths fill ps) = do
+    compilePrimitive (Rez sh win) (Filled fill (PathPrims ps)) = do
         -- We use a filled concave polygon technique instead of
         -- triangulating the path.
         -- http://www.glprogramming.com/red/chapter14.html#name13
@@ -86,24 +75,29 @@ instance Primitive (FillPrimitives Font) where
             return (c,\t -> stencilMask (f t) (f t))
         return $ foldl appendRenderer emptyRenderer rs
 
-instance Primitive (R2Primitives Font) where
-    type PrimM (R2Primitives Font) = IO
-    type PrimR (R2Primitives Font) = Rez
-    type PrimT (R2Primitives Font) = Transform
-    canAllocPrimitive rez (R2PathPrimitives sps) = canAllocPrimitive rez sps
-    canAllocPrimitive rez (R2FillPrimitives fps) = canAllocPrimitive rez fps
-    compilePrimitive rez (R2PathPrimitives sps) = compilePrimitive rez sps
-    compilePrimitive rez (R2FillPrimitives fps) = compilePrimitive rez fps
-
 deriving instance Generic FontStyle
 instance Hashable FontStyle
 deriving instance Generic FontDescriptor
 instance Hashable FontDescriptor
 
-instance Hashable Font where
-    hashWithSalt s = hashWithSalt s . descriptorOf
+-- | Provide a FontData for a given FontyFruity TrueType Font.
+fontyData :: Font -> FontData
+fontyData font = FontData { fontStringBoundingBox = boundingBox
+                          , fontStringCurves = fontCurves font
+                          , fontStringGeom = fontGeom font
+                          , fontHash = \s -> hashWithSalt s $ descriptorOf font 
+                          , fontShow = show $ descriptorOf font
+                          }
+    where boundingBox dpi px str = unBox $ stringBoundingBox font dpi 
+                                                                  (PointSize px) 
+                                                                  str
+          unBox (BoundingBox xn yn xx yx _) = (V2 xn yn, V2 xx yx) 
 
-instance FontClass Font where
-    stringBoundingBox font dpi px str = (V2 nx ny, V2 xx xy)
-        where BoundingBox nx ny xx xy _ =
-                TT.stringBoundingBox font dpi (PointSize px) str
+--
+--instance Hashable Font where
+--    hashWithSalt s = hashWithSalt s . descriptorOf
+--
+--instance FontClass Font where
+--    stringBoundingBox font dpi px str = (V2 nx ny, V2 xx xy)
+--        where BoundingBox nx ny xx xy _ =
+--                TT.stringBoundingBox font dpi (PointSize px) str

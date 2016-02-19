@@ -7,7 +7,6 @@ module Gelatin.Core.Path where
 
 import Gelatin.Core.Bounds
 import Gelatin.Core.Transform
-import Gelatin.Core.Shape
 import Linear
 import Data.Hashable
 import GHC.Generics
@@ -54,3 +53,13 @@ pathHasPoint poly@(p1':_) p' = pointInPath' False p' (poly ++ [p1'])
           t2 p p1 p2 = x p < (x p1 - x p2) * (y p - y p2) / (y p1 - y p2) + x p2
           x (V2 a _) = a
           y (V2 _ b) = b
+
+-- | Create a closed box path.
+box :: Fractional a => V2 a -> [V2 a]
+box (V2 w h) = poly
+    where poly = [V2 x1 y1, V2 x2 y1, V2 x2 y2, V2 x1 y2, V2 x1 y1]
+          (hw,hh) = (w/2,h/2)
+          x1 = -hw
+          x2 = hw
+          y1 = -hh
+          y2 = hh

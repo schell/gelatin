@@ -43,7 +43,7 @@ newWindow ww wh ws mmon mwin = do
                        exitFailure
         Just win -> return win
 
-calculateDpi :: Window -> IO Dpi
+calculateDpi :: Window -> IO Int
 calculateDpi win = do
     mMonitor <- getPrimaryMonitor
     -- Calculate the dpi of the primary monitor.
