@@ -24,7 +24,7 @@ module Gelatin.GL.Renderer (
     textureBezUnitRenderer,
     filledBezierRenderer,
     -- * Font rendering
-    colorFontRenderer,
+    filledFontRenderer,
     fontCurves,
     fontGeom,
     -- * Masking
@@ -235,22 +235,15 @@ onContourPoints :: [Bezier a] -> [a]
 onContourPoints [] = []
 onContourPoints (Bezier LT a b c :bs) = [a,b,c] ++ onContourPoints bs
 onContourPoints (Bezier _ a _ c :bs) = [a,c] ++ onContourPoints bs
--- | TODO: textureFontRenderer and then fontRenderer.
 
 -- | Creates and returns a renderer that renders some text with a font. 
-colorFontRenderer :: Context -> GeomShader -> BezShader
+filledFontRenderer :: Context -> GeomShader -> BezShader
                   -> FontData -> Int -> Float -> String 
-                  -> V4 Float -> IO GLRenderer
-colorFontRenderer window gsh brs fd dpi px str clr = do
+                  -> Fill -> IO GLRenderer
+filledFontRenderer window gsh brs fd dpi px str fill = do
     let (bs,ts) = fontStringGeom fd dpi px str
-        vs = concatMap (\(Triangle a b c) -> [a,b,c]) ts
-        clrf = const clr
-        cs = map clrf vs
-    (cg,fg) <- colorRenderer window gsh GL_TRIANGLES vs cs
-
-    let bcs = map ((\(Bezier _ a b c) -> Triangle a b c) . fmap clrf) bs
-    (cb,fb) <- colorBezRenderer window brs bs bcs
-
+    (cg,fg) <- filledTriangleRenderer window gsh ts fill 
+    (cb,fb) <- filledBezierRenderer window brs bs fill
     let s t  = stencilMask (fg t) (fg t)
         gs t = s t >> fb t
     return (cg >> cb,gs)

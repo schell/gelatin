@@ -99,7 +99,8 @@ compilePrimitives (Free (WithStroke attrs p n)) = do
 compilePrimitives (Free (WithFill fill p n)) = do
     otherPrims <- compilePrimitives n 
     mColor     <- asks cdColoring
-    let mPaint = mColor <|> Just (FillColoring fill) 
+    t          <- asks cdTransform
+    let mPaint = mColor <|> Just (FillColoring $ transform t fill) 
     prims <- local (\cd -> cd{cdColoring = mPaint}) $ 
                    compilePrimitives $ fromF p
     return $ prims ++ otherPrims
