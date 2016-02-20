@@ -4,14 +4,13 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE DeriveGeneric #-}
 module Gelatin.Picture (
     -- * Types
     FontData(..),
     PictureCmd(..),
     Picture,
     Coloring(..),
-    Painted(..),
+    PaintedPrimitives(..),
     -- * Creating pictures
     blank,
     line,
@@ -49,8 +48,6 @@ import Gelatin.Core hiding (ellipse, arc)
 import qualified Gelatin.Core as Core
 import Linear hiding (rotate)
 import Data.Hashable
-import GHC.Generics
-
 --------------------------------------------------------------------------------
 -- Picture
 --------------------------------------------------------------------------------
@@ -68,7 +65,7 @@ data PictureCmd n where
     Circle        :: Float -> n -> PictureCmd n
     Letters       :: Int -> Float -> String -> n -> PictureCmd n
     WithStroke    :: [StrokeAttr] -> Picture () -> n -> PictureCmd n
-    WithFill      :: [FillAttr] -> Picture () -> n -> PictureCmd n
+    WithFill      :: Fill -> Picture () -> n -> PictureCmd n
     WithTransform :: Transform -> Picture () -> n -> PictureCmd n
     WithFont      :: FontData -> Picture () -> n -> PictureCmd n
 
@@ -102,16 +99,20 @@ data Coloring = StrokeColoring Stroke
               | FillColoring Fill
               -- | NoColoring
 
-data Painted a = Stroked Stroke a
-               | Filled Fill a
-               -- | Unpainted a
-               deriving (Show, Eq, Generic)
-instance Hashable a => Hashable (Painted a)
+data PaintedPrimitives = Stroked Stroke Primitives
+                       | Filled Fill Primitives
+                       deriving (Show)
+instance Hashable PaintedPrimitives where
+    hashWithSalt s (Stroked st prim) =
+        s `hashWithSalt` "Stroked" `hashWithSalt` st `hashWithSalt` prim 
+    hashWithSalt s (Filled f prim) =
+        let vs = concatMap unPath $ primToPaths prim
+            fh = FillHash f vs
+        in s `hashWithSalt` "Filled" `hashWithSalt` fh `hashWithSalt` prim
 
-withColoring :: Coloring -> a -> Painted a 
+withColoring :: Coloring -> Primitives -> PaintedPrimitives 
 withColoring (FillColoring f) = Filled f
 withColoring (StrokeColoring s) = Stroked s
--- withColoring NoColoring = Unpainted
 
 data CompileData = CompileData { cdFont :: Maybe FontData 
                                , cdColoring :: Maybe Coloring
@@ -153,7 +154,7 @@ letters dpi px s = liftF $ Letters dpi px s ()
 withStroke :: [StrokeAttr] -> Picture () -> Picture ()
 withStroke attrs pic = liftF $ WithStroke attrs pic ()
 
-withFill :: [FillAttr] -> Picture () -> Picture ()
+withFill :: Fill -> Picture () -> Picture ()
 withFill f pic = liftF $ WithFill f pic ()
 
 withTransform :: Transform -> Picture () -> Picture ()
@@ -205,7 +206,7 @@ boundingBox cd (Free (Circle r n)) =
 boundingBox cd (Free (Letters dpi px str n))
     | Just font <- cdFont cd =
         let t = cdTransform cd
-            (V2 nx ny, V2 xx xy) = (fontStringBoundingBox font) dpi px str
+            (V2 nx ny, V2 xx xy) = fontStringBoundingBox font dpi px str
             vs = transform t [V2 nx ny, V2 xx xy]
         in boundsBounds [polyBounds vs, boundingBox cd n]
     | otherwise = boundingBox cd n

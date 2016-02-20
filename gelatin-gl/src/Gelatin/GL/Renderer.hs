@@ -6,12 +6,6 @@ module Gelatin.GL.Renderer (
     -- * Renderer
     GLRenderer,
     Context(..),
-    -- * Loading shaders
-    loadShaders,
-    loadGeomShader,
-    loadBezShader,
-    loadMaskShader,
-    loadShader,
     -- * Loading textures
     loadTexture,
     loadTextureUnit,
@@ -30,8 +24,7 @@ module Gelatin.GL.Renderer (
     textureBezUnitRenderer,
     filledBezierRenderer,
     -- * Font rendering
-    FontString(..),
-    colorFontRenderer,
+    filledFontRenderer,
     fontCurves,
     fontGeom,
     -- * Masking
@@ -47,6 +40,7 @@ module Gelatin.GL.Renderer (
 ) where
 
 import Gelatin.GL.Shader
+import Gelatin.GL.Common
 import Gelatin.Picture
 import Linear
 import Graphics.Text.TrueType
@@ -65,20 +59,13 @@ import Data.Maybe
 import Data.Vector.Storable (Vector,unsafeWith)
 import qualified Data.Vector.Unboxed as UV
 import Control.Monad
+import Control.Applicative
 import System.Directory
 import System.IO
 import System.Exit
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Foldable as F
 import GHC.Stack
-
-type GLRenderer = Renderer IO Transform
-
-data Context = Context { ctxFramebufferSize :: IO (Int,Int) 
-                       , ctxWindowSize :: IO (Int,Int)
-                       , ctxScreenDpi :: IO Int
-                       }
-
 --------------------------------------------------------------------------------
 -- GLRenderers
 --------------------------------------------------------------------------------
@@ -174,21 +161,25 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
 -- triangles with the given filling.
 filledTriangleRenderer :: Context -> GeomShader -> [Triangle (V2 Float)]
                        -> Fill -> IO GLRenderer
-filledTriangleRenderer win gsh ts fill = do
+filledTriangleRenderer win gsh ts (FillColor f) = do
     let vs = trisToComp ts
-        colors = if null (fillColors fill) 
-                 then [fillColor fill] 
-                 else fillColors fill
-    colorRenderer win gsh GL_TRIANGLES vs $ take (length vs) $ cycle colors 
-    --mfr <- getFillResult fill vs
-    --case mfr of
-    --    Just (FillResultColor cs) -> colorRenderer win gsh GL_TRIANGLES vs cs
-    --    Just (FillResultTexture tx uvs) -> do
-    --        (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
-    --        let r' t = bindTexAround tx $ r t
-    --        return (c, r')
-    --    _ -> do putStrLn "Could not create a filledTriangleRenderer."
-    --            return (return (), const $ putStrLn "Non op renderer.")
+        -- If we can't find a color in the color map we'll just use
+        -- transparent black.
+        cs = map f vs
+    colorRenderer win gsh GL_TRIANGLES vs cs 
+filledTriangleRenderer win gsh ts (FillTexture fp f) = do
+    mtex <- loadImageAsTexture fp
+    case mtex of
+        Just tx -> do
+            let vs = trisToComp ts
+                -- If we can't find a uv in the uv map we'll just use
+                -- 0,0 
+                uvs = map f vs
+            (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
+            let r' t = bindTexAround tx $ r t
+            return (c, r')
+        _ -> do putStrLn "Could not create a filledTriangleRenderer."
+                return (return (), const $ putStrLn "Non op renderer.")
 
 -- | Binds the given texture to the zeroeth texture unit, runs the IO
 -- action and then unbinds the texture.
@@ -198,21 +189,9 @@ bindTexAround tx f = do
     glBindTexture GL_TEXTURE_2D tx
     f
     glBindTexture GL_TEXTURE_2D 0
-
--- | Applies a fill to a list of points to create a fill result. If the
--- Fill is a texture then the texture's image will be loaded.
---getFillResult :: Gradient -> [V2 Float] -> IO (Maybe (FillResult GLuint))
---getFillResult (GradColor f) vs = return $ Just $ FillResultColor $ map f vs
---getFillResult (GradTexture fp f) vs = do
---    mtex <- loadImageAsTexture fp
---    return $ case mtex of
---        Nothing  -> Nothing
---        Just tex -> Just $ FillResultTexture tex $ map f vs
 --------------------------------------------------------------------------------
 -- Font decomposition into triangles and beziers
 --------------------------------------------------------------------------------
-data FontString = FontString Font Float (Float,Float) String
-
 -- | Ephemeral types for creating polygons from font outlines.
 -- Fonty gives us a [[Vector (Float, Float)]] for an entire string, which
 -- breaks down to
@@ -256,22 +235,15 @@ onContourPoints :: [Bezier a] -> [a]
 onContourPoints [] = []
 onContourPoints (Bezier LT a b c :bs) = [a,b,c] ++ onContourPoints bs
 onContourPoints (Bezier _ a _ c :bs) = [a,c] ++ onContourPoints bs
--- | TODO: textureFontRenderer and then fontRenderer.
 
 -- | Creates and returns a renderer that renders some text with a font. 
-colorFontRenderer :: Context -> GeomShader -> BezShader
+filledFontRenderer :: Context -> GeomShader -> BezShader
                   -> FontData -> Int -> Float -> String 
-                  -> V4 Float -> IO GLRenderer
-colorFontRenderer window gsh brs fd dpi px str clr = do
-    let (bs,ts) = (fontStringGeom fd) dpi px str
-        vs = concatMap (\(Triangle a b c) -> [a,b,c]) ts
-        clrf = const clr
-        cs = map clrf vs
-    (cg,fg) <- colorRenderer window gsh GL_TRIANGLES vs cs
-
-    let bcs = map ((\(Bezier _ a b c) -> Triangle a b c) . fmap clrf) bs
-    (cb,fb) <- colorBezRenderer window brs bs bcs
-
+                  -> Fill -> IO GLRenderer
+filledFontRenderer window gsh brs fd dpi px str fill = do
+    let (bs,ts) = fontStringGeom fd dpi px str
+    (cg,fg) <- filledTriangleRenderer window gsh ts fill 
+    (cb,fb) <- filledBezierRenderer window brs bs fill
     let s t  = stencilMask (fg t) (fg t)
         gs t = s t >> fb t
     return (cg >> cb,gs)
@@ -441,23 +413,18 @@ textureBezRenderer = textureBezUnitRenderer Nothing
 -- triangles with the given filling.
 filledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)] -> Fill
                       -> IO GLRenderer
-filledBezierRenderer win sh bs fill = do
-    let ts = map toTri bs
-        toTri (Bezier _ a b c) = Triangle (colors !! 0) (colors !! 1) (colors !! 2) 
-        colors = cycle $ if null (fillColors fill) 
-                         then [fillColor fill] 
-                         else fillColors fill
+filledBezierRenderer win sh bs (FillColor f) = do
+    let ts = map (\(Bezier _ a b c) -> f <$> Triangle a b c) bs
     colorBezRenderer win sh bs ts
---filledBezierRenderer win sh bs (FillTexture fp f) = do
---    let ts = map toTri bs
---        toTri (Bezier _ a b c) = f <$> Triangle a b c
---    mtex <- loadImageAsTexture fp
---    case mtex of
---        Just tx -> do (c,r) <- textureBezRenderer win sh bs ts
---                      let r' t = bindTexAround tx $ r t
---                      return (c, r')
---        Nothing -> do putStrLn "Could not create a filledBezRenderer."
---                      return (return (), const $ putStrLn "Non op renderer.")
+filledBezierRenderer win sh bs (FillTexture fp f) = do
+    let ts = map (\(Bezier _ a b c) -> f <$> Triangle a b c) bs
+    mtex <- loadImageAsTexture fp
+    case mtex of
+        Just tx -> do (c,r) <- textureBezRenderer win sh bs ts
+                      let r' t = bindTexAround tx $ r t
+                      return (c, r')
+        Nothing -> do putStrLn "Could not create a filledBezRenderer."
+                      return (return (), const $ putStrLn "Non op renderer.")
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.
@@ -568,66 +535,6 @@ orthoContextProjection window = do
     (ww, wh) <- ctxWindowSize window
     let (hw,hh) = (fromIntegral ww, fromIntegral wh)
     return $ ortho 0 hw hh 0 0 1
---------------------------------------------------------------------------------
--- Loading resources and things
---------------------------------------------------------------------------------
--- | Compile all shader programs and return a "sum renderer".
-loadShaders :: IO SumShader
-loadShaders = SRS <$> loadProjectedPolylineShader
-                  <*> loadGeomShader
-                  <*> loadBezShader
-                  <*> loadMaskShader
-
--- | Compile a shader program and link attributes for rendering screen space
--- projected expanded polylines.
-loadProjectedPolylineShader :: IO ProjectedPolylineShader
-loadProjectedPolylineShader = do
-    let def = ShaderDefBS[(vertSourceProjPoly, GL_VERTEX_SHADER)
-                         ,(fragSourceProjPoly, GL_FRAGMENT_SHADER)
-                         ] ["projection", "modelview", "thickness", "feather", "sumlength", "cap"]
-    PPRS <$> loadShader def
-
--- | Loads a new shader program and attributes for rendering geometry.
-loadGeomShader :: IO GeomShader
-loadGeomShader = do
-    let def = ShaderDefBS [(vertSourceGeom, GL_VERTEX_SHADER)
-                          ,(fragSourceGeom, GL_FRAGMENT_SHADER)
-                          ] ["projection", "modelview", "sampler", "hasUV"]
-    GRS <$> loadShader def
-
--- | Loads a new shader progarm and attributes for rendering beziers.
-loadBezShader :: IO BezShader
-loadBezShader = do
-    let def = ShaderDefBS [(vertSourceBezier, GL_VERTEX_SHADER)
-                          ,(fragSourceBezier, GL_FRAGMENT_SHADER)
-                          ] ["projection", "modelview", "sampler", "hasUV"]
-    BRS <$> loadShader def
-
--- | Loads a new shader program and attributes for masking textures.
-loadMaskShader :: IO MaskShader
-loadMaskShader = do
-    let def = ShaderDefBS [(vertSourceMask, GL_VERTEX_SHADER)
-                          ,(fragSourceMask, GL_FRAGMENT_SHADER)
-                          ] ["projection","modelview","mainTex","maskTex"]
-    MRS <$> loadShader def
-
-loadShader :: ShaderDef -> IO Shader
-loadShader (ShaderDefBS ss uniforms) = do
-    shaders <- mapM (uncurry compileShader) ss
-    program <- compileProgram shaders
-    glUseProgram program
-    locs <- forM uniforms $ \attr -> do
-        loc <- withCString attr $ glGetUniformLocation program
-        return $ if loc == (-1)
-                 then Nothing
-                 else Just (attr, loc)
-    return $ Shader program $ catMaybes locs
-loadShader (ShaderDefFP fps uniforms) = do
-    cwd <- getCurrentDirectory
-    srcs <- forM fps $ \(fp, shaderType) -> do
-        src <- B.readFile $ cwd ++ "/" ++ fp
-        return (src, shaderType)
-    loadShader $ ShaderDefBS srcs uniforms
 --------------------------------------------------------------------------------
 -- Working with textures.
 --------------------------------------------------------------------------------
