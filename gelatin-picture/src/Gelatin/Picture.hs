@@ -68,7 +68,7 @@ data PictureCmd n where
     Circle        :: Float -> n -> PictureCmd n
     Letters       :: Int -> Float -> String -> n -> PictureCmd n
     WithStroke    :: [StrokeAttr] -> Picture () -> n -> PictureCmd n
-    WithFill      :: [FillAttr] -> Picture () -> n -> PictureCmd n
+    WithFill      :: Fill -> Picture () -> n -> PictureCmd n
     WithTransform :: Transform -> Picture () -> n -> PictureCmd n
     WithFont      :: FontData -> Picture () -> n -> PictureCmd n
 
@@ -153,7 +153,7 @@ letters dpi px s = liftF $ Letters dpi px s ()
 withStroke :: [StrokeAttr] -> Picture () -> Picture ()
 withStroke attrs pic = liftF $ WithStroke attrs pic ()
 
-withFill :: [FillAttr] -> Picture () -> Picture ()
+withFill :: Fill -> Picture () -> Picture ()
 withFill f pic = liftF $ WithFill f pic ()
 
 withTransform :: Transform -> Picture () -> Picture ()

@@ -1,6 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Gelatin.GL.Shader (
+    -- * Loading shaders
+    loadShaders,
+    loadBezShader,
+    loadGeomShader,
+    loadMaskShader,
+    loadProjectedPolylineShader,
+    loadShader,
     -- * Shader types
     ShaderProgram,
     Shader(..),
@@ -43,6 +50,7 @@ import Graphics.GL.Core33
 import Graphics.GL.Types
 import Control.Monad
 import System.Exit
+import System.Directory
 import Foreign.Ptr
 import Foreign.C.String
 import Foreign.Marshal.Array
@@ -50,6 +58,7 @@ import Foreign.Marshal.Utils
 import Foreign.Storable
 import Data.ByteString.Char8 as B
 import Data.FileEmbed
+import Data.Maybe
 
 type ShaderProgram = GLuint
 
@@ -75,6 +84,66 @@ data SumShader = SRS { shProjectedPolyline :: ProjectedPolylineShader
                      , shBezier   :: BezShader
                      , shMask     :: MaskShader
                      }
+--------------------------------------------------------------------------------
+-- Loading built shaders. 
+--------------------------------------------------------------------------------
+-- | Compile all shader programs and return a "sum renderer".
+loadShaders :: IO SumShader
+loadShaders = SRS <$> loadProjectedPolylineShader
+                  <*> loadGeomShader
+                  <*> loadBezShader
+                  <*> loadMaskShader
+
+-- | Compile a shader program and link attributes for rendering screen space
+-- projected expanded polylines.
+loadProjectedPolylineShader :: IO ProjectedPolylineShader
+loadProjectedPolylineShader = do
+    let def = ShaderDefBS[(vertSourceProjPoly, GL_VERTEX_SHADER)
+                         ,(fragSourceProjPoly, GL_FRAGMENT_SHADER)
+                         ] ["projection", "modelview", "thickness", "feather", "sumlength", "cap"]
+    PPRS <$> loadShader def
+
+-- | Loads a new shader program and attributes for rendering geometry.
+loadGeomShader :: IO GeomShader
+loadGeomShader = do
+    let def = ShaderDefBS [(vertSourceGeom, GL_VERTEX_SHADER)
+                          ,(fragSourceGeom, GL_FRAGMENT_SHADER)
+                          ] ["projection", "modelview", "sampler", "hasUV"]
+    GRS <$> loadShader def
+
+-- | Loads a new shader progarm and attributes for rendering beziers.
+loadBezShader :: IO BezShader
+loadBezShader = do
+    let def = ShaderDefBS [(vertSourceBezier, GL_VERTEX_SHADER)
+                          ,(fragSourceBezier, GL_FRAGMENT_SHADER)
+                          ] ["projection", "modelview", "sampler", "hasUV"]
+    BRS <$> loadShader def
+
+-- | Loads a new shader program and attributes for masking textures.
+loadMaskShader :: IO MaskShader
+loadMaskShader = do
+    let def = ShaderDefBS [(vertSourceMask, GL_VERTEX_SHADER)
+                          ,(fragSourceMask, GL_FRAGMENT_SHADER)
+                          ] ["projection","modelview","mainTex","maskTex"]
+    MRS <$> loadShader def
+
+loadShader :: ShaderDef -> IO Shader
+loadShader (ShaderDefBS ss uniforms) = do
+    shaders <- mapM (uncurry compileShader) ss
+    program <- compileProgram shaders
+    glUseProgram program
+    locs <- forM uniforms $ \attr -> do
+        loc <- withCString attr $ glGetUniformLocation program
+        return $ if loc == (-1)
+                 then Nothing
+                 else Just (attr, loc)
+    return $ Shader program $ catMaybes locs
+loadShader (ShaderDefFP fps uniforms) = do
+    cwd <- getCurrentDirectory
+    srcs <- forM fps $ \(fp, shaderType) -> do
+        src <- B.readFile $ cwd ++ "/" ++ fp
+        return (src, shaderType)
+    loadShader $ ShaderDefBS srcs uniforms
 
 --------------------------------------------------------------------------------
 -- $layout
