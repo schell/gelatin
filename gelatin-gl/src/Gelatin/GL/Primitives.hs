@@ -7,7 +7,7 @@ import Gelatin.GL.Common
 import Control.Monad
 import Data.Renderable
 
-renderPaintedPrimitives :: Rez -> Painted Primitives -> IO GLRenderer 
+renderPaintedPrimitives :: Rez -> PaintedPrimitives -> IO GLRenderer 
 renderPaintedPrimitives (Rez sh win) (Stroked (Stroke c cs w f cp) p) = do
         let ps = primToPaths p
             shader = shProjectedPolyline sh

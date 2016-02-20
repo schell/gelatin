@@ -32,7 +32,7 @@ nextPicCmd (Free (WithFont _ _ n)) = n
 -- | Compile only the nested picture within the command given coloring,
 -- font and transform.
 compileCurrentWith :: Free PictureCmd () ->  Maybe Coloring -> Maybe FontData 
-                   -> Transform -> [(Transform, Painted Primitives)]
+                   -> Transform -> [(Transform, PaintedPrimitives)]
 -- First list all the cases where primitives cannot be mapped.
 compileCurrentWith (Pure ()) _ _ _ = []
 compileCurrentWith (Free (Blank _)) _ _ _ = []
@@ -81,7 +81,7 @@ compileCurrentWith (Free (Curve a b c _))
 
 -- | Compile the picture commands into a list of renderable primitives.
 compilePrimitives :: Free PictureCmd ()
-                  -> Reader CompileData [(Transform, Painted Primitives)]
+                  -> Reader CompileData [(Transform, PaintedPrimitives)]
 compilePrimitives (Pure ()) = return []
 compilePrimitives (Free (WithTransform t p n)) = do
     t' <- asks cdTransform
@@ -99,8 +99,7 @@ compilePrimitives (Free (WithStroke attrs p n)) = do
 compilePrimitives (Free (WithFill fill p n)) = do
     otherPrims <- compilePrimitives n 
     mColor     <- asks cdColoring
-    t          <- asks cdTransform
-    let mPaint = mColor <|> Just (FillColoring $ transform t fill) 
+    let mPaint = mColor <|> Just (FillColoring fill) 
     prims <- local (\cd -> cd{cdColoring = mPaint}) $ 
                    compilePrimitives $ fromF p
     return $ prims ++ otherPrims
@@ -113,7 +112,7 @@ compilePrimitives cmd = do
     prims <- compileCurrentWith cmd <$> asks cdColoring <*> asks cdFont <*> asks cdTransform
     (prims ++) <$> compilePrimitives (nextPicCmd cmd)
 
-toPaintedPrimitives :: Picture () -> [(Transform, Painted Primitives)]
+toPaintedPrimitives :: Picture () -> [(Transform, PaintedPrimitives)]
 toPaintedPrimitives pic =
     runReader (compilePrimitives $ freePic pic) emptyCompileData
 --------------------------------------------------------------------------------

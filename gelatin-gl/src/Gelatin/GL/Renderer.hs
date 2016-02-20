@@ -161,20 +161,20 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
 -- triangles with the given filling.
 filledTriangleRenderer :: Context -> GeomShader -> [Triangle (V2 Float)]
                        -> Fill -> IO GLRenderer
-filledTriangleRenderer win gsh ts (FillColor cm) = do
+filledTriangleRenderer win gsh ts (FillColor f) = do
     let vs = trisToComp ts
         -- If we can't find a color in the color map we'll just use
         -- transparent black.
-        cs = map (fromMaybe 0 . lookupColor (unColorMap cm)) vs
+        cs = map f vs
     colorRenderer win gsh GL_TRIANGLES vs cs 
-filledTriangleRenderer win gsh ts (FillTexture fp tm) = do
+filledTriangleRenderer win gsh ts (FillTexture fp f) = do
     mtex <- loadImageAsTexture fp
     case mtex of
         Just tx -> do
             let vs = trisToComp ts
                 -- If we can't find a uv in the uv map we'll just use
                 -- 0,0 
-                uvs = map (fromMaybe 0 . lookupColor (unTextureMap tm)) vs
+                uvs = map f vs
             (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
             let r' t = bindTexAround tx $ r t
             return (c, r')
@@ -413,13 +413,11 @@ textureBezRenderer = textureBezUnitRenderer Nothing
 -- triangles with the given filling.
 filledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)] -> Fill
                       -> IO GLRenderer
-filledBezierRenderer win sh bs (FillColor cm) = do
-    let ts = map (\(Bezier _ a b c) -> clr <$> Triangle a b c) bs
-        clr v = fromMaybe 0 $ lookupColor (unColorMap cm) v
+filledBezierRenderer win sh bs (FillColor f) = do
+    let ts = map (\(Bezier _ a b c) -> f <$> Triangle a b c) bs
     colorBezRenderer win sh bs ts
-filledBezierRenderer win sh bs (FillTexture fp tm) = do
-    let ts = map (\(Bezier _ a b c) -> uv <$> Triangle a b c) bs
-        uv v = fromMaybe 0 $ lookupColor (unTextureMap tm) v 
+filledBezierRenderer win sh bs (FillTexture fp f) = do
+    let ts = map (\(Bezier _ a b c) -> f <$> Triangle a b c) bs
     mtex <- loadImageAsTexture fp
     case mtex of
         Just tx -> do (c,r) <- textureBezRenderer win sh bs ts

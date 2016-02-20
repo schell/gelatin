@@ -30,10 +30,10 @@ import Linear hiding (rotate)
 import System.Exit
 import GHC.Generics
 
-instance Primitive (Painted Primitives) where
-    type PrimM (Painted Primitives) = IO
-    type PrimR (Painted Primitives) = Rez
-    type PrimT (Painted Primitives) = Transform
+instance Primitive PaintedPrimitives where
+    type PrimM PaintedPrimitives = IO
+    type PrimR PaintedPrimitives = Rez
+    type PrimT PaintedPrimitives = Transform
     canAllocPrimitive _ (Stroked _ p) = not $ null $ primToPaths p
     canAllocPrimitive _ _ = True 
     compilePrimitive = renderPaintedPrimitives 
