@@ -51,7 +51,6 @@ fontyData font = FontData { fontStringBoundingBox = boundingBox
                           , fontHash = \s -> hashWithSalt s $ descriptorOf font 
                           , fontShow = show $ descriptorOf font
                           }
-    where boundingBox dpi px str = unBox $ stringBoundingBox font dpi 
-                                                                  (PointSize px) 
-                                                                  str
+    where boundingBox dpi px str = unBox $ 
+            stringBoundingBox font dpi (pixelSizeInPointAtDpi px dpi) str
           unBox (BoundingBox xn yn xx yx _) = (V2 xn yn, V2 xx yx) 

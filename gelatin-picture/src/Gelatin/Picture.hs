@@ -32,6 +32,7 @@ module Gelatin.Picture (
     pictureBounds,
     pictureSize,
     pictureOrigin,
+    pictureCenter,
     -- * Compilation helpers
     CompileData(..),
     emptyCompileData,
@@ -231,6 +232,12 @@ pictureSize :: Picture () -> V2 Float
 pictureSize p =
     let (tl,br) = pictureBounds p
     in br - tl
+
+-- Returns the center point of the picture, based on its bounding box.
+pictureCenter :: Picture () -> V2 Float
+pictureCenter p = 
+    let (tl,br) = pictureBounds p
+    in tl + (br - tl) / 2
 
 -- Returns the leftmost, uppermost point of the picture.
 pictureOrigin :: Picture () -> V2 Float

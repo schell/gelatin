@@ -5,7 +5,9 @@ packages:
 - '../gelatin-core'
 - '../gelatin-picture'
 - '../gelatin-gl'
-- '../../sdl2'
+- location:
+    git: https://github.com/schell/sdl2.git
+    commit: b3e8c9cb707ca45cf443b5103c5fd6dff1bb1fd3
 - location:
     git: https://github.com/schell/renderable.git
     commit: 743ea68c91daeb4c3000f3c0ce2c73fbac02cacc
