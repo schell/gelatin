@@ -32,6 +32,7 @@ module Gelatin.Picture (
     pictureBounds,
     pictureSize,
     pictureOrigin,
+    pictureCenter,
     -- * Compilation helpers
     CompileData(..),
     emptyCompileData,
@@ -46,7 +47,7 @@ import Control.Monad.Free
 import Control.Monad.Free.Church
 import Gelatin.Core hiding (ellipse, arc)
 import qualified Gelatin.Core as Core
-import Linear hiding (rotate)
+import Linear hiding (rotate, trace)
 import Data.Hashable
 --------------------------------------------------------------------------------
 -- Picture
@@ -104,11 +105,13 @@ data PaintedPrimitives = Stroked Stroke Primitives
                        deriving (Show)
 instance Hashable PaintedPrimitives where
     hashWithSalt s (Stroked st prim) =
-        s `hashWithSalt` "Stroked" `hashWithSalt` st `hashWithSalt` prim 
+        let vs = concatMap unPath $ primToPaths prim
+            sh = StrokeHash st vs
+        in s `hashWithSalt` sh `hashWithSalt` prim 
     hashWithSalt s (Filled f prim) =
         let vs = concatMap unPath $ primToPaths prim
             fh = FillHash f vs
-        in s `hashWithSalt` "Filled" `hashWithSalt` fh `hashWithSalt` prim
+        in s `hashWithSalt` fh `hashWithSalt` prim
 
 withColoring :: Coloring -> Primitives -> PaintedPrimitives 
 withColoring (FillColoring f) = Filled f
@@ -178,36 +181,27 @@ boundingBox :: CompileData -> Free PictureCmd () -> (V2 Float, V2 Float)
 boundingBox _ (Pure ()) = (0,0)
 boundingBox cd (Free (Blank n)) = boundingBox cd n
 boundingBox cd (Free (Polyline vs n)) =
-    let t = cdTransform cd
-        vs' = transform t vs
-    in boundsBounds [polyBounds vs', boundingBox cd n]
+    boundsBounds [polyBounds vs, boundingBox cd n]
 boundingBox cd (Free (Rectangle v n)) =
-    let t = cdTransform cd
-        vs = box v
-        vs' = transform t vs
-    in boundsBounds [polyBounds vs', boundingBox cd n]
+    let vs = box v
+    in boundsBounds [polyBounds vs, boundingBox cd n]
 boundingBox cd (Free (Curve a b c n)) =
-    let t = cdTransform cd
-        vs = transform t $ subdivideAdaptive 100 0 $ bez3 a b c
+    let vs = subdivideAdaptive 100 0 $ bez3 a b c
     in boundsBounds [polyBounds vs, boundingBox cd n]
 boundingBox cd (Free (Arc (V2 xr yr) start stop n)) =
-    let t = cdTransform cd
-        vs = transform t $ concatMap (subdivideAdaptive4 100 0) $
-                 Core.arc xr yr start stop
+    let vs = concatMap (subdivideAdaptive4 100 0) $ Core.arc xr yr start stop
     in boundsBounds [polyBounds vs, boundingBox cd n]
 boundingBox cd (Free (Ellipse (V2 x y) n)) =
-    let t = cdTransform cd
-        vs = transform t $ bez4sToPath 100 0 $ Core.ellipse x y
+    let vs = bez4sToPath 100 0 $ Core.ellipse x y
     in boundsBounds [polyBounds vs, boundingBox cd n]
 boundingBox cd (Free (Circle r n)) =
-    let t = cdTransform cd
-        vs = transform t $ bez4sToPath 100 0 $ Core.ellipse r r
+    let vs = bez4sToPath 100 0 $ Core.ellipse r r
     in boundsBounds [polyBounds vs, boundingBox cd n]
 boundingBox cd (Free (Letters dpi px str n))
     | Just font <- cdFont cd =
-        let t = cdTransform cd
-            (V2 nx ny, V2 xx xy) = fontStringBoundingBox font dpi px str
-            vs = transform t [V2 nx ny, V2 xx xy]
+        let (tl, br) = polyBounds $ trisToComp $ snd $ 
+                         fontStringGeom font dpi px str
+            vs = [tl, br]
         in boundsBounds [polyBounds vs, boundingBox cd n]
     | otherwise = boundingBox cd n
 boundingBox cd (Free (WithStroke _ p n)) =
@@ -215,9 +209,11 @@ boundingBox cd (Free (WithStroke _ p n)) =
 boundingBox cd (Free (WithFill _ p n)) =
     boundsBounds [boundingBox cd $ freePic p, boundingBox cd n]
 boundingBox cd (Free (WithTransform t p n)) =
-    let t' = cdTransform cd
-        cd' = cd{cdTransform = t `mappend` t'}
-    in boundsBounds [boundingBox cd' $ freePic p, boundingBox cd n]
+    let (tl,br) = boundingBox cd $ freePic p 
+        (tl',br') = (transform t tl, transform t br)
+    in boundsBounds [ (tl',br')
+                    , boundingBox cd n 
+                    ]
 boundingBox cd (Free (WithFont font p n)) =
     let cd' = cd{cdFont = Just font}
     in boundsBounds [boundingBox cd' $ freePic p, boundingBox cd n]
@@ -231,6 +227,12 @@ pictureSize :: Picture () -> V2 Float
 pictureSize p =
     let (tl,br) = pictureBounds p
     in br - tl
+
+-- Returns the center point of the picture, based on its bounding box.
+pictureCenter :: Picture () -> V2 Float
+pictureCenter p = 
+    let (tl,br) = pictureBounds p
+    in tl + (br - tl) / 2
 
 -- Returns the leftmost, uppermost point of the picture.
 pictureOrigin :: Picture () -> V2 Float

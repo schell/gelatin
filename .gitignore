@@ -4,7 +4,7 @@ dist*
 *.sqlite3
 .cabal-sandbox
 cabal.sandbox.config
-.DS_Store
-*.swp
-.stack-work
-session.*
+cabal.config
+*/.stack-work/
+.stack-work/
+*.sw[a-z]

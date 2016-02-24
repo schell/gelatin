@@ -1,0 +1,47 @@
+name:                gelatin
+version:             0.0.0.1
+synopsis:            The gelatin mega-repo examples and tests.
+description:         Please see README.md
+homepage:            https://github.com/schell/gelatin#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Schell Scivally
+maintainer:          schell@synapsegroup.com
+copyright:           2016 Schell Scivally
+category:            Graphics
+build-type:          Simple
+-- extra-source-files:
+cabal-version:       >=1.10
+
+executable gelatin-sandbox
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , gelatin-core
+                     , gelatin-picture
+                     , gelatin-gl
+                     , gelatin-glfw
+                     , gelatin-sdl2
+                     , renderable
+                     , FontyFruity
+                     , filepath
+                     , directory
+  default-language:    Haskell2010
+
+test-suite gelatin-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base
+                     , gelatin-core
+                     , gelatin-picture
+                     , gelatin-gl
+                     , gelatin-glfw
+                     , gelatin-sdl2
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/schell/gelatin

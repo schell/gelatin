@@ -5,8 +5,11 @@ module Gelatin.SDL2 (
     -- * Re-exports
     module GL,
     module SDL,
+    -- * Startup
     startupSDL2Backend,
-    startupSDL2BackendWithConfig
+    startupSDL2BackendWithConfig,
+    -- * Rendering
+    renderWithSDL2
 ) where
 
 import Gelatin.GL as GL
@@ -14,6 +17,7 @@ import Control.Monad
 import Control.Arrow (second)
 import Data.Hashable
 import Data.Text as T
+import Data.Bits
 import SDL hiding (glBindTexture,glUnbindTexture,Rectangle,Renderer)
 import Linear hiding (rotate)
 import System.Exit
@@ -22,9 +26,9 @@ import GHC.Generics
 
 startupSDL2Backend :: Int -> Int -> String -> Bool -> IO (Rez, Window)
 startupSDL2Backend ww wh ws highDPI = do
-    let openGL = defaultOpenGL{ glProfile = Core Debug 3 3 
+    let openGL = defaultOpenGL{ glProfile = Core Debug 3 3
                               }
-        window = defaultWindow{ windowInitialSize = V2 (fromIntegral ww) 
+        window = defaultWindow{ windowInitialSize = V2 (fromIntegral ww)
                                                        (fromIntegral wh)
                               , windowOpenGL = Just openGL
                               , windowResizable = True
@@ -43,7 +47,7 @@ startupSDL2BackendWithConfig cfg str = do
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
-    let wsize =  do V2 x y <- get $ windowSize w 
+    let wsize =  do V2 x y <- get $ windowSize w
                     return (fromIntegral x, fromIntegral y)
         fsize = do V2 x y <- glGetDrawableSize w
                    return (fromIntegral x, fromIntegral y)
@@ -52,8 +56,18 @@ startupSDL2BackendWithConfig cfg str = do
                  return $ floor $ 72 * fromIntegral fw / fromIntegral ww
 
         ctx = Context { ctxFramebufferSize = fsize
-                      , ctxWindowSize = wsize                      
+                      , ctxWindowSize = wsize
                       , ctxScreenDpi = dpi
                       }
     return (Rez sh ctx, w)
 
+renderWithSDL2 :: Window -> Rez -> Cache IO Transform -> Picture ()
+               -> IO (Cache IO Transform)
+renderWithSDL2 window rez cache pic = do
+  (fbw,fbh) <- ctxFramebufferSize $ rezContext rez
+  glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
+  glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
+  let strategy = paintedPrimitivesRenderStrategy
+  newCache <- renderPrims strategy rez cache $ toPaintedPrimitives pic
+  glSwapWindow window
+  return newCache

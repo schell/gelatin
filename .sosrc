@@ -1,11 +1,11 @@
 - patterns:
   - ([^\/]*)\/(.*\.hs)$
   commands:
-  - cd \1; stack build
-  - cd \1; stack exec hlint \2
-  - cd gelatin-sdl2; stack build
+  - stack build
+  - stack exec hlint \0
+  - stack exec gelatin-sandbox
 - patterns:
   - ([^\/]*)\/(.*\.cabal)$
   commands:
-  - cd \1; stack build
-  - cd gelatin-sdl2; stack build
+  - stack build
+  - stack exec hlint \0

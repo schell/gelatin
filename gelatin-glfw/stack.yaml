@@ -1,13 +1,13 @@
 flags: {}
 extra-package-dbs: []
-packages: 
+packages:
 - '.'
 - '../gelatin-core'
 - '../gelatin-picture'
 - '../gelatin-gl'
 - location:
     git: https://github.com/schell/renderable.git
-    commit: 743ea68c91daeb4c3000f3c0ce2c73fbac02cacc
+    commit: d1a0b6bcb5412f93cba7188dd45b09420de8e2af
 - location:
     git: https://github.com/schell/FontyFruity
     commit: 99c143ebb569c286aa5252587923f8c34423e969
