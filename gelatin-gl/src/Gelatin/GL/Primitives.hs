@@ -7,15 +7,12 @@ import Gelatin.GL.Common
 import Control.Monad
 import Data.Renderable
 
-renderPaintedPrimitives :: Rez -> PaintedPrimitives -> IO GLRenderer 
-renderPaintedPrimitives (Rez sh win) (Stroked (Stroke c cs w f cp) p) = do
+renderPaintedPrimitives :: Rez -> PaintedPrimitives -> IO GLRenderer
+renderPaintedPrimitives (Rez sh win) (Stroked (Stroke sf w f cp) p) = do
         let ps = primToPaths p
             shader = shProjectedPolyline sh
-        rs <- forM ps $ \(Path vs) -> do
-            let cs' = if null cs then repeat c else gradient
-                gradient = [deCasteljau n cs | n <- map (/len) [0..len - 1]]
-                len = realToFrac $ length vs
-            projectedPolylineRenderer win shader w f cp vs cs'
+        rs <- forM ps $ \(Path vs) ->
+            filledPolylineRenderer win shader sf w f cp vs
         return $ foldl appendRenderer emptyRenderer rs
 renderPaintedPrimitives (Rez sh win) (Filled fill (TextPrims font dpi px str)) = do
     let gsh = shGeometry sh

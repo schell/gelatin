@@ -1,6 +1,6 @@
 flags: {}
 extra-package-dbs: []
-packages: 
+packages:
 - '.'
 - '../gelatin-core'
 - '../gelatin-picture'

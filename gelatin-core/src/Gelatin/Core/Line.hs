@@ -10,6 +10,6 @@ data LineCap = LineCapNone
              | LineCapRound
              | LineCapTriOut
              | LineCapTriIn
-             deriving (Show, Eq, Enum, Generic)
+             deriving (Show, Ord, Eq, Enum, Generic)
 
 instance Hashable LineCap

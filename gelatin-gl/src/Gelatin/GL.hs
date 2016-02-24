@@ -1,10 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveGeneric #-}
 module Gelatin.GL (
-    fontyData,
     -- * Re-exports
     module G,
     module Picture,
@@ -23,34 +20,16 @@ import Control.Monad
 import Control.Arrow (second)
 import Data.Renderable as Renderable
 import Data.Hashable
-import Graphics.Text.TrueType 
+import Graphics.Text.TrueType
 import Graphics.GL.Types as GL
 import Graphics.GL.Core33 as GL
-import Linear hiding (rotate)
+import Linear hiding (rotate, trace)
 import System.Exit
-import GHC.Generics
 
 instance Primitive PaintedPrimitives where
     type PrimM PaintedPrimitives = IO
     type PrimR PaintedPrimitives = Rez
     type PrimT PaintedPrimitives = Transform
     canAllocPrimitive _ (Stroked _ p) = not $ null $ primToPaths p
-    canAllocPrimitive _ _ = True 
-    compilePrimitive = renderPaintedPrimitives 
-    
-deriving instance Generic FontStyle
-instance Hashable FontStyle
-deriving instance Generic FontDescriptor
-instance Hashable FontDescriptor
-
--- | Provide a FontData for a given FontyFruity TrueType Font.
-fontyData :: Font -> FontData
-fontyData font = FontData { fontStringBoundingBox = boundingBox
-                          , fontStringCurves = fontCurves font
-                          , fontStringGeom = fontGeom font
-                          , fontHash = \s -> hashWithSalt s $ descriptorOf font 
-                          , fontShow = show $ descriptorOf font
-                          }
-    where boundingBox dpi px str = unBox $ 
-            stringBoundingBox font dpi (pixelSizeInPointAtDpi px dpi) str
-          unBox (BoundingBox xn yn xx yx _) = (V2 xn yn, V2 xx yx) 
+    canAllocPrimitive _ _ = True
+    compilePrimitive = renderPaintedPrimitives

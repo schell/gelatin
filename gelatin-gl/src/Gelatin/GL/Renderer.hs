@@ -2,6 +2,8 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Gelatin.GL.Renderer (
     -- * Renderer
     GLRenderer,
@@ -12,7 +14,7 @@ module Gelatin.GL.Renderer (
     unloadTexture,
     loadImageAsTexture,
     -- * Line rendering
-    projectedPolylineRenderer,
+    filledPolylineRenderer,
     -- * Triangle rendering
     colorRenderer,
     textureRenderer,
@@ -24,6 +26,8 @@ module Gelatin.GL.Renderer (
     textureBezUnitRenderer,
     filledBezierRenderer,
     -- * Font rendering
+    fontyData,
+    loadFont,
     filledFontRenderer,
     fontCurves,
     fontGeom,
@@ -42,7 +46,7 @@ module Gelatin.GL.Renderer (
 import Gelatin.GL.Shader
 import Gelatin.GL.Common
 import Gelatin.Picture
-import Linear
+import Linear hiding (trace)
 import Graphics.Text.TrueType
 import Graphics.GL.Core33
 import Graphics.GL.Types
@@ -53,6 +57,7 @@ import Foreign.Marshal.Utils
 import Foreign.C.String
 import Foreign.Storable
 import Foreign.Ptr
+import Data.Hashable
 import Data.Renderable
 import Data.Monoid
 import Data.Maybe
@@ -66,19 +71,15 @@ import System.Exit
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Foldable as F
 import GHC.Stack
+import GHC.Generics
 --------------------------------------------------------------------------------
 -- GLRenderers
 --------------------------------------------------------------------------------
--- | Creates and returns a renderer that renders an expanded 2d polyline
--- projected in 3d space.
-projectedPolylineRenderer :: Context -> ProjectedPolylineShader -> Float
-                           -> Float -> (LineCap,LineCap) -> [V2 Float]
-                           -> [V4 Float] -> IO GLRenderer
-projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
-    | (v1:v2:_) <- verts
-    , (c1:_:_) <- colors = do
+expandPolyline :: [V2 Float] -> Float -> Float
+               -> Maybe ([V2 Float], [V2 Float], [V2 Float], [V2 Float], Float)
+expandPolyline verts thickness feather
+    | (v1:v2:_) <- verts =
     let v3:v3n:_ = reverse verts
-        c3:_:_ = reverse $ take (length verts) colors
         -- clamp the lower bound of our thickness to 1
         absthick = max thickness 1
         d = fromIntegral (ceiling $ absthick + 2.5 * feather :: Integer)
@@ -89,7 +90,7 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
         seqLens  = snd $ foldl seqfunc (0,[]) lens
         isClosed = distance v1 v3 <= 0.00001
         -- if the polyline is closed return a miter with the last point
-        startCap = ([cap,cap], [c1,c1], uvs, [v2,v2],[prev,prev])
+        startCap = ([cap,cap], uvs, [v2,v2],[prev,prev])
             where (uvs,cap,prev) = if isClosed
                                    -- no cap
                                    then ([V2 0 d, V2 0 (-d)],v1,v3n)
@@ -97,7 +98,7 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
                                    else let c = d *^ signorm (v2 - v1)
                                         in ([V2 (-d) d, V2 (-d) (-d)],v1 - c, v1 - 2*c)
 
-        endCap = ([cap,cap], [c3,c3], uvs,[next,next],[v3n,v3n])
+        endCap = ([cap,cap], uvs,[next,next],[v3n,v3n])
             where (uvs,cap,next) = if isClosed
                                    -- no cap
                                    then ([V2 totalLen d, V2 totalLen (-d)], v3, v2)
@@ -105,57 +106,83 @@ projectedPolylineRenderer win psh thickness feather (capx,capy) verts colors
                                    else let c = d *^ signorm (v3 - v3n)
                                         in ([V2 totalEnd d, V2 totalEnd (-d)], v3 + c, v3 + 2*c)
 
-        vcs  = zip3 verts colors seqLens :: [(V2 Float, V4 Float, Float)]
+        vcs  = zip verts seqLens :: [(V2 Float, Float)]
         tris = startCap : zipWith3 strip vcs (drop 1 vcs) (drop 2 vcs)
                         ++ [endCap]
         -- Expand the line into a triangle strip
-        strip (a,_,_) (b,bc,l) (c,_,_) = ([b,b],[bc,bc],[V2 l d,V2 l (-d)],[c,c],[a,a])
-        vToGL :: Foldable f => [f Float] -> [GLfloat]
-        vToGL = map realToFrac . concatMap F.toList
-        vs_ = concatMap (\(a,_,_,_,_) -> a) tris
-        cs_ = concatMap (\(_,a,_,_,_) -> a) tris
-        us_ = concatMap (\(_,_,a,_,_) -> a) tris
-        ns_ = concatMap (\(_,_,_,a,_) -> a) tris
-        ps_ = concatMap (\(_,_,_,_,a) -> a) tris
-        vs  = vToGL vs_
-        cs  = vToGL cs_
-        us  = vToGL us_
-        ns  = vToGL ns_
-        ps  = vToGL ps_
-        PPRS src = psh
-        srcs = [src]
+        strip (a,_) (b,l) (c,_) = ([b,b],[V2 l d,V2 l (-d)],[c,c],[a,a])
+        vs = concatMap (\(a,_,_,_) -> a) tris
+        us = concatMap (\(_,a,_,_) -> a) tris
+        ns = concatMap (\(_,_,a,_) -> a) tris
+        ps = concatMap (\(_,_,_,a) -> a) tris
+    in Just (vs, us, ns, ps, totalLen)
+    | otherwise = Nothing
 
-    withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, uvbuf, nbuf, pbuf] -> do
-        onlyEnableAttribs [positionLoc, colorLoc, uvLoc, nextLoc, prevLoc]
-        bufferAttrib positionLoc 2 vbuf vs
-        bufferAttrib colorLoc 4 cbuf cs
-        bufferAttrib uvLoc 2 uvbuf us
-        bufferAttrib nextLoc 2 nbuf ns
-        bufferAttrib prevLoc 2 pbuf ps
-        glBindVertexArray 0
-        let num = fromIntegral $ length vs_
-            r t = do withUniform "projection" srcs $ setOrthoContextProjection win
-                     withUniform "modelview" srcs $ setModelview t
-                     withUniform "thickness" srcs $ \p u -> do
-                         glUseProgram p
-                         glUniform1f u thickness
-                     withUniform "feather" srcs $ \p u -> do
-                         glUseProgram p
-                         glUniform1f u feather
-                     withUniform "sumlength" srcs $ \p u -> do
-                         glUseProgram p
-                         glUniform1f u totalLen
-                     withUniform "cap" srcs $ \p u -> do
-                         glUseProgram p
-                         let [x,y] = map (fromIntegral . fromEnum) [capx,capy]
-                         glUniform2f u x y
-                     -- set the thickness uniform with the actual thickness
-                     -- so the shader knows how to anti-alias fragments
-                     drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
-            c = do withArray bufs $ glDeleteBuffers 5
-                   withArray [vao] $ glDeleteVertexArrays 1
-        return (c, r)
-    | otherwise = return emptyRenderer
+-- | Creates and returns a renderer that renders an expanded 2d polyline
+-- projected in 3d space.
+filledPolylineRenderer :: Context -> ProjectedPolylineShader -> Fill
+                           -> Float -> Float -> (LineCap,LineCap) -> [V2 Float]
+                           -> IO GLRenderer
+filledPolylineRenderer win psh fill thickness feather caps verts = do
+    let empty = do putStrLn "could not expand polyline"
+                   return emptyRenderer
+        mpoly = expandPolyline verts thickness feather
+    flip (maybe empty) mpoly $ \(vs_,us_,ns_,ps_,totalLen) -> do
+        mtex <- case fill of
+            FillColor{} -> return Nothing
+            FillTexture fp _ -> loadImageAsTexture fp
+
+        let vToGL :: Foldable f => [f Float] -> [GLfloat]
+            vToGL = map realToFrac . concatMap F.toList
+            vs  = vToGL vs_
+            us  = vToGL us_
+            ns  = vToGL ns_
+            ps  = vToGL ps_
+            PPRS src = psh
+
+        withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, buvbuf, nbuf, pbuf] -> do
+            let commonLocs = [PositionLoc, BezUVLoc, NextLoc, PrevLoc]
+                colorLocs = ColorLoc : commonLocs
+                uvLocs = UVLoc : commonLocs
+                buffer f = do
+                    bufferAttrib PositionLoc 2 vbuf vs
+                    f
+                    bufferAttrib BezUVLoc 2 buvbuf us
+                    bufferAttrib NextLoc 2 nbuf ns
+                    bufferAttrib PrevLoc 2 pbuf ps
+
+            hasUV <- case fill of
+                FillColor f -> do
+                    onlyEnableAttribs colorLocs
+                    buffer $ bufferAttrib ColorLoc 4 cbuf $ vToGL $ map f vs_
+                    return False
+                FillTexture _ f -> do
+                    onlyEnableAttribs uvLocs
+                    buffer $ bufferAttrib UVLoc 2 cbuf $ vToGL $ map f vs_
+                    return True
+
+            glBindVertexArray 0
+
+            let num = fromIntegral $ length vs_
+                r t = do let mv = modelviewProjection t
+                         pj <- orthoContextProjection win
+                         updateUniforms [ UniformProjection pj
+                                        , UniformModelView mv
+                                        , UniformThickness thickness
+                                        , UniformFeather feather
+                                        , UniformSumLength totalLen
+                                        , UniformLineCaps caps
+                                        , UniformHasUV hasUV
+                                        , UniformSampler 0
+                                        ] src
+                         drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
+                c = do withArray bufs $ glDeleteBuffers 5
+                       withArray [vao] $ glDeleteVertexArrays 1
+            case (hasUV, mtex) of
+                (True, Just tx) -> return (c, bindTexAround tx . r)
+                (True, Nothing) -> do putStrLn "Could not creat a filledPolylineRenderer"
+                                      empty
+                (False,_)       -> return (c,r)
 
 -- | Creates and returns a renderer that renders a given string of
 -- triangles with the given filling.
@@ -166,14 +193,14 @@ filledTriangleRenderer win gsh ts (FillColor f) = do
         -- If we can't find a color in the color map we'll just use
         -- transparent black.
         cs = map f vs
-    colorRenderer win gsh GL_TRIANGLES vs cs 
+    colorRenderer win gsh GL_TRIANGLES vs cs
 filledTriangleRenderer win gsh ts (FillTexture fp f) = do
     mtex <- loadImageAsTexture fp
     case mtex of
         Just tx -> do
             let vs = trisToComp ts
                 -- If we can't find a uv in the uv map we'll just use
-                -- 0,0 
+                -- 0,0
                 uvs = map f vs
             (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
             let r' t = bindTexAround tx $ r t
@@ -189,6 +216,7 @@ bindTexAround tx f = do
     glBindTexture GL_TEXTURE_2D tx
     f
     glBindTexture GL_TEXTURE_2D 0
+
 --------------------------------------------------------------------------------
 -- Font decomposition into triangles and beziers
 --------------------------------------------------------------------------------
@@ -199,19 +227,36 @@ type Contour = [Bezier (V2 Float)] -- Beziers
 type CharacterOutline = [Contour]
 type StringOutline = [CharacterOutline]
 
+deriving instance Generic FontStyle
+instance Hashable FontStyle
+deriving instance Generic FontDescriptor
+instance Hashable FontDescriptor
+
+-- | Provide a FontData for a given FontyFruity TrueType Font.
+fontyData :: Font -> FontData
+fontyData font = FontData { fontStringCurves = fontCurves font
+                          , fontStringGeom = fontGeom font
+                          , fontHash = \s -> hashWithSalt s $ descriptorOf font
+                          , fontShow = show $ descriptorOf font
+                          }
+
+loadFont :: FilePath -> IO (Either String FontData)
+loadFont fp = fmap fontyData <$> loadFontFile fp
+
+stringOutline :: Font -> Int -> Float -> String -> StringOutline
+stringOutline font dpi px str = beziers cs
+    where sz = pixelSizeInPointAtDpi px dpi
+          cs = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
+
 fontGeom :: Font -> Int -> Float -> String -> ([Bezier (V2 Float)], [Triangle (V2 Float)])
 fontGeom font dpi px str =
-    let sz  = pixelSizeInPointAtDpi px dpi
-        cs  = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
-        bs  = beziers cs
+    let bs  = stringOutline font dpi px str
         ts  = concatMap (concatMap (concaveTriangles . onContourPoints)) bs
     in (concat $ concat bs,ts)
 
 fontCurves :: Font -> Int -> Float -> String -> [[[QuadraticBezier (V2 Float)]]]
 fontCurves font dpi px str =
-    let sz = pixelSizeInPointAtDpi px dpi
-        cs = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
-        bs = beziers cs
+    let bs = stringOutline font dpi px str
     in fmap (fmap (fmap (\(Bezier _ a b c) -> bez3 a b c))) bs
 
 fromFonty :: (UV.Unbox b1, Functor f1, Functor f) => ([V2 b1] -> b) -> f (f1 (UV.Vector (b1, b1))) -> f (f1 b)
@@ -236,13 +281,13 @@ onContourPoints [] = []
 onContourPoints (Bezier LT a b c :bs) = [a,b,c] ++ onContourPoints bs
 onContourPoints (Bezier _ a _ c :bs) = [a,c] ++ onContourPoints bs
 
--- | Creates and returns a renderer that renders some text with a font. 
+-- | Creates and returns a renderer that renders some text with a font.
 filledFontRenderer :: Context -> GeomShader -> BezShader
-                  -> FontData -> Int -> Float -> String 
+                  -> FontData -> Int -> Float -> String
                   -> Fill -> IO GLRenderer
 filledFontRenderer window gsh brs fd dpi px str fill = do
     let (bs,ts) = fontStringGeom fd dpi px str
-    (cg,fg) <- filledTriangleRenderer window gsh ts fill 
+    (cg,fg) <- filledTriangleRenderer window gsh ts fill
     (cb,fb) <- filledBezierRenderer window brs bs fill
     let s t  = stencilMask (fg t) (fg t)
         gs t = s t >> fb t
@@ -260,20 +305,19 @@ colorRenderer window gsh mode vs gs = do
         let ps = map realToFrac $ concatMap F.toList vs :: [GLfloat]
             cs = map realToFrac $ concatMap F.toList $ take (length vs) gs :: [GLfloat]
 
-        glDisableVertexAttribArray uvLoc
-        glEnableVertexAttribArray colorLoc
-
-        bufferAttrib positionLoc 2 pbuf ps
-        bufferAttrib colorLoc 4 cbuf cs
+        onlyEnableAttribs [PositionLoc, ColorLoc]
+        bufferAttrib PositionLoc 2 pbuf ps
+        bufferAttrib ColorLoc 4 cbuf cs
         glBindVertexArray 0
 
         let num = fromIntegral $ length vs
             renderFunction t = do
-                withUniform "hasUV" srcs $ \p huv -> do
-                    glUseProgram p
-                    glUniform1i huv 0
-                withUniform "projection" srcs $ setOrthoContextProjection window
-                withUniform "modelview" srcs $ setModelview t
+                let mv = modelviewProjection t
+                pj <- orthoContextProjection window
+                updateUniforms [UniformHasUV False
+                               ,UniformProjection pj
+                               ,UniformModelView mv
+                               ] src
                 drawBuffer (shProgram src) vao mode num
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
@@ -301,23 +345,20 @@ textureUnitRenderer (Just u) win gsh mode vs uvs = do
             ps = f vs
             cs = f $ take (length vs) uvs
 
-        glDisableVertexAttribArray colorLoc
-        glEnableVertexAttribArray uvLoc
-
-        bufferAttrib positionLoc 2 pbuf ps
-        bufferAttrib uvLoc 2 cbuf cs
+        onlyEnableAttribs [PositionLoc, UVLoc]
+        bufferAttrib PositionLoc 2 pbuf ps
+        bufferAttrib UVLoc 2 cbuf cs
         glBindVertexArray 0
 
         let num = fromIntegral $ length vs
             renderFunction tfrm = do
-                withUniform "hasUV" srcs $ \p huv -> do
-                    glUseProgram p
-                    glUniform1i huv 1
-                withUniform "sampler" srcs $ \p smp -> do
-                    glUseProgram p
-                    glUniform1i smp u
-                withUniform "projection" srcs $ setOrthoContextProjection win
-                withUniform "modelview" srcs $ setModelview tfrm
+                let mv = modelviewProjection tfrm
+                pj <- orthoContextProjection win
+                updateUniforms [UniformHasUV True
+                               ,UniformSampler $ fromIntegral u
+                               ,UniformProjection pj
+                               ,UniformModelView mv
+                               ] src
                 drawBuffer (shProgram src) vao mode num
             cleanupFunction = do
                 withArray [pbuf, cbuf] $ glDeleteBuffers 2
@@ -340,24 +381,23 @@ colorBezRenderer window (BRS src) bs ts =
                                                     ])
                            bs :: [GLfloat]
 
-        glDisableVertexAttribArray uvLoc
-        glEnableVertexAttribArray colorLoc
-        bufferAttrib positionLoc 2 pbuf ps
-        bufferAttrib bezLoc 3 tbuf ws
-        bufferAttrib colorLoc 4 cbuf cs
+        onlyEnableAttribs [PositionLoc, BezLoc, ColorLoc]
+        bufferAttrib PositionLoc 2 pbuf ps
+        bufferAttrib BezLoc 3 tbuf ws
+        bufferAttrib ColorLoc 4 cbuf cs
         glBindVertexArray 0
 
         let cleanupFunction = do
                 withArray [pbuf, tbuf, cbuf] $ glDeleteBuffers 3
                 withArray [vao] $ glDeleteVertexArrays 1
             num = fromIntegral $ length vs
-            srcs = [src]
             renderFunction t = do
-                withUniform "hasUV" srcs $ \p huv -> do
-                    glUseProgram p
-                    glUniform1i huv 0
-                withUniform "projection" srcs $ setOrthoContextProjection window
-                withUniform "modelview" srcs $ setModelview t
+                pj <- orthoContextProjection window
+                let mv = modelviewProjection t
+                updateUniforms [UniformHasUV False
+                               ,UniformProjection pj
+                               ,UniformModelView mv
+                               ] src
                 drawBuffer (shProgram src) vao GL_TRIANGLES num
         return (cleanupFunction,renderFunction)
 
@@ -380,26 +420,24 @@ textureBezUnitRenderer (Just u) window (BRS src) bs ts =
                                                     ])
                            bs :: [GLfloat]
 
-        onlyEnableAttribs [positionLoc, uvLoc, bezLoc]
-        bufferAttrib positionLoc 2 pbuf ps
-        bufferAttrib uvLoc 2 uvbuf uvs'
-        bufferAttrib bezLoc 3 tbuf ws
+        onlyEnableAttribs [PositionLoc, UVLoc, BezLoc]
+        bufferAttrib PositionLoc 2 pbuf ps
+        bufferAttrib UVLoc 2 uvbuf uvs'
+        bufferAttrib BezLoc 3 tbuf ws
         glBindVertexArray 0
 
         let cleanupFunction = do
                 withArray [pbuf, tbuf, uvbuf] $ glDeleteBuffers 3
                 withArray [vao] $ glDeleteVertexArrays 1
             num = fromIntegral $ length vs
-            srcs = [src]
             renderFunction t = do
-                withUniform "hasUV" srcs $ \p huv -> do
-                    glUseProgram p
-                    glUniform1i huv 1
-                withUniform "sampler" srcs $ \p smp -> do
-                    glUseProgram p
-                    glUniform1i smp u
-                withUniform "projection" srcs $ setOrthoContextProjection window
-                withUniform "modelview" srcs $ setModelview t
+                let mv = modelviewProjection t
+                pj <- orthoContextProjection window
+                updateUniforms [UniformProjection pj
+                               ,UniformModelView mv
+                               ,UniformHasUV True
+                               ,UniformSampler $ fromIntegral u
+                               ] src
                 drawBuffer (shProgram src) vao GL_TRIANGLES num
         return (cleanupFunction,renderFunction)
 
@@ -435,25 +473,22 @@ maskRenderer win (MRS src) mode vs uvs =
         let vs'  = map realToFrac $ concatMap F.toList vs :: [GLfloat]
             uvs' = map realToFrac $ concatMap F.toList uvs :: [GLfloat]
 
-        glDisableVertexAttribArray colorLoc
-        glEnableVertexAttribArray positionLoc
-        glEnableVertexAttribArray uvLoc
-        bufferAttrib positionLoc 2 pbuf vs'
-        bufferAttrib uvLoc 2 uvbuf uvs'
+        onlyEnableAttribs [PositionLoc, UVLoc]
+        bufferAttrib PositionLoc 2 pbuf vs'
+        bufferAttrib UVLoc 2 uvbuf uvs'
         glBindVertexArray 0
 
         let cleanup = do withArray [pbuf, uvbuf] $ glDeleteBuffers 2
                          withArray [vao] $ glDeleteVertexArrays 1
             num = fromIntegral $ length vs
             render t = do
-                withUniform "projection" [src] $ setOrthoContextProjection win
-                withUniform "modelview" [src] $ setModelview t
-                withUniform "mainTex" [src] $ \p smp -> do
-                    glUseProgram p
-                    glUniform1i smp 0
-                withUniform "maskTex" [src] $ \p smp -> do
-                    glUseProgram p
-                    glUniform1i smp 1
+                let mv = modelviewProjection t
+                pj <- orthoContextProjection win
+                updateUniforms [UniformProjection pj
+                               ,UniformModelView mv
+                               ,UniformMainTex 0
+                               ,UniformMaskTex 1
+                               ] src
                 drawBuffer (shProgram src) vao mode num
         return (cleanup,render)
 
@@ -510,31 +545,27 @@ transformRenderer t (c, r) = (c, r . (t <>))
 --------------------------------------------------------------------------------
 -- Updating uniforms
 --------------------------------------------------------------------------------
-withUniform :: String -> [Shader] -> (GLuint -> GLint -> IO ()) -> IO ()
-withUniform name srcs f = mapM_ update srcs
-    where update (Shader p ls) = forM_ (lookup name ls) (f p)
-
-setOrthoContextProjection :: Context -> GLuint -> GLint -> IO ()
-setOrthoContextProjection window program pju = do
-    pj <- orthoContextProjection window
-    glUseProgram program
-    with pj $ glUniformMatrix4fv pju 1 GL_TRUE . castPtr
-
-setModelview :: Transform -> GLuint -> GLint -> IO ()
-setModelview (Transform (V2 x y) (V2 w h) r) program uniform = do
-    let mv = mat4Translate txy !*! rot !*! mat4Scale sxy :: M44 GLfloat
-        sxy = V3 w h 1
+modelviewProjection :: Transform -> M44 Float
+modelviewProjection (Transform (V2 x y) (V2 w h) r) =
+    let sxy = V3 w h 1
         txy = V3 x y 0
         rxy = V3 0 0 1
         rot = if r /= 0 then mat4Rotate r rxy else identity
-    glUseProgram program
-    with mv $ glUniformMatrix4fv uniform 1 GL_TRUE . castPtr
+    in mat4Translate txy !*! rot !*! mat4Scale sxy
 
-orthoContextProjection :: Context -> IO (M44 GLfloat)
+orthoContextProjection :: Context -> IO (M44 Float)
 orthoContextProjection window = do
     (ww, wh) <- ctxWindowSize window
     let (hw,hh) = (fromIntegral ww, fromIntegral wh)
     return $ ortho 0 hw hh 0 0 1
+
+setProjectionUniforms :: [Shader] -> Context -> Transform -> IO ()
+setProjectionUniforms srcs window t = do
+    pj <- orthoContextProjection window
+    mapM_ (updateUniform $ UniformProjection pj) srcs
+
+    let mv = modelviewProjection t
+    mapM_ (updateUniform $ UniformModelView mv) srcs
 --------------------------------------------------------------------------------
 -- Working with textures.
 --------------------------------------------------------------------------------
@@ -543,19 +574,23 @@ loadImageAsTexture fp = do
     eStrOrImg <- readImage fp
     case eStrOrImg of
         Left err -> putStrLn err >> return Nothing
-        Right i  -> liftM Just (loadTexture i)
+        Right i  -> Just <$> loadTexture i
 
 loadTexture :: DynamicImage -> IO GLuint
 loadTexture = loadTextureUnit Nothing
 
-loadTextureUnit :: Maybe GLuint -> DynamicImage -> IO GLuint
-loadTextureUnit Nothing img = loadTextureUnit (Just GL_TEXTURE0) img
-loadTextureUnit (Just u) img = do
+allocAndActivateTex u = do
     [t] <- allocaArray 1 $ \ptr -> do
         glGenTextures 1 ptr
         peekArray 1 ptr
     glActiveTexture u
     glBindTexture GL_TEXTURE_2D t
+    return t
+
+loadTextureUnit :: Maybe GLuint -> DynamicImage -> IO GLuint
+loadTextureUnit Nothing img = loadTextureUnit (Just GL_TEXTURE0) img
+loadTextureUnit (Just u) img = do
+    t <- allocAndActivateTex u
     loadJuicy img
     glGenerateMipmap GL_TEXTURE_2D  -- Generate mipmaps now!!!
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S GL_REPEAT
@@ -595,24 +630,12 @@ toTextureUnit (Just u) win r = do
         peekArray 1 ptr
     glBindFramebuffer GL_FRAMEBUFFER fb
 
-    [t] <- allocaArray 1 $ \ptr -> do
-        glGenTextures 1 ptr
-        peekArray 1 ptr
-    glActiveTexture u
-    glBindTexture GL_TEXTURE_2D t
+    t <- allocAndActivateTex u
+
     (w,h) <- ctxWindowSize win
     let [w',h'] = map fromIntegral [w,h]
-    glTexImage2D GL_TEXTURE_2D
-                 0
-                 GL_RGBA
-                 w'
-                 h'
-                 0
-                 GL_RGBA
-                 GL_UNSIGNED_BYTE
-                 nullPtr
-    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
-    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST
+
+    initializeTexImage2D w' h'
 
     glFramebufferTexture GL_FRAMEBUFFER GL_COLOR_ATTACHMENT0 t 0
     withArray [GL_COLOR_ATTACHMENT0] $ glDrawBuffers 1
@@ -622,17 +645,18 @@ toTextureUnit (Just u) win r = do
     then putStrLn "incomplete framebuffer!"
     else do glClearColor 0 0 0 0
             glClear GL_COLOR_BUFFER_BIT
-            --ww <- (fromIntegral . fst) <$> ctxWindowSize win
-
-            --let s = floor (fbw/ww :: Double)
-            --print s
-            glViewport 0 0 w' h' --fbw' fbh'
+            glViewport 0 0 w' h'
             r
             glBindFramebuffer GL_FRAMEBUFFER 0
             with fb $ glDeleteFramebuffers 1
             (fbw, fbh) <- ctxFramebufferSize win
             glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
     return t
+
+initializeTexImage2D w h = do
+  glTexImage2D GL_TEXTURE_2D 0 GL_RGBA w h 0 GL_RGBA GL_UNSIGNED_BYTE nullPtr
+  glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
+  glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST
 
 type ClippingArea = (V2 Int, V2 Int)
 
@@ -660,17 +684,7 @@ clipTexture rtex (V2 x1 y1, V2 x2 y2) = do
     let [x1',y1',x2',y2',w',h'] = map fromIntegral
                                       [x1,y1,x2,y2,abs $ x2 - x1
                                                   ,abs $ y2 - y1]
-    glTexImage2D GL_TEXTURE_2D
-                 0
-                 GL_RGBA
-                 w'
-                 h'
-                 0
-                 GL_RGBA
-                 GL_UNSIGNED_BYTE
-                 nullPtr
-    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
-    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST
+    initializeTexImage2D w' h'
     glBindFramebuffer GL_DRAW_FRAMEBUFFER fbwrite
     glFramebufferTexture2D GL_DRAW_FRAMEBUFFER GL_COLOR_ATTACHMENT0 GL_TEXTURE_2D wtex 0
     clearErrors "clipTexture bind write framebuffer"
@@ -725,9 +739,10 @@ withBuffers n f = do
         peekArray (fromIntegral n) ptr
     f bufs
 
-bufferAttrib :: Storable a => GLuint -> GLint -> GLuint -> [a] -> IO ()
-bufferAttrib loc n buf as = do
-    let asize = length as * glFloatSize
+bufferAttrib :: Storable a => AttribLoc -> GLint -> GLuint -> [a] -> IO ()
+bufferAttrib attr n buf as = do
+    let loc = locToGLuint attr
+        asize = length as * glFloatSize
     glBindBuffer GL_ARRAY_BUFFER buf
     withArray as $ \ptr ->
         glBufferData GL_ARRAY_BUFFER (fromIntegral asize) (castPtr ptr) GL_STATIC_DRAW

@@ -5,6 +5,7 @@
 #version 330 core
 
 in vec4 fcolor;
+in vec2 fbezuv;
 in vec2 fuv;
 out vec4 fragColor;
 
@@ -16,13 +17,17 @@ uniform float feather;
 uniform float sumlength;
 // The start and end cap type.
 uniform vec2 cap;
+// Whether or not to use a texture for color.
+uniform bool hasUV;
+// Our texture sampler.
+uniform sampler2D sampler;
 
-float capNone = 0;
-float capButt = 1;
+float capNone   = 0;
+float capButt   = 1;
 float capSquare = 2;
-float capRound = 3;
+float capRound  = 3;
 float capTriOut = 4;
-float capTriIn = 5;
+float capTriIn  = 5;
 
 float capd(float type, float u, float v, float t ) {
     // None
@@ -41,13 +46,20 @@ float capd(float type, float u, float v, float t ) {
 }
 
 void main() {
-    float u = fuv.x;
-    float v = fuv.y;
+    float u = fbezuv.x;
+    float v = fbezuv.y;
     float l = sumlength;
     float dx = abs(min(u, u - l));
     float dy = abs(v);
     float d = dy;
-    vec4 color = fcolor;
+
+    vec4 color = vec4(0);
+    if (hasUV) {
+        color = texture(sampler, fuv.st);
+    } else {
+        color = fcolor;
+    }
+
     float t = thickness/2.0 - feather;
 
     if (u < 0) {
@@ -60,10 +72,10 @@ void main() {
 
     d -= t;
     if (d < 0.0) {
-        fragColor = fcolor;
+        fragColor = color;
     } else {
         d /= feather;
-        fragColor = vec4(fcolor.rgb, exp(-d*d)*fcolor.a);
+        fragColor = vec4(color.rgb, exp(-d*d)*color.a);
     }
 }
 
