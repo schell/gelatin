@@ -1,9 +1,6 @@
 flags: {}
 extra-package-dbs: []
-packages: 
+packages:
 - '.'
 - '../gelatin-core'
-- location:
-    git: https://github.com/schell/renderable.git
-    commit: 743ea68c91daeb4c3000f3c0ce2c73fbac02cacc
 resolver: lts-5.2
