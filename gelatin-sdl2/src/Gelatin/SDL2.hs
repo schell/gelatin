@@ -67,6 +67,7 @@ renderWithSDL2 window rez cache pic = do
   (fbw,fbh) <- ctxFramebufferSize $ rezContext rez
   glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
   glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
-  newCache <- renderPrims rez cache $ toPaintedPrimitives pic
+  let strategy = paintedPrimitivesRenderStrategy
+  newCache <- renderPrims strategy rez cache $ toPaintedPrimitives pic
   glSwapWindow window
   return newCache

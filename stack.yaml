@@ -16,7 +16,7 @@ packages:
     commit: b3e8c9cb707ca45cf443b5103c5fd6dff1bb1fd3
 - location:
     git: https://github.com/schell/renderable.git
-    commit: 743ea68c91daeb4c3000f3c0ce2c73fbac02cacc
+    commit: 242b09b9a14936f013baf816a7ddd9ae75e0e53b
 - location:
     git: https://github.com/schell/FontyFruity
     commit: 99c143ebb569c286aa5252587923f8c34423e969

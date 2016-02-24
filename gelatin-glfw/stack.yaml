@@ -1,16 +1,15 @@
 flags: {}
 extra-package-dbs: []
-packages: 
+packages:
 - '.'
 - '../gelatin-core'
 - '../gelatin-picture'
 - '../gelatin-gl'
-- '../../FontyFruity'
 - location:
     git: https://github.com/schell/renderable.git
-    commit: 743ea68c91daeb4c3000f3c0ce2c73fbac02cacc
-#- location:
-#    git: https://github.com/schell/FontyFruity
-#    commit: 99c143ebb569c286aa5252587923f8c34423e969
+    commit: 242b09b9a14936f013baf816a7ddd9ae75e0e53b
+- location:
+    git: https://github.com/schell/FontyFruity
+    commit: 99c143ebb569c286aa5252587923f8c34423e969
 extra-deps: []
 resolver: lts-5.2
