@@ -1,6 +1,0 @@
-flags: {}
-extra-package-dbs: []
-packages:
-- '.'
-- '../gelatin-core'
-resolver: lts-5.2
