@@ -1,43 +1,36 @@
 module Main where
 
-import Gelatin.SDL2
-import Data.Renderable
-import Data.Bits
-import Control.Concurrent
-import Control.Monad
-import Graphics.Text.TrueType
-import System.Directory
-import System.FilePath
-import System.Exit
+import           Control.Concurrent (threadDelay)
+import           Control.Monad      (when)
+import           SDL                (EventPayload(QuitEvent))
+import           System.Directory   (getCurrentDirectory)
+import           System.FilePath    ((</>))
+import           System.Exit        (exitSuccess, exitFailure)
 
-import Debug.Trace
+import           Data.Renderable
+import           Gelatin.SDL2
+
 
 picture :: FontData -> Picture ()
-picture font = move 100 $ do
+picture font = move 200 $ do
     let text = withFont font $ withFill (solid white) $
-                   letters 128 64 "128 dpi, 64 point text"
+                   letters 128 64 "Hello world!"
         textSize = pictureSize text
         textCenter = pictureCenter text
-    move textCenter $ withStroke [StrokeWidth 4, StrokeFeather 1
-                                 ,StrokeFill $ FillColor $ \(V2 x y) ->
-                                    V4 (abs x/100) (abs y/100) 1 1
+    move textCenter $ withStroke [ StrokeWidth 4
+                                 , StrokeFeather 1
+                                 , StrokeFill $ FillColor $ \(V2 x y) ->
+                                       V4 (abs x/100) (abs y/100) 1 1
                                  ] $ rectangle textSize
     withFill (FillTexture "img/tex.jpg" $ \v -> (100 + v) / 200) $ circle 100
     text
 
-isQuit :: Keysym -> Bool
-isQuit (Keysym (Scancode 20) (Keycode 113) m) = any ($ m)
-    [ keyModifierLeftCtrl
-    , keyModifierRightCtrl
-    , keyModifierLeftGUI
-    , keyModifierRightGUI
-    ]
-isQuit _ = False
-
 handleEvent :: Event -> IO ()
-handleEvent (Event _ (KeyboardEvent (KeyboardEventData _ m r k))) =
-    when (isQuit k) exitSuccess
-handleEvent _ = return ()
+handleEvent (Event _ payload) =
+    when (isKeyQ payload || payload == QuitEvent) exitSuccess
+  where
+    isKeyQ (KeyboardEvent (KeyboardEventData _ _ _ (Keysym _ KeycodeQ _))) = True
+    isKeyQ _ = False
 
 loop :: Picture () -> Rez -> Window -> Cache IO Transform -> IO ()
 loop pic rez window cache = do
@@ -54,5 +47,5 @@ main = do
         Left err -> do putStrLn err
                        exitFailure
         Right f -> return f
-    (rez,window) <- startupSDL2Backend 800 600 "gelatin" True
+    (rez, window) <- startupSDL2Backend 800 600 "gelatin" True
     loop (picture neuton) rez window mempty
