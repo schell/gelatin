@@ -51,12 +51,13 @@ import Graphics.Text.TrueType
 import Graphics.GL.Core33
 import Graphics.GL.Types
 import Codec.Picture.Types
-import Codec.Picture (readImage)
+import Codec.Picture (decodeImage, readImage)
 import Foreign.Marshal.Array
 import Foreign.Marshal.Utils
 import Foreign.C.String
 import Foreign.Storable
 import Foreign.Ptr
+import Data.ByteString (ByteString)
 import Data.Hashable
 import Data.Renderable
 import Data.Monoid
@@ -130,7 +131,8 @@ filledPolylineRenderer win psh fill thickness feather caps verts = do
     flip (maybe empty) mpoly $ \(vs_,us_,ns_,ps_,totalLen) -> do
         mtex <- case fill of
             FillColor{} -> return Nothing
-            FillTexture fp _ -> loadImageAsTexture fp
+            FillTexture bstr _ -> decodeImageAsTexture bstr
+            FillTextureFile fp _ -> loadImageAsTexture fp
 
         let vToGL :: Foldable f => [f Float] -> [GLfloat]
             vToGL = map realToFrac . concatMap F.toList
@@ -194,19 +196,24 @@ filledTriangleRenderer win gsh ts (FillColor f) = do
         -- transparent black.
         cs = map f vs
     colorRenderer win gsh GL_TRIANGLES vs cs
-filledTriangleRenderer win gsh ts (FillTexture fp f) = do
-    mtex <- loadImageAsTexture fp
-    case mtex of
-        Just tx -> do
-            let vs = trisToComp ts
-                -- If we can't find a uv in the uv map we'll just use
-                -- 0,0
-                uvs = map f vs
-            (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
-            let r' t = bindTexAround tx $ r t
-            return (c, r')
-        _ -> do putStrLn "Could not create a filledTriangleRenderer."
-                return (return (), const $ putStrLn "Non op renderer.")
+filledTriangleRenderer win gsh ts (FillTextureFile fp f) =
+    loadImageAsTexture fp >>= texFilledTriangleRenderer win gsh ts f
+filledTriangleRenderer win gsh ts (FillTexture bstr f) =
+    decodeImageAsTexture bstr >>= texFilledTriangleRenderer win gsh ts f
+
+texFilledTriangleRenderer :: Context -> GeomShader -> [Triangle (V2 Float)]
+                       -> (V2 Float -> V2 Float) -> Maybe GLuint -> IO GLRenderer
+texFilledTriangleRenderer win gsh ts f mtex = case mtex of
+    Just tx -> do
+        let vs = trisToComp ts
+            -- If we can't find a uv in the uv map we'll just use
+            -- 0,0
+            uvs = map f vs
+        (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
+        let r' t = bindTexAround tx $ r t
+        return (c, r')
+    _ -> do putStrLn "Could not create a filledTriangleRenderer."
+            return (return (), const $ putStrLn "Non op renderer.")
 
 -- | Binds the given texture to the zeroeth texture unit, runs the IO
 -- action and then unbinds the texture.
@@ -454,9 +461,13 @@ filledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)] -> Fill
 filledBezierRenderer win sh bs (FillColor f) = do
     let ts = map (\(Bezier _ a b c) -> f <$> Triangle a b c) bs
     colorBezRenderer win sh bs ts
-filledBezierRenderer win sh bs (FillTexture fp f) = do
+filledBezierRenderer win sh bs (FillTexture bstr f) =
+    decodeImageAsTexture bstr >>= texFilledBezierRenderer win sh bs f
+filledBezierRenderer win sh bs (FillTextureFile fp f) =
+    loadImageAsTexture fp >>= texFilledBezierRenderer win sh bs f
+
+texFilledBezierRenderer win sh bs f mtex = do
     let ts = map (\(Bezier _ a b c) -> f <$> Triangle a b c) bs
-    mtex <- loadImageAsTexture fp
     case mtex of
         Just tx -> do (c,r) <- textureBezRenderer win sh bs ts
                       let r' t = bindTexAround tx $ r t
@@ -569,12 +580,16 @@ setProjectionUniforms srcs window t = do
 --------------------------------------------------------------------------------
 -- Working with textures.
 --------------------------------------------------------------------------------
+decodeImageAsTexture :: ByteString -> IO (Maybe GLuint)
+decodeImageAsTexture bstr = maybeLoadTexture $ decodeImage bstr
+
 loadImageAsTexture :: FilePath -> IO (Maybe GLuint)
-loadImageAsTexture fp = do
-    eStrOrImg <- readImage fp
-    case eStrOrImg of
-        Left err -> putStrLn err >> return Nothing
-        Right i  -> Just <$> loadTexture i
+loadImageAsTexture fp = readImage fp >>= maybeLoadTexture
+
+maybeLoadTexture :: Either String DynamicImage -> IO (Maybe GLuint)
+maybeLoadTexture strOrImg = case strOrImg of
+    Left err -> putStrLn err >> return Nothing
+    Right i  -> Just <$> loadTexture i
 
 loadTexture :: DynamicImage -> IO GLuint
 loadTexture = loadTextureUnit Nothing
