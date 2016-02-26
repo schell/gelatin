@@ -2,8 +2,9 @@
 
 import           Control.Concurrent     (threadDelay)
 import           Control.Monad          (when)
-import qualified Data.ByteString
+import           Data.ByteString        (ByteString)
 import           Data.ByteString.Lazy   (fromStrict)
+import           Data.FileEmbed         (embedFile)
 import           Graphics.Text.TrueType (decodeFont)
 import           SDL                    (EventPayload(QuitEvent))
 import           System.Directory       (getCurrentDirectory)
@@ -14,8 +15,12 @@ import           Data.Renderable
 import           Gelatin.SDL2
 
 
-picture :: FontData -> Picture ()
-picture font = move 200 $ do
+ttfFont, jpgTex :: Data.ByteString.ByteString
+ttfFont = $(embedFile $ "assets" </> "Neuton-Regular.ttf")
+jpgTex  = $(embedFile $ "assets" </> "tex.jpg")
+
+makePicture :: FontData -> Picture ()
+makePicture font = move 200 $ do
     let text = withFont font $ withFill (solid white) $
                    letters 128 64 "Hello world!"
         textSize = pictureSize text
@@ -25,8 +30,7 @@ picture font = move 200 $ do
                                  , StrokeFill $ FillColor $ \(V2 x y) ->
                                        V4 (abs x/100) (abs y/100) 1 1
                                  ] $ rectangle textSize
-    let texFile = "gelatin-example" </> "assets" </> "tex.jpg"
-    withFill (FillTexture texFile $ \v -> (100 + v) / 200) $ circle 100
+    withFill (FillTexture jpgTex $ \v -> (100 + v) / 200) $ circle 100
     text
 
 handleEvent :: Event -> IO ()
@@ -45,11 +49,8 @@ loop pic rez window cache = do
 
 main :: IO ()
 main = do
-    let fontFile = "gelatin-example" </> "assets" </> "Neuton-Regular.ttf"
-    eneuton <- getCurrentDirectory >>= loadFont . (</> fontFile)
-    neuton <- case eneuton of
-        Left err -> do putStrLn err
-                       exitFailure
-        Right f -> return f
-    (rez, window) <- startupSDL2Backend 800 600 "gelatin" True
-    loop (picture neuton) rez window mempty
+    font <- case fontyData <$> decodeFont (fromStrict ttfFont) of
+                    Left err -> putStrLn err >> exitFailure
+                    Right f  -> return f
+    (rez, window) <- startupSDL2Backend 800 600 "gelatin-example" True
+    loop (makePicture font) rez window mempty
