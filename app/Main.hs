@@ -22,8 +22,11 @@ picture font = move 100 $ do
                                  ,StrokeFill $ FillColor $ \(V2 x y) ->
                                     V4 (abs x/100) (abs y/100) 1 1
                                  ] $ rectangle textSize
-    withFill (FillTexture "img/tex.jpg" $ \v -> (100 + v) / 200) $ circle 100
+    let tex = FillTexture "img/tex.jpg" $ \v -> (100 + v) / 200
+    withFill tex $ circle 100
     text
+    move 200 $ withStroke [StrokeFill tex, StrokeWidth 8, StrokeFeather 1] $
+        polyline [V2 0 (-100), 0, V2 50 0, V2 50 100, V2 75 75, V2 100 (-100), V2 0 100]
 
 isQuit :: Keysym -> Bool
 isQuit (Keysym (Scancode 20) (Keycode 113) m) = any ($ m)

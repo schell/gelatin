@@ -63,7 +63,6 @@ library
   exposed-modules:     Gelatin.GL,
                        Gelatin.GL.Renderer,
                        Gelatin.GL.Shader,
-                       Gelatin.GL.Primitives,
                        Gelatin.GL.Common
 
   -- Modules included in this library but not exported.

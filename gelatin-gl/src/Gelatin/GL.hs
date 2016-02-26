@@ -14,7 +14,6 @@ module Gelatin.GL (
 
 import Gelatin.GL.Renderer as G
 import Gelatin.GL.Shader as G
-import Gelatin.GL.Primitives as G
 import Gelatin.GL.Common as G
 import Gelatin.Picture as Picture
 import Gelatin.PicturePrimitives as Picture

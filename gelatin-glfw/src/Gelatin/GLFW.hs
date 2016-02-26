@@ -5,6 +5,7 @@ module Gelatin.GLFW (
     Rez(..),
     startupGLFWBackend,
     newWindow,
+    renderWithGLFW,
     -- * Re-exports
     module GL,
     module GLFW,
@@ -14,6 +15,7 @@ import Gelatin.GL as GL
 import Control.Monad
 import Control.Arrow (second)
 import Data.Hashable
+import Data.Bits ((.|.))
 import Graphics.UI.GLFW as GLFW
 import Linear hiding (rotate)
 import System.Exit
@@ -57,14 +59,14 @@ calculateDpi win = do
                           Nothing -> return 128
                           Just (VideoMode vw vh _ _ _ _) -> do
                               let mm2 = fromIntegral $ w*h :: Double
-                                  px  = sqrt $ (fromIntegral vw :: Double) 
+                                  px  = sqrt $ (fromIntegral vw :: Double)
                                                * fromIntegral vh
                                   inches = sqrt $ mm2 / (25.4 * 25.4)
                               let dpi = floor $ px / inches
                               return dpi
 
 -- | Completes all initialization, creates a new window and returns
--- the resource record and the new window. If any part of the process fails the 
+-- the resource record and the new window. If any part of the process fails the
 -- program will exit with failure.
 startupGLFWBackend :: Int -- ^ Window width
                    -> Int -- ^ Window height
@@ -88,3 +90,14 @@ startupGLFWBackend ww wh ws mmon mwin = do
                       , ctxScreenDpi = calculateDpi w
                       }
     return (Rez sh ctx, w)
+
+renderWithGLFW :: Window -> Rez -> Cache IO Transform -> Picture ()
+               -> IO (Cache IO Transform)
+renderWithGLFW window rez cache pic = do
+  (fbw,fbh) <- ctxFramebufferSize $ rezContext rez
+  glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
+  glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
+  let strategy = paintedPrimitivesRenderStrategy
+  newCache <- renderPrims strategy rez cache $ toPaintedPrimitives pic
+  swapBuffers window
+  return newCache
