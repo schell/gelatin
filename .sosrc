@@ -3,7 +3,7 @@
   commands:
   - stack build
   - stack exec hlint \0
-  - stack exec gelatin-sandbox
+  - stack exec gelatin-example
 - patterns:
   - ([^\/]*)\/(.*\.cabal)$
   commands:

@@ -8,6 +8,10 @@ module Gelatin.GL (
     module GL,
     module Linear,
     module Renderable,
+    -- * Compiling a Renderer from a Picture
+    compileRenderer,
+    -- * Clearing the frame
+    clearFrame,
     -- * Renderable
     paintedPrimitivesRenderStrategy
 ) where
@@ -21,6 +25,7 @@ import Control.Monad
 import Control.Arrow (second)
 import Data.Renderable as Renderable
 import Data.Hashable
+import Data.Bits ((.|.))
 import Graphics.Text.TrueType
 import Graphics.GL.Types as GL
 import Graphics.GL.Core33 as GL
@@ -67,3 +72,21 @@ paintedPrimitivesRenderStrategy = RenderStrategy
     { canAllocPrimitive = canAlloc
     , compilePrimitive = compile
     }
+
+-- | Creates a renderer for a specific picture without regard for changes
+-- over time.
+compileRenderer :: Rez -> Picture () -> IO (Renderer IO Transform)
+compileRenderer rez p = do
+  let s = paintedPrimitivesRenderStrategy
+      ps = toPaintedPrimitives p
+      makeRenderer (t, p) = do (c,r) <- compilePrimitive s rez p
+                               return (c, r . mappend t)
+
+  rs <- mapM makeRenderer ps
+  return $ foldl appendRenderer emptyRenderer rs
+
+clearFrame :: Rez -> IO ()
+clearFrame rez = do
+  (fbw,fbh) <- ctxFramebufferSize $ rezContext rez
+  glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
+  glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT

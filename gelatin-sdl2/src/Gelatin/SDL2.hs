@@ -2,27 +2,28 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Gelatin.SDL2 (
-    -- * Re-exports
-    module GL,
-    module SDL,
     -- * Startup
     startupSDL2Backend,
     startupSDL2BackendWithConfig,
     -- * Rendering
-    renderWithSDL2
+    renderWithSDL2,
+    updateWindowSDL2,
+    -- * Re-exports
+    module GL,
+    module SDL
 ) where
 
-import Gelatin.GL as GL
-import Control.Monad
-import Control.Arrow (second)
-import Data.Hashable
-import Data.Text as T
-import Data.Bits
-import SDL hiding (glBindTexture,glUnbindTexture,Rectangle,Renderer)
-import Linear hiding (rotate)
-import System.Exit
-import System.IO
-import GHC.Generics
+import           Gelatin.GL as GL
+import           Control.Monad
+import           Control.Arrow (second)
+import           Data.Hashable
+import qualified Data.Text as T
+import           Data.Bits
+import           SDL hiding (glBindTexture,glUnbindTexture,Rectangle,Renderer)
+import           Linear hiding (rotate)
+import           System.Exit
+import           System.IO
+import           GHC.Generics
 
 startupSDL2Backend :: Int -> Int -> String -> Bool -> IO (Rez, Window)
 startupSDL2Backend ww wh ws highDPI = do
@@ -61,13 +62,14 @@ startupSDL2BackendWithConfig cfg str = do
                       }
     return (Rez sh ctx, w)
 
+updateWindowSDL2 :: Window -> IO ()
+updateWindowSDL2 = glSwapWindow
+
 renderWithSDL2 :: Window -> Rez -> Cache IO Transform -> Picture ()
                -> IO (Cache IO Transform)
 renderWithSDL2 window rez cache pic = do
-  (fbw,fbh) <- ctxFramebufferSize $ rezContext rez
-  glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
-  glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
+  clearFrame rez
   let strategy = paintedPrimitivesRenderStrategy
   newCache <- renderPrims strategy rez cache $ toPaintedPrimitives pic
-  glSwapWindow window
+  updateWindowSDL2 window
   return newCache

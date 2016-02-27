@@ -3,12 +3,15 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Gelatin.GLFW (
     Rez(..),
+    -- * Startup
     startupGLFWBackend,
     newWindow,
+    -- * Rendering
     renderWithGLFW,
+    updateWindowGLFW,
     -- * Re-exports
     module GL,
-    module GLFW,
+    module GLFW
 ) where
 
 import Gelatin.GL as GL
@@ -91,13 +94,14 @@ startupGLFWBackend ww wh ws mmon mwin = do
                       }
     return (Rez sh ctx, w)
 
+updateWindowGLFW :: Window -> IO ()
+updateWindowGLFW = swapBuffers
+
 renderWithGLFW :: Window -> Rez -> Cache IO Transform -> Picture ()
                -> IO (Cache IO Transform)
 renderWithGLFW window rez cache pic = do
-  (fbw,fbh) <- ctxFramebufferSize $ rezContext rez
-  glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
-  glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
+  clearFrame rez
   let strategy = paintedPrimitivesRenderStrategy
   newCache <- renderPrims strategy rez cache $ toPaintedPrimitives pic
-  swapBuffers window
+  updateWindowGLFW window
   return newCache
