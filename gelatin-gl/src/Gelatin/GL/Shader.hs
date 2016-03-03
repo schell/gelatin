@@ -45,7 +45,7 @@ import Prelude hiding (init)
 import Prelude as P
 import Graphics.GL.Core33
 import Graphics.GL.Types
-import Gelatin.Picture
+import Gelatin.Core
 import Control.Monad
 import System.Exit
 import System.Directory

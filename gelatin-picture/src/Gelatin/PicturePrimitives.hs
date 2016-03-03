@@ -31,7 +31,7 @@ nextPicCmd (Free (WithFont _ _ n)) = n
 
 -- | Compile only the nested picture within the command given coloring,
 -- font and transform.
-compileCurrentWith :: Free PictureCmd () ->  Maybe Coloring -> Maybe FontData 
+compileCurrentWith :: Free PictureCmd () ->  Maybe Coloring -> Maybe FontData
                    -> Transform -> [(Transform, PaintedPrimitives)]
 -- First list all the cases where primitives cannot be mapped.
 compileCurrentWith (Pure ()) _ _ _ = []
@@ -40,44 +40,44 @@ compileCurrentWith _ Nothing _ _ = []
 compileCurrentWith (Free Letters{}) _ Nothing _ = []
 
 -- Handle coloring everything that gets broken down into paths.
-compileCurrentWith (Free (Polyline vs _)) 
-                   (Just clr) _ t = 
+compileCurrentWith (Free (Polyline vs _))
+                   (Just clr) _ t =
     [(t, withColoring clr $ PathPrims [Path vs])]
-compileCurrentWith (Free (Curve a b c n)) 
-                   (Just clr) _ t = 
+compileCurrentWith (Free (Curve a b c n))
+                   (Just clr) _ t =
     let path = Path $ subdivideAdaptive 100 0 $ bez3 a b c
     in [(t, withColoring clr $ PathPrims [path])]
-compileCurrentWith (Free (Arc (V2 xr yr) start stop _)) 
-                   (Just clr) _ t = 
-    let erc = concatMap (subdivideAdaptive4 100 0) $ Core.arc xr yr start stop 
+compileCurrentWith (Free (Arc (V2 xr yr) start stop _))
+                   (Just clr) _ t =
+    let erc = concatMap (subdivideAdaptive4 100 0) $ Core.arc xr yr start stop
     in [(t, withColoring clr $ PathPrims [Path erc])]
-compileCurrentWith (Free (Ellipse (V2 x y) _)) 
-                   (Just clr) _ t = 
+compileCurrentWith (Free (Ellipse (V2 x y) _))
+                   (Just clr) _ t =
     let path = Path $ bez4sToPath 100 0 $ Core.ellipse x y
     in [(t, withColoring clr $ PathPrims [path])]
-compileCurrentWith (Free (Circle r _)) 
-                   (Just clr) _ t = 
+compileCurrentWith (Free (Circle r _))
+                   (Just clr) _ t =
     let path = Path $ bez4sToPath 100 0 $ Core.ellipse r r
     in [(t, withColoring clr $ PathPrims [path])]
-compileCurrentWith (Free (Letters dpi px str _)) 
-                   (Just clr) (Just fd) t = 
+compileCurrentWith (Free (Letters dpi px str _))
+                   (Just clr) (Just fd) t =
     [(t, withColoring clr $ TextPrims fd dpi px str)]
 
 -- Now do all the rest of the work for paths.
-compileCurrentWith (Free (Rectangle sz _)) 
-                   (Just (StrokeColoring s)) _ t = 
+compileCurrentWith (Free (Rectangle sz _))
+                   (Just (StrokeColoring s)) _ t =
     [(t, Stroked s $ PathPrims $ sizeToPaths $ Size sz)]
 
 -- Now do all the burte force work for fills.
-compileCurrentWith (Free (Polyline vs _)) 
-                   (Just (FillColoring s)) _ t = 
+compileCurrentWith (Free (Polyline vs _))
+                   (Just (FillColoring s)) _ t =
     [(t, Filled s $ PathPrims [Path vs])]
-compileCurrentWith (Free (Rectangle sz _)) 
-                   (Just (FillColoring s)) _ t = 
+compileCurrentWith (Free (Rectangle sz _))
+                   (Just (FillColoring s)) _ t =
     [(t, Filled s $ TrianglePrims $ sizeToTris $ Size sz)]
-compileCurrentWith (Free (Curve a b c _)) 
-                   (Just (FillColoring s)) _ t = 
-    [(t, Filled s $ BezierPrims [bez a b c])]
+compileCurrentWith (Free (Curve a b c _))
+                   (Just (FillColoring s)) _ t =
+    [(t, Filled s $ BezierPrims [bezier a b c])]
 
 -- | Compile the picture commands into a list of renderable primitives.
 compilePrimitives :: Free PictureCmd ()
@@ -89,23 +89,23 @@ compilePrimitives (Free (WithTransform t p n)) = do
     prims <- local (\cd -> cd{cdTransform = t `mappend` t'}) f
     (prims ++) <$> compilePrimitives n
 compilePrimitives (Free (WithStroke attrs p n)) = do
-    otherPrims <- compilePrimitives n 
+    otherPrims <- compilePrimitives n
     mColor     <- asks cdColoring
     let mStroke = StrokeColoring <$> foldl strokeAttr Nothing attrs
-        mPaint  = mColor <|> mStroke 
-    prims <- local (\cd -> cd{cdColoring = mPaint}) $ 
+        mPaint  = mColor <|> mStroke
+    prims <- local (\cd -> cd{cdColoring = mPaint}) $
                    compilePrimitives $ fromF p
     return $ prims ++ otherPrims
 compilePrimitives (Free (WithFill fill p n)) = do
-    otherPrims <- compilePrimitives n 
+    otherPrims <- compilePrimitives n
     mColor     <- asks cdColoring
-    let mPaint = mColor <|> Just (FillColoring fill) 
-    prims <- local (\cd -> cd{cdColoring = mPaint}) $ 
+    let mPaint = mColor <|> Just (FillColoring fill)
+    prims <- local (\cd -> cd{cdColoring = mPaint}) $
                    compilePrimitives $ fromF p
     return $ prims ++ otherPrims
 compilePrimitives (Free (WithFont font p n)) = do
     mFont <- asks cdFont
-    prims <- local (\cd -> cd{cdFont = mFont <|> Just font}) $ 
+    prims <- local (\cd -> cd{cdFont = mFont <|> Just font}) $
                    compilePrimitives $ fromF p
     (prims ++) <$> compilePrimitives n
 compilePrimitives cmd = do

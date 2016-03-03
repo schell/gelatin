@@ -23,6 +23,7 @@ extra-source-files:    shaders/2d.frag,
                        docimages/*.png
 
 library
+  ghc-options:         -Wall
   exposed-modules:     Gelatin.GL,
                        Gelatin.GL.Renderer,
                        Gelatin.GL.Shader,
@@ -30,6 +31,7 @@ library
   build-depends:       base            >= 4.8     && < 4.9,
                        bytestring,
                        gelatin-picture >= 0.0.0.1,
+                       gelatin-core    >= 0.0.0.1,
                        linear          >= 1.20    && < 1.21,
                        gl              >= 0.7     && < 0.8,
                        FontyFruity     >= 0.5     && < 0.6,

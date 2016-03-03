@@ -7,7 +7,7 @@ module Gelatin.Core.Bezier (
     QuadraticBezier(..),
     CubicBezier(..),
     -- * Smart Constructors
-    bez,
+    bezier,
     bez3,
     bez4,
     -- * Conversion
@@ -42,13 +42,13 @@ import GHC.Generics
 import Data.Hashable
 
 data Bezier a = Bezier Ordering a a a deriving (Show, Eq, Generic)
-instance Hashable a => Hashable (Bezier a) 
+instance Hashable a => Hashable (Bezier a)
 
 data QuadraticBezier a = QuadraticBezier a a a deriving (Show, Eq, Generic)
-instance Hashable a => Hashable (QuadraticBezier a) 
+instance Hashable a => Hashable (QuadraticBezier a)
 
 data CubicBezier a = CubicBezier a a a a deriving (Show, Eq, Generic)
-instance Hashable a => Hashable (CubicBezier a) 
+instance Hashable a => Hashable (CubicBezier a)
 
 instance Functor Bezier where
     fmap f (Bezier o a b c) = Bezier o (f a) (f b) (f c)
@@ -70,13 +70,13 @@ instance Transformable Transform a => Transformable Transform (CubicBezier a) wh
 
 -- | Turn a polyline into a list of bezier primitives.
 toBeziers :: (Fractional a, Ord a) => [V2 a] -> [Bezier (V2 a)]
-toBeziers (a:b:c:ps) = bez a b c : toBeziers (c:ps)
+toBeziers (a:b:c:ps) = bezier a b c : toBeziers (c:ps)
 toBeziers _ = []
 
 -- | Create a bezier primitive. The area of the triangle formed by the
 -- bezier's three points will be used to determine the orientation.
-bez :: (Ord a, Fractional a) => V2 a -> V2 a -> V2 a -> Bezier (V2 a)
-bez a b c = Bezier (compare (triangleArea a b c) 0) a b c
+bezier :: (Ord a, Fractional a) => V2 a -> V2 a -> V2 a -> Bezier (V2 a)
+bezier a b c = Bezier (compare (triangleArea a b c) 0) a b c
     where triangleArea (V2 x2 y2) (V2 x0 y0) (V2 x1 y1) =
             (x1-x0)*(y2-y0)-(x2-x0)*(y1-y0)
 
@@ -102,7 +102,7 @@ flipBez4 (CubicBezier a b c d) = CubicBezier d c b a
 -- and derives the winding (which determines drawing an inner or outer bez) from
 -- the order of control points.
 bez3ToBez :: (Ord a, Fractional a) => QuadraticBezier (V2 a) -> [Bezier (V2 a)]
-bez3ToBez (QuadraticBezier a b c) = [bez a b c]
+bez3ToBez (QuadraticBezier a b c) = [bezier a b c]
 
 -- | Convert a quadratic bezier into a bezier primitive that fills outer.
 bez3ToBezOuter :: (Ord a, Fractional a)
@@ -110,7 +110,7 @@ bez3ToBezOuter :: (Ord a, Fractional a)
 bez3ToBezOuter qbz =
     case bez3ToBez qbz of
         z@[Bezier GT _ _ _] -> z
-        [Bezier _ a b c] -> [bez c b a]
+        [Bezier _ a b c] -> [bezier c b a]
         z -> z
 
 -- | Convert a quadratic bezier into a bezier primitive that fills inner.
@@ -118,7 +118,7 @@ bez3ToBezInner :: (Ord a, Fractional a)
                => QuadraticBezier (V2 a) -> [Bezier (V2 a)]
 bez3ToBezInner qbz =
     case bez3ToBez qbz of
-        [Bezier GT a b c] -> [bez c b a]
+        [Bezier GT a b c] -> [bezier c b a]
         b -> b
 
 -- | Convert a cubic bezier into a list of drawable bezier primitives.

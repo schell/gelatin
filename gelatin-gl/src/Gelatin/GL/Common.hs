@@ -1,12 +1,12 @@
 module Gelatin.GL.Common where
 
-import Gelatin.Picture
+import Gelatin.Core
 import Gelatin.GL.Shader
 import Data.Renderable
 
 type GLRenderer = Renderer IO Transform
 
-data Context = Context { ctxFramebufferSize :: IO (Int,Int) 
+data Context = Context { ctxFramebufferSize :: IO (Int,Int)
                        , ctxWindowSize :: IO (Int,Int)
                        , ctxScreenDpi :: IO Int
                        }

@@ -69,7 +69,7 @@ renderWithSDL2 :: Window -> Rez -> Cache IO Transform -> Picture ()
                -> IO (Cache IO Transform)
 renderWithSDL2 window rez cache pic = do
   clearFrame rez
-  let strategy = paintedPrimitivesRenderStrategy
-  newCache <- renderPrims strategy rez cache $ toPaintedPrimitives pic
+  let strategy = pictureRenderStrategy
+  newCache <- renderPrims strategy rez cache $ compilePicture pic
   updateWindowSDL2 window
   return newCache
