@@ -1,11 +1,19 @@
 - patterns:
   - ([^\/]*)\/(.*\.hs)$
   commands:
-  - stack build
+  - stack build --fast --executable-profiling --library-profiling --ghc-options="-fprof-auto -fprof-cafs"
   - stack exec hlint \0
-  - stack exec gelatin-example
+  - cd gelatin-example; stack exec gelatin-example -- +RTS -hc -p -sstderr -xc
+  - ./pack-profiling.sh gelatin-example/gelatin-example
+- patterns:
+  - .*\.vert$
+  - .*\.frag$
+  commands:
+  - stack build --fast --executable-profiling --library-profiling --ghc-options="-fprof-auto -fprof-cafs"
+  - cd gelatin-example; stack exec gelatin-example -- +RTS -hc -p -sstderr -xc
+  - ./pack-profiling.sh gelatin-example/gelatin-example
 - patterns:
   - ([^\/]*)\/(.*\.cabal)$
   commands:
-  - stack build
+  - stack build --fast --executable-profiling --library-profiling --ghc-options="-fprof-auto -fprof-cafs"
   - stack exec hlint \0

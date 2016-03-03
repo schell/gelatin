@@ -9,8 +9,7 @@ module Gelatin.SDL2 (
     renderWithSDL2,
     updateWindowSDL2,
     -- * Re-exports
-    module GL,
-    module SDL
+    module GL
 ) where
 
 import           Gelatin.GL as GL
@@ -43,7 +42,7 @@ startupSDL2BackendWithConfig cfg str = do
 
     w     <- createWindow (T.pack str) cfg
     glctx <- glCreateContext w
-    sh    <- loadShaders
+    sh    <- loadSumShader
 
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
@@ -65,11 +64,11 @@ startupSDL2BackendWithConfig cfg str = do
 updateWindowSDL2 :: Window -> IO ()
 updateWindowSDL2 = glSwapWindow
 
-renderWithSDL2 :: Window -> Rez -> Cache IO Transform -> Picture ()
-               -> IO (Cache IO Transform)
+renderWithSDL2 :: Window -> Rez -> Cache IO PictureTransform
+               -> Picture GLuint () -> IO (Cache IO PictureTransform)
 renderWithSDL2 window rez cache pic = do
   clearFrame rez
-  let strategy = paintedPrimitivesRenderStrategy
-  newCache <- renderPrims strategy rez cache $ toPaintedPrimitives pic
+  (r, newCache) <- compilePictureRenderer rez cache pic
+  snd r mempty
   updateWindowSDL2 window
-  return newCache
+  cleanPictureRendererCache newCache pic

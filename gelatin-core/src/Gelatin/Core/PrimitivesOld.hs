@@ -17,7 +17,7 @@ data Primitives = PathPrims [Path (V2 Float)]
                 | TrianglePrims [Triangle (V2 Float)]
                 | TextPrims FontData Int Float String
                 deriving (Show, Generic)
-instance Hashable Primitives 
+instance Hashable Primitives
 
 path2ConcavePoly :: Path a -> [Triangle a]
 path2ConcavePoly (Path vs)
@@ -27,6 +27,6 @@ path2ConcavePoly (Path vs)
 
 primToPaths :: Primitives -> [Path (V2 Float)]
 primToPaths (PathPrims ps) = ps
-primToPaths (BezierPrims bs) = map bezToPath bs 
-primToPaths (TrianglePrims ts) = map triToPath ts 
-primToPaths (TextPrims fd dpi px str) = stringCurvesToPaths fd dpi px str 
+primToPaths (BezierPrims bs) = map bezToPath bs
+primToPaths (TrianglePrims ts) = map triToPath ts
+primToPaths (TextPrims fd dpi px str) = stringCurvesToPaths fd dpi px str

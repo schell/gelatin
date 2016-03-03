@@ -4,55 +4,36 @@
 {-# LANGUAGE TypeFamilies #-}
 module Gelatin.Core.Triangle where
 
-import Gelatin.Core.Bounds
-import Gelatin.Core.Path
-import Gelatin.Core.Transform
-import Gelatin.Core.Bezier
-import Linear
-import Data.Hashable
+import           Gelatin.Core.Bounds
+import           Gelatin.Core.Path
+import           Gelatin.Core.Bezier
+import           Linear
+import qualified Data.Vector.Unboxed as V
+import           Data.Vector.Unboxed (Vector, Unbox)
 
-data Triangle a = Triangle a a a deriving (Show, Eq)
+type Triangle a = (a,a,a)
 
-trisToComp :: [Triangle (V2 a)] -> [V2 a]
-trisToComp = concatMap triPoints
+trisToComp :: Unbox a => Vector (Triangle (V2 a)) -> Vector (V2 a)
+trisToComp = V.concatMap triPoints
 
-triPoints :: Triangle (V2 a) -> [V2 a]
-triPoints (Triangle a b c) = [a, b, c]
+triPoints :: Unbox a => Triangle (V2 a) -> Vector (V2 a)
+triPoints (a,b,c) = V.fromList [a, b, c]
 
 bezToTri :: Bezier a -> Triangle a
-bezToTri (Bezier _ a b c) = Triangle a b c
+bezToTri (_,a,b,c) = (a,b,c)
 
-triToPath :: Triangle a -> Path a
-triToPath (Triangle a b c) = Path [a,b,c]
+triToPath :: Unbox a => Triangle a -> Path a
+triToPath (a,b,c) = Path $ V.fromList [a,b,c]
 
-instance Functor Triangle where
-    fmap f (Triangle a b c) = Triangle (f a ) (f b) (f c)
-
-instance Transformable Transform a => Transformable Transform (Triangle a) where
-    transform = fmap . transform
+fmapTriangle :: (t -> t1) -> (t, t, t) -> (t1, t1, t1)
+fmapTriangle f (a,b,c) = (f a, f b, f c)
 
 triBounds :: Triangle (V2 Float) -> BBox
-triBounds (Triangle a b c) = polyBounds [a,b,c]
+triBounds (a,b,c) = polyBounds $ V.fromList [a,b,c]
 --------------------------------------------------------------------------------
 -- Decomposing things into triangles
 --------------------------------------------------------------------------------
-sizeToTris :: Size -> [Triangle (V2 Float)]
-sizeToTris (Size (V2 w h)) = [Triangle a b c, Triangle a c d]
+sizeToTris :: Size -> Vector (Triangle (V2 Float))
+sizeToTris (Size (V2 w h)) = V.fromList [(a,b,c), (a,c,d)]
     where [a,b,c,d] = [V2 (-hw) (-hh), V2 hw (-hh), V2 hw hh, V2 (-hw) hh]
           (hw,hh) = (w/2,h/2)
-
---class ToTriangles a where
---    toTriangles :: a -> [Triangle (V2 Float)]
---
---instance ToTriangles a => ToTriangles [a] where
---    toTriangles = concatMap toTriangles
---
---instance ToTriangles Size where
---    toTriangles = sizeToTris
---
---instance ToTriangles (Bezier (V2 Float)) where
---    toTriangles (Bezier _ a b c) = [Triangle a b c]
-
-instance Hashable a => Hashable (Triangle a) where
-    hashWithSalt s (Triangle a b c) =
-        s `hashWithSalt`  a `hashWithSalt` b `hashWithSalt` c

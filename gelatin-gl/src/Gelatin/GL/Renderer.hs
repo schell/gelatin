@@ -8,13 +8,23 @@ module Gelatin.GL.Renderer (
     -- * Renderer
     GLRenderer,
     Context(..),
-    -- * Loading textures
+    -- * Loading and using textures
+    loadImage,
+    maybeLoadTexture,
     loadTexture,
     loadTextureUnit,
     unloadTexture,
     loadImageAsTexture,
+    bindTexAround,
+    -- * Rendering pictures
+    compiledPicRenderer,
+    -- * Rendering geometry
+    colorPrimsRenderer,
+    texturePrimsRenderer,
     -- * Line rendering
-    filledPolylineRenderer,
+    --filledPolylineRenderer,
+    colorPolylineRenderer,
+    texPolylineRenderer,
     -- * Triangle rendering
     colorRenderer,
     textureRenderer,
@@ -43,186 +53,341 @@ module Gelatin.GL.Renderer (
     clipTexture
 ) where
 
-import Gelatin.GL.Shader
-import Gelatin.GL.Common
-import Gelatin.Picture
-import Linear hiding (trace)
-import Graphics.Text.TrueType
-import Graphics.GL.Core33
-import Graphics.GL.Types
-import Codec.Picture.Types
-import Codec.Picture (decodeImage, readImage)
-import Foreign.Marshal.Array
-import Foreign.Marshal.Utils
-import Foreign.C.String
-import Foreign.Storable
-import Foreign.Ptr
-import Data.ByteString (ByteString)
-import Data.Hashable
-import Data.Renderable
-import Data.Monoid
-import Data.Maybe
-import Data.Vector.Storable (Vector,unsafeWith)
-import qualified Data.Vector.Unboxed as UV
-import Control.Monad
-import Control.Applicative
-import System.Directory
-import System.IO
-import System.Exit
-import qualified Data.ByteString.Char8 as B
+import           Gelatin.GL.Shader
+import           Gelatin.GL.Common
+import           Gelatin.Core
+import           Gelatin.Picture
+import           Graphics.Text.TrueType
+import           Graphics.GL.Core33
+import           Graphics.GL.Types
+import           Codec.Picture.Types
+import           Codec.Picture (decodeImage, readImage)
+import           Foreign.Marshal.Array
+import           Foreign.Marshal.Utils
+import           Foreign.Storable
+import           Foreign.Ptr
+import           Data.ByteString (ByteString)
+import           Data.Hashable
+import           Data.Renderable
+import           Data.Monoid
+import           Data.Foldable (foldl')
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector as B
+import qualified Data.Vector.Storable as S
+import qualified Data.Vector.Unboxed as V
+import           Data.Vector.Unboxed (Vector,Unbox)
+import           Control.Monad
+import           System.Exit
 import qualified Data.Foldable as F
-import GHC.Stack
-import GHC.Generics
+import           GHC.Stack
+import           GHC.Generics
+import Debug.Trace
+import           Linear hiding (trace)
+
+--------------------------------------------------------------------------------
+-- Rendering compiled pictures
+--------------------------------------------------------------------------------
+compiledPicRenderer :: Rez -> CompiledPicture GLuint
+                    -> IO GLRenderer
+compiledPicRenderer rez (CompiledTex op ps tx) = do
+  rs <- mapM (texturePrimsRenderer rez) ps
+  let (c,f) = foldl' appendRenderer emptyRenderer rs
+      r t = bindTexAround tx $ f t
+  return $ applySpecialOp op (c,r)
+compiledPicRenderer rez (CompiledColor op ps) = do
+  rs <- mapM (colorPrimsRenderer rez) ps
+  return $ applySpecialOp op $ foldl' appendRenderer emptyRenderer rs
+compiledPicRenderer rez (CompiledLine op s ps) = do
+  let f (GPLine _ vs) = GPLine s vs
+      f p = p
+  rs <- mapM (colorPrimsRenderer rez . f) ps
+  return $ applySpecialOp op $ foldl' appendRenderer emptyRenderer rs
+
+applySpecialOp :: SpecialOp -> GLRenderer -> GLRenderer
+applySpecialOp SOpNone r = r
+applySpecialOp SOpStencilMask (c,r) =
+  let s t  = stencilMask (r t) (r t)
+  in (c,s)
+--------------------------------------------------------------------------------
+-- Renderers for GPrims with specific attributes
+-- @(V2 Float, V4 Float)@
+-- @(V2 Float, V2 Float)@
+--------------------------------------------------------------------------------
+fromTris :: Unbox a
+         => Vector ((V2 Float, a), (V2 Float, a), (V2 Float, a))
+         -> (Vector (V2 Float), Vector a)
+fromTris = uncurry mycat . V.unzip . V.map f
+  where f ((va,ca),(vb,cb),(vc,cc)) = ((va,vb,vc), (ca,cb,cc))
+        mycat vs cs = (V.concatMap g vs, V.concatMap g cs)
+        g (a,b,c) = V.fromList [a,b,c]
+
+--fromTris ts = atts
+--  where atts = V.foldr' fatt (mempty,mempty) ts
+--        fatt (xs,ys) =
+--          (V.fromList [va,vb,vc] V.++ xs, V.fromList [ca,cb,cc] V.++ ys)
+
+toBezAndTris :: Unbox a
+             => Vector ((V2 Float, a), (V2 Float, a), (V2 Float, a))
+             -> (Vector (Bezier (V2 Float)), Vector (Triangle a))
+toBezAndTris = V.unzip . V.map f
+  where f ((va,ca),(vb,cb),(vc,cc)) = ( bezier va vb vc
+                                      , (ca,cb,cc)
+                                      )
+
+type BezRenderer a t =
+  Context -> SumShader -> Vector (Bezier (V2 Float)) -> Vector (Triangle a)
+          -> t
+
+renderBezsWith :: Unbox a
+               => BezRenderer a t -> Rez
+               -> Vector ((V2 Float, a), (V2 Float, a), (V2 Float, a)) -> t
+renderBezsWith f rez bs = do
+  let sh = rezShader rez
+      ctx = rezContext rez
+      (vs,cs) = toBezAndTris bs
+  f ctx sh vs cs
+
+type TriSeqRenderer a b c t =
+  Context -> SumShader -> a -> Vector b -> Vector c -> t
+
+renderTriSeqWith :: (Eq a, Num a, Unbox b, Unbox a1)
+                 => TriSeqRenderer a a1 b c
+                 -> Rez -> SeqType -> (a1, b) -> (a1, b) -> (a1, b)
+                 -> Vector (a1, b) -> c
+renderTriSeqWith f rez stype a b c ds = do
+  let sh = rezShader rez
+      ctx = rezContext rez
+      mode = if stype == SeqStrip
+             then GL_TRIANGLE_STRIP else GL_TRIANGLE_FAN
+  uncurry (f ctx sh mode) $ V.unzip $ V.fromList [a,b,c] V.++ ds
+
+renderTrisWith :: (Eq a, Num a, Unbox a1)
+               => (Context -> SumShader -> a -> Vector (V2 Float) -> Vector a1 -> c)
+               -> Rez -> Vector ((V2 Float, a1), (V2 Float, a1), (V2 Float, a1))
+               -> c
+renderTrisWith f rez ts = do
+  let sh = rezShader rez
+      ctx = rezContext rez
+  uncurry (f ctx sh GL_TRIANGLES) $ fromTris ts
+
+renderLineWith :: (Show (f Float), Additive f, Unbox (f Float))
+               => (Context -> SumShader -> Float -> Float -> (LineCap, LineCap) -> Vector (V2 Float) -> Vector (f Float) -> c)
+               -> Rez -> Stroke -> Vector (V2 Float, f Float) -> c
+renderLineWith f rez (Stroke w fth cs) = uncurry (f ctx sh w fth cs) . V.unzip
+  where sh = rezShader rez
+        ctx = rezContext rez
+
+-- | Create a renderer for some colored geometry.
+colorPrimsRenderer :: Rez -> GPrims (V2 Float, V4 Float) -> IO GLRenderer
+colorPrimsRenderer rez (GPTris ts) = renderTrisWith colorRenderer rez ts
+colorPrimsRenderer rez (GPBezs bs) = renderBezsWith colorBezRenderer rez bs
+colorPrimsRenderer rez (GPTriSeq stype a b c ds) =
+  renderTriSeqWith colorRenderer rez stype a b c ds
+colorPrimsRenderer rez (GPLine s ls) =
+  renderLineWith colorPolylineRenderer rez s ls
+
+-- | Create a renderer for some textured geometry.
+texturePrimsRenderer :: Rez -> GPrims (V2 Float, V2 Float) -> IO GLRenderer
+texturePrimsRenderer rez (GPTris ts) = renderTrisWith textureRenderer rez ts
+texturePrimsRenderer rez (GPBezs bs) = renderBezsWith textureBezRenderer rez bs
+texturePrimsRenderer rez (GPTriSeq stype a b c ds) =
+  renderTriSeqWith textureRenderer rez stype a b c ds
+texturePrimsRenderer rez (GPLine s ls) =
+  renderLineWith texPolylineRenderer rez s ls
 --------------------------------------------------------------------------------
 -- GLRenderers
 --------------------------------------------------------------------------------
-expandPolyline :: [V2 Float] -> Float -> Float
-               -> Maybe ([V2 Float], [V2 Float], [V2 Float], [V2 Float], Float)
-expandPolyline verts thickness feather
-    | (v1:v2:_) <- verts =
-    let v3:v3n:_ = reverse verts
-        -- clamp the lower bound of our thickness to 1
+type PolylineData f =
+  ( Vector (V2 Float)
+  , Vector (f Float)
+  , Vector (V2 Float)
+  , Vector (V2 Float)
+  , Vector (V2 Float)
+  , Float
+  )
+
+expandPolyline :: Unbox (f Float)
+               => Vector (V2 Float) -> Vector (f Float) -> Float -> Float
+               -> Maybe (PolylineData f)
+expandPolyline verts colors thickness feather
+    | Just (v1,v2) <- (,) <$> (verts V.!? 0) <*> (verts V.!? 1)
+    , Just c1  <- colors V.!? 0
+    , Just (v3,v3n) <- (,) <$> (verts V.!? (V.length verts -1))
+                           <*> (verts V.!? (V.length verts -2))
+    , Just c3 <- colors V.!? (V.length verts -1) =
+    let -- clamp the lower bound of our thickness to 1
         absthick = max thickness 1
         d = fromIntegral (ceiling $ absthick + 2.5 * feather :: Integer)
-        lens = 0 : zipWith distance verts (drop 1 verts)
-        totalLen = sum lens
+        lens = 0 `V.cons` V.zipWith distance verts (V.drop 1 verts)
+        totalLen = V.foldl' (+) 0 lens
         totalEnd = totalLen + d
-        seqfunc (total,ts) len = (total + len,ts ++ [total + len])
-        seqLens  = snd $ foldl seqfunc (0,[]) lens
+        seqfunc (total,ts) len = (total + len,ts V.++ V.singleton (total + len))
+        seqLens  = snd $ V.foldl' seqfunc (0,mempty) lens
         isClosed = distance v1 v3 <= 0.00001
         -- if the polyline is closed return a miter with the last point
-        startCap = ([cap,cap], uvs, [v2,v2],[prev,prev])
+        startCap = ( V.fromList [cap,cap]
+                   , V.fromList [c1,c1]
+                   , uvs
+                   , V.fromList [v2,v2]
+                   , V.fromList [prev,prev]
+                   )
             where (uvs,cap,prev) = if isClosed
                                    -- no cap
-                                   then ([V2 0 d, V2 0 (-d)],v1,v3n)
+                                   then (V.fromList [V2 0 d, V2 0 (-d)],v1,v3n)
                                    -- cap
                                    else let c = d *^ signorm (v2 - v1)
-                                        in ([V2 (-d) d, V2 (-d) (-d)],v1 - c, v1 - 2*c)
-
-        endCap = ([cap,cap], uvs,[next,next],[v3n,v3n])
+                                        in ( V.fromList [V2 (-d) d, V2 (-d) (-d)]
+                                           , v1 - c
+                                           , v1 - 2*c)
+        endCap = ( V.fromList [cap,cap]
+                 , V.fromList [c3,c3]
+                 , uvs
+                 , V.fromList [next,next]
+                 , V.fromList [v3n,v3n]
+                 )
             where (uvs,cap,next) = if isClosed
                                    -- no cap
-                                   then ([V2 totalLen d, V2 totalLen (-d)], v3, v2)
+                                   then ( V.fromList [ V2 totalLen d
+                                                     , V2 totalLen (-d)
+                                                     ]
+                                        , v3
+                                        , v2
+                                        )
                                    -- cap
                                    else let c = d *^ signorm (v3 - v3n)
-                                        in ([V2 totalEnd d, V2 totalEnd (-d)], v3 + c, v3 + 2*c)
-
-        vcs  = zip verts seqLens :: [(V2 Float, Float)]
-        tris = startCap : zipWith3 strip vcs (drop 1 vcs) (drop 2 vcs)
-                        ++ [endCap]
+                                        in (V.fromList [ V2 totalEnd d
+                                                       , V2 totalEnd (-d)
+                                                       ]
+                                           , v3 + c
+                                           , v3 + 2*c
+                                           )
+        vcs  = B.convert $ V.zip3 verts colors seqLens
+        zs   = B.zipWith3 strp vcs (B.drop 1 vcs) (B.drop 2 vcs)
         -- Expand the line into a triangle strip
-        strip (a,_) (b,l) (c,_) = ([b,b],[V2 l d,V2 l (-d)],[c,c],[a,a])
-        vs = concatMap (\(a,_,_,_) -> a) tris
-        us = concatMap (\(_,a,_,_) -> a) tris
-        ns = concatMap (\(_,_,a,_) -> a) tris
-        ps = concatMap (\(_,_,_,a) -> a) tris
-    in Just (vs, us, ns, ps, totalLen)
+        strp :: Unbox (f Float)
+             => (V2 Float, f Float, Float) -> (V2 Float, f Float, Float)
+             -> (V2 Float, f Float, Float) -> (Vector (V2 Float)
+                                              ,Vector (f Float)
+                                              ,Vector (V2 Float)
+                                              ,Vector (V2 Float)
+                                              ,Vector (V2 Float)
+                                              )
+        strp (a,_,_) (b,bc,l) (c,_,_) =
+          ( V.fromList [b,b]
+          , V.fromList [bc,bc]
+          , V.fromList [V2 l d,V2 l (-d)]
+          , V.fromList [c,c]
+          , V.fromList [a,a]
+          )
+        tris = startCap `B.cons` zs B.++ B.singleton endCap
+        cat5 (vs',cs',us',ns',ps') (v,c,u,n,p) = (vs' V.++ v
+                                                 ,cs' V.++ c
+                                                 ,us' V.++ u
+                                                 ,ns' V.++ n
+                                                 ,ps' V.++ p
+                                                 )
+        (vs,cs,us,ns,ps) = B.foldl' cat5 (mempty,mempty,mempty,mempty,mempty) tris
+      in Just (vs, cs, us, ns, ps, totalLen)
     | otherwise = Nothing
 
--- | Creates and returns a renderer that renders an expanded 2d polyline
--- projected in 3d space.
-filledPolylineRenderer :: Context -> ProjectedPolylineShader -> Fill
-                           -> Float -> Float -> (LineCap,LineCap) -> [V2 Float]
-                           -> IO GLRenderer
-filledPolylineRenderer win psh fill thickness feather caps verts = do
-    let empty = do putStrLn "could not expand polyline"
-                   return emptyRenderer
-        mpoly = expandPolyline verts thickness feather
-    flip (maybe empty) mpoly $ \(vs_,us_,ns_,ps_,totalLen) -> do
-        mtex <- case fill of
-            FillColor{} -> return Nothing
-            FillTexture bstr _ -> decodeImageAsTexture bstr
-            FillTextureFile fp _ -> loadImageAsTexture fp
+unwrapTransform :: PictureTransform -> (M44 Float, Float, V4 Float)
+unwrapTransform t =
+  let mv = modelviewProjection $ ptAffine t
+      a  = ptAlpha t
+      m  = ptMult t
+  in (mv, a, m)
 
-        let vToGL :: Foldable f => [f Float] -> [GLfloat]
-            vToGL = map realToFrac . concatMap F.toList
-            vs  = vToGL vs_
-            us  = vToGL us_
-            ns  = vToGL ns_
-            ps  = vToGL ps_
-            PPRS src = psh
+polylineRenderer :: (Foldable f, Unbox (f Float))
+                 => Context -> SumShader -> Float -> Float
+                 -> (LineCap,LineCap) -> Bool
+                 -> PolylineData f
+                 -> IO GLRenderer
+polylineRenderer win sh thickness feather caps isTex (vs_,cs_,us_,ns_,ps_,totalLen) = do
+  let vToGL :: (Foldable f, Unbox (f Float)) => Vector (f Float) -> Vector GLfloat
+      vToGL = V.map realToFrac . V.concatMap (V.fromList . F.toList)
+      vs = vToGL vs_
+      cs = vToGL cs_
+      us = vToGL us_
+      ns = vToGL ns_
+      ps = vToGL ps_
 
-        withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, buvbuf, nbuf, pbuf] -> do
-            let commonLocs = [PositionLoc, BezUVLoc, NextLoc, PrevLoc]
-                colorLocs = ColorLoc : commonLocs
-                uvLocs = UVLoc : commonLocs
-                buffer f = do
-                    bufferAttrib PositionLoc 2 vbuf vs
-                    f
-                    bufferAttrib BezUVLoc 2 buvbuf us
-                    bufferAttrib NextLoc 2 nbuf ns
-                    bufferAttrib PrevLoc 2 pbuf ps
+  withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, buvbuf, nbuf, pbuf] -> do
+    enableAttribsForLines isTex
+    bufferAttrib PositionLoc 2 vbuf vs
+    if isTex then bufferAttrib UVLoc 2 cbuf cs
+             else bufferAttrib ColorLoc 4 cbuf cs
+    bufferAttrib BezUVLoc 2 buvbuf us
+    bufferAttrib NextLoc 2 nbuf ns
+    bufferAttrib PrevLoc 2 pbuf ps
+    glBindVertexArray 0
 
-            hasUV <- case fill of
-                FillColor f -> do
-                    onlyEnableAttribs colorLocs
-                    buffer $ bufferAttrib ColorLoc 4 cbuf $ vToGL $ map f vs_
-                    return False
-                FillTexture _ f -> do
-                    onlyEnableAttribs uvLocs
-                    buffer $ bufferAttrib UVLoc 2 cbuf $ vToGL $ map f vs_
-                    return True
+    let num = fromIntegral $ V.length vs_
+        r t = do let (mv, a, m) = unwrapTransform t
+                 pj <- orthoContextProjection win
+                 updateUniformsForLines (unShader sh) pj mv isTex a m thickness
+                                        feather totalLen caps
+                 drawBuffer (shProgram $ unShader sh) vao GL_TRIANGLE_STRIP num
+        c = do withArray bufs $ glDeleteBuffers 5
+               withArray [vao] $ glDeleteVertexArrays 1
+    return (c,r)
 
-            glBindVertexArray 0
+-- | Creates and returns a renderer that renders a colored, expanded 2d polyline
+-- projected in 2d space.
+colorPolylineRenderer :: Context -> SumShader -> Float -> Float
+                      -> (LineCap,LineCap) -> Vector (V2 Float)
+                      -> Vector (V4 Float) -> IO GLRenderer
+colorPolylineRenderer win psh thickness feather caps verts colors = do
+  let empty = putStrLn "could not expand polyline" >> return emptyRenderer
+      mpoly = expandPolyline verts colors thickness feather
+  flip (maybe empty) mpoly $
+    polylineRenderer win psh thickness feather caps False
 
-            let num = fromIntegral $ length vs_
-                r t = do let mv = modelviewProjection t
-                         pj <- orthoContextProjection win
-                         updateUniforms [ UniformProjection pj
-                                        , UniformModelView mv
-                                        , UniformThickness thickness
-                                        , UniformFeather feather
-                                        , UniformSumLength totalLen
-                                        , UniformLineCaps caps
-                                        , UniformHasUV hasUV
-                                        , UniformSampler 0
-                                        ] src
-                         drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
-                c = do withArray bufs $ glDeleteBuffers 5
-                       withArray [vao] $ glDeleteVertexArrays 1
-            case (hasUV, mtex) of
-                (True, Just tx) -> return (c, bindTexAround tx . r)
-                (True, Nothing) -> do putStrLn "Could not creat a filledPolylineRenderer"
-                                      empty
-                (False,_)       -> return (c,r)
+-- | Creates and returns a renderer that renders a textured, expanded 2d
+-- polyline projected in 2d space.
+texPolylineRenderer :: Context -> SumShader -> Float
+                    -> Float -> (LineCap,LineCap) -> Vector (V2 Float)
+                    -> Vector (V2 Float) -> IO GLRenderer
+texPolylineRenderer win psh thickness feather caps verts uvs = do
+  let empty = putStrLn "could not expand polyline" >> return emptyRenderer
+      mpoly = expandPolyline verts uvs thickness feather
+  flip (maybe empty) mpoly $
+    polylineRenderer win psh thickness feather caps True
+
+-- | Creates and returns a renderer that renders a filled, expanded 2d polyline
+-- projected in 2d space.
+--filledPolylineRenderer :: Context -> SumShader -> Fill -> Float
+--                       -> Float -> (LineCap,LineCap) -> [V2 Float]
+--                       -> IO GLRenderer
+--filledPolylineRenderer win psh fill thickness feather caps verts =
+--  case fill of
+--    FillColor f ->
+--      colorPolylineRenderer win psh thickness feather caps verts $ f verts
+--    FillTexture _ f -> do
+--      texPolylineRenderer win psh thickness feather caps verts $ f verts
 
 -- | Creates and returns a renderer that renders a given string of
 -- triangles with the given filling.
-filledTriangleRenderer :: Context -> GeomShader -> [Triangle (V2 Float)]
-                       -> Fill -> IO GLRenderer
+filledTriangleRenderer :: Context -> SumShader -> Vector (Triangle (V2 Float))
+                       -> Fill GLuint -> IO GLRenderer
 filledTriangleRenderer win gsh ts (FillColor f) = do
-    let vs = trisToComp ts
-        -- If we can't find a color in the color map we'll just use
-        -- transparent black.
-        cs = map f vs
-    colorRenderer win gsh GL_TRIANGLES vs cs
-filledTriangleRenderer win gsh ts (FillTextureFile fp f) =
-    loadImageAsTexture fp >>= texFilledTriangleRenderer win gsh ts f
-filledTriangleRenderer win gsh ts (FillTexture bstr f) =
-    decodeImageAsTexture bstr >>= texFilledTriangleRenderer win gsh ts f
-
-texFilledTriangleRenderer :: Context -> GeomShader -> [Triangle (V2 Float)]
-                       -> (V2 Float -> V2 Float) -> Maybe GLuint -> IO GLRenderer
-texFilledTriangleRenderer win gsh ts f mtex = case mtex of
-    Just tx -> do
-        let vs = trisToComp ts
-            -- If we can't find a uv in the uv map we'll just use
-            -- 0,0
-            uvs = map f vs
-        (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
-        let r' t = bindTexAround tx $ r t
-        return (c, r')
-    _ -> do putStrLn "Could not create a filledTriangleRenderer."
-            return (return (), const $ putStrLn "Non op renderer.")
+  let vs = trisToComp ts
+      cs = V.map f vs
+  colorRenderer win gsh GL_TRIANGLES vs cs
+filledTriangleRenderer win gsh ts (FillTexture tx f) = do
+  let vs = trisToComp ts
+      uvs = V.map f vs
+  (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
+  let r' t = bindTexAround tx $ r t
+  return (c, r')
 
 -- | Binds the given texture to the zeroeth texture unit, runs the IO
 -- action and then unbinds the texture.
 bindTexAround :: GLuint -> IO () -> IO ()
 bindTexAround tx f = do
-    glActiveTexture GL_TEXTURE0
-    glBindTexture GL_TEXTURE_2D tx
-    f
-    glBindTexture GL_TEXTURE_2D 0
+  glActiveTexture GL_TEXTURE0
+  glBindTexture GL_TEXTURE_2D tx
+  f
+  glBindTexture GL_TEXTURE_2D 0
 
 --------------------------------------------------------------------------------
 -- Font decomposition into triangles and beziers
@@ -230,9 +395,13 @@ bindTexAround tx f = do
 -- | Ephemeral types for creating polygons from font outlines.
 -- Fonty gives us a [[Vector (Float, Float)]] for an entire string, which
 -- breaks down to
-type Contour = [Bezier (V2 Float)] -- Beziers
+type Contour = Vector (Bezier (V2 Float)) -- Beziers
 type CharacterOutline = [Contour]
 type StringOutline = [CharacterOutline]
+
+type ContourInnards = Vector (V2 Float)
+type CharacterInnards = [ContourInnards]
+type StringInnards = [CharacterInnards]
 
 deriving instance Generic FontStyle
 instance Hashable FontStyle
@@ -255,140 +424,171 @@ stringOutline font dpi px str = beziers cs
     where sz = pixelSizeInPointAtDpi px dpi
           cs = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
 
-fontGeom :: Font -> Int -> Float -> String -> ([Bezier (V2 Float)], [Triangle (V2 Float)])
+fontGeom :: Font -> Int -> Float -> String -> ( Vector (Bezier (V2 Float))
+                                              , [Vector (V2 Float)]
+                                              )
 fontGeom font dpi px str =
-    let bs  = stringOutline font dpi px str
-        ts  = concatMap (concatMap (concaveTriangles . onContourPoints)) bs
-    in (concat $ concat bs,ts)
+    let bs  = stringOutline font dpi px str -- list of list of vector of beziers
+        ts  = concatMap (fmap innerTriFan) bs
+    in ( V.concat $ concat bs
+       , ts
+       )
 
-fontCurves :: Font -> Int -> Float -> String -> [[[QuadraticBezier (V2 Float)]]]
+fontCurves :: Font -> Int -> Float -> String -> [[Vector (QuadraticBezier (V2 Float))]]
 fontCurves font dpi px str =
     let bs = stringOutline font dpi px str
-    in fmap (fmap (fmap (\(Bezier _ a b c) -> bez3 a b c))) bs
+    in fmap (fmap (V.map (\(_,a,b,c) -> bez3 a b c))) bs
 
-fromFonty :: (UV.Unbox b1, Functor f1, Functor f) => ([V2 b1] -> b) -> f (f1 (UV.Vector (b1, b1))) -> f (f1 b)
-fromFonty f = fmap $ fmap $ f . UV.toList . UV.map (uncurry V2)
+fromFonty :: (Unbox b1, Functor f1, Functor f)
+          => (Vector (V2 b1) -> b) -> f (f1 (Vector (b1, b1))) -> f (f1 b)
+fromFonty f = fmap $ fmap $ f . V.map (uncurry V2)
 
-beziers :: [[UV.Vector (Float, Float)]] -> StringOutline
-beziers = fromFonty (toBeziers . fmap (fmap realToFrac))
+-- | Turn a polyline into a list of bezier primitives.
+toBeziers :: (Fractional a, Ord a, Unbox a)
+          => Vector (V2 a) -> Vector (Bezier (V2 a))
+toBeziers vs =
+  V.fromList $ map (\(a,b,c) -> bezier (vs V.! a) (vs V.! b) (vs V.! c)) ndxs
+  where ndxs = map f [0 .. nt $ V.length vs -1]
+        nt n = max 0 $ ceiling $ (fromIntegral n - 3) / 2
+        f i = let a = i * 2
+                  b = a + 1
+                  c = a + 2
+               in (a,b,c)
+
+beziers :: [[Vector (Float, Float)]] -> StringOutline
+beziers = fromFonty (toBeziers . V.map (fmap realToFrac))
+
+-- |
+innerTriFan :: Unbox a => Vector (Bezier a) -> Vector a
+innerTriFan bs
+  | V.null bs = V.empty
+  | (True,x,_,c) <- V.head bs  =
+    x `V.cons` (c `V.cons` V.map (\(_,_,_,z) -> z) (V.drop 1 bs))
+  | (False,a,b,c) <- V.head bs =
+    a `V.cons` (b `V.cons` (c `V.cons` V.concatMap (\(_,_,y,z) ->
+      V.fromList [y,z]) (V.drop 1 bs)))
 
 -- | Turns a polygon into a list of triangles that can be rendered using the
 -- Concave Polygon Stencil Test
 -- @see http://www.glprogramming.com/red/chapter14.html#name13
-concaveTriangles :: [a] -> [Triangle a]
-concaveTriangles [] = []
-concaveTriangles (a:as) = tris a as
-    where tris p (p':p'':ps) = Triangle p p' p'' : tris p (p'':ps)
-          tris _ _ = []
+concaveTriangles :: Unbox a => Vector a -> Vector (Triangle a)
+concaveTriangles ts
+  | Just a <- ts V.!? 0 = tris a $ V.drop 1 ts
+  | otherwise = V.empty
+    where tris v vs
+            | Just (b,c) <- (,) <$> (vs V.!? 0) <*> (vs V.!? 1)  =
+              (v,b,c) `V.cons` tris v (V.drop 1 vs)
+            | otherwise = V.empty
 
 -- | Collects the points that lie directly on the contour of the font
 -- outline.
-onContourPoints :: [Bezier a] -> [a]
-onContourPoints [] = []
-onContourPoints (Bezier LT a b c :bs) = [a,b,c] ++ onContourPoints bs
-onContourPoints (Bezier _ a _ c :bs) = [a,c] ++ onContourPoints bs
+onContourPoints :: Unbox a => Vector (Bezier a) -> Vector a
+onContourPoints = V.foldl' f mempty
+  where f bs (False,a,b,c) = bs V.++ V.fromList [a,b,c]
+        f bs (_,a,_,c) = bs V.++ V.fromList [a,c]
 
 -- | Creates and returns a renderer that renders some text with a font.
-filledFontRenderer :: Context -> GeomShader -> BezShader
+filledFontRenderer :: Context -> SumShader
                   -> FontData -> Int -> Float -> String
-                  -> Fill -> IO GLRenderer
-filledFontRenderer window gsh brs fd dpi px str fill = do
+                  -> Fill GLuint -> IO GLRenderer
+filledFontRenderer window sh fd dpi px str fill = do
     let (bs,ts) = fontStringGeom fd dpi px str
-    (cg,fg) <- filledTriangleRenderer window gsh ts fill
-    (cb,fb) <- filledBezierRenderer window brs bs fill
+    (cg,fg) <- case fill of
+                 (FillColor f) -> do
+                   rs <- forM ts $ \vs ->
+                     let cs = V.map f vs
+                     in colorRenderer window sh GL_TRIANGLE_FAN vs cs
+                   return $ foldl' appendRenderer emptyRenderer rs
+                 (FillTexture tx f) -> do
+                   rs <- forM ts $ \vs ->
+                     let uvs = V.map f vs
+                     in textureRenderer window sh GL_TRIANGLE_FAN vs uvs
+                   let (c,r) = foldl' appendRenderer emptyRenderer rs
+                       r' t = bindTexAround tx $ r t
+                   return (c,r')
+    (cb,fb) <- filledBezierRenderer window sh bs fill
     let s t  = stencilMask (fg t) (fg t)
         gs t = s t >> fb t
     return (cg >> cb,gs)
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
-colorRenderer :: Context -> GeomShader -> GLuint -> [V2 Float]
-              -> [V4 Float] -> IO GLRenderer
-colorRenderer window gsh mode vs gs = do
-    let (GRS src) = gsh
-        srcs = [src]
-
+colorRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
+              -> Vector (V4 Float) -> IO GLRenderer
+colorRenderer window sh mode vs gs =
     withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
-        let ps = map realToFrac $ concatMap F.toList vs :: [GLfloat]
-            cs = map realToFrac $ concatMap F.toList $ take (length vs) gs :: [GLfloat]
+    let ps = V.map realToFrac $ V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
+        cs = V.map realToFrac $ V.concatMap (V.fromList . F.toList) $ V.take (V.length vs) gs :: Vector GLfloat
 
-        onlyEnableAttribs [PositionLoc, ColorLoc]
-        bufferAttrib PositionLoc 2 pbuf ps
-        bufferAttrib ColorLoc 4 cbuf cs
-        glBindVertexArray 0
-
-        let num = fromIntegral $ length vs
-            renderFunction t = do
-                let mv = modelviewProjection t
-                pj <- orthoContextProjection window
-                updateUniforms [UniformHasUV False
-                               ,UniformProjection pj
-                               ,UniformModelView mv
-                               ] src
-                drawBuffer (shProgram src) vao mode num
-            cleanupFunction = do
-                withArray [pbuf, cbuf] $ glDeleteBuffers 2
-                withArray [vao] $ glDeleteVertexArrays 1
-        return (cleanupFunction,renderFunction)
+    enableAttribsForTris False
+    bufferAttrib PositionLoc 2 pbuf ps
+    bufferAttrib ColorLoc 4 cbuf cs
+    glBindVertexArray 0
+    let num = fromIntegral $ V.length vs
+        renderFunction t = do
+            let (mv,a,m) = unwrapTransform t
+            pj <- orthoContextProjection window
+            updateUniformsForTris (unShader sh) pj mv False a m
+            drawBuffer (shProgram $ unShader sh) vao mode num
+        cleanupFunction = do
+            withArray [pbuf, cbuf] $ glDeleteBuffers 2
+            withArray [vao] $ glDeleteVertexArrays 1
+    return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders a textured
 -- geometry using the texture bound to GL_TEXTURE0.
-textureRenderer :: Context -> GeomShader -> GLuint -> [V2 Float]
-                -> [V2 Float] -> IO GLRenderer
+textureRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
+                -> Vector (V2 Float) -> IO GLRenderer
 textureRenderer = textureUnitRenderer Nothing
 
 -- | Creates and returns a renderer that renders the given textured
 -- geometry using the specified texture binding.
-textureUnitRenderer :: Maybe GLint -> Context -> GeomShader -> GLuint
-                    -> [V2 Float] -> [V2 Float] -> IO GLRenderer
-textureUnitRenderer Nothing w gs md vs uvs =
-    textureUnitRenderer (Just 0) w gs md vs uvs
-textureUnitRenderer (Just u) win gsh mode vs uvs = do
-    let (GRS src) = gsh
-        srcs = [src]
+textureUnitRenderer :: Maybe GLint -> Context -> SumShader -> GLuint
+                    -> Vector (V2 Float) -> Vector (V2 Float) -> IO GLRenderer
+textureUnitRenderer Nothing w sh md vs uvs =
+    textureUnitRenderer (Just 0) w sh md vs uvs
+textureUnitRenderer (Just u) win sh mode vs uvs =
+  withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
+  let f xs = V.map realToFrac $ V.concatMap (V.fromList . F.toList) xs :: Vector GLfloat
+      ps = f vs
+      cs = f $ V.take (V.length vs) uvs
 
-    withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
-        let f xs = map realToFrac $ concatMap F.toList xs :: [GLfloat]
-            ps = f vs
-            cs = f $ take (length vs) uvs
+  enableAttribsForTris True
+  bufferAttrib PositionLoc 2 pbuf ps
+  bufferAttrib UVLoc 2 cbuf cs
+  glBindVertexArray 0
 
-        onlyEnableAttribs [PositionLoc, UVLoc]
-        bufferAttrib PositionLoc 2 pbuf ps
-        bufferAttrib UVLoc 2 cbuf cs
-        glBindVertexArray 0
-
-        let num = fromIntegral $ length vs
-            renderFunction tfrm = do
-                let mv = modelviewProjection tfrm
-                pj <- orthoContextProjection win
-                updateUniforms [UniformHasUV True
-                               ,UniformSampler $ fromIntegral u
-                               ,UniformProjection pj
-                               ,UniformModelView mv
-                               ] src
-                drawBuffer (shProgram src) vao mode num
-            cleanupFunction = do
-                withArray [pbuf, cbuf] $ glDeleteBuffers 2
-                withArray [vao] $ glDeleteVertexArrays 1
-        return (cleanupFunction,renderFunction)
+  let num = fromIntegral $ V.length vs
+      renderFunction t = do
+        let (mv,a,m) = unwrapTransform t
+        pj <- orthoContextProjection win
+        updateUniformsForTris (unShader sh) pj mv True a m
+        drawBuffer (shProgram $ unShader sh) vao mode num
+      cleanupFunction = do
+        withArray [pbuf, cbuf] $ glDeleteBuffers 2
+        withArray [vao] $ glDeleteVertexArrays 1
+  return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders the given colored beziers.
-colorBezRenderer :: Context -> BezShader -> [Bezier (V2 Float)]
-                 -> [Triangle (V4 Float)] -> IO GLRenderer
-colorBezRenderer window (BRS src) bs ts =
+colorBezRenderer :: Context -> SumShader -> Vector (Bezier (V2 Float))
+                 -> Vector (Triangle (V4 Float)) -> IO GLRenderer
+colorBezRenderer window sh bs ts =
     withVAO $ \vao -> withBuffers 3 $ \[pbuf, tbuf, cbuf] -> do
-        let vs = concatMap (\(Bezier _ a b c) -> [a,b,c]) bs
-            cvs = concatMap (\(Triangle a b c) -> [a,b,c]) $ take (length bs) ts
-            ps = map realToFrac $ concatMap F.toList vs :: [GLfloat]
-            cs = map realToFrac $ concatMap F.toList cvs :: [GLfloat]
-            ws = concatMap (\(Bezier w _ _ _) -> let w' = fromBool $ w == LT
-                                                 in [ 0, 0, w'
-                                                    , 0.5, 0, w'
-                                                    , 1, 1, w'
-                                                    ])
-                           bs :: [GLfloat]
+        let vs = V.concatMap (\(_,a,b,c) -> V.fromList [a,b,c]) bs
+            cvs = V.concatMap (\(a,b,c) -> V.fromList [a,b,c]) $
+                    V.take (V.length bs) ts
+            ps = V.map realToFrac $
+                   V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
+            cs = V.map realToFrac $
+                   V.concatMap (V.fromList . F.toList) cvs :: Vector GLfloat
+            ws = V.concatMap (\(w,_,_,_) -> let w' = fromBool $ not w
+                                            in V.fromList [ 0, 0, w'
+                                                          , 0.5, 0, w'
+                                                          , 1, 1, w'
+                                                          ])
+                           bs :: Vector GLfloat
 
-        onlyEnableAttribs [PositionLoc, BezLoc, ColorLoc]
+        enableAttribsForBezs False
         bufferAttrib PositionLoc 2 pbuf ps
         bufferAttrib BezLoc 3 tbuf ws
         bufferAttrib ColorLoc 4 cbuf cs
@@ -397,37 +597,36 @@ colorBezRenderer window (BRS src) bs ts =
         let cleanupFunction = do
                 withArray [pbuf, tbuf, cbuf] $ glDeleteBuffers 3
                 withArray [vao] $ glDeleteVertexArrays 1
-            num = fromIntegral $ length vs
+            num = fromIntegral $ V.length vs
             renderFunction t = do
                 pj <- orthoContextProjection window
-                let mv = modelviewProjection t
-                updateUniforms [UniformHasUV False
-                               ,UniformProjection pj
-                               ,UniformModelView mv
-                               ] src
-                drawBuffer (shProgram src) vao GL_TRIANGLES num
+                let (mv,a,m) = unwrapTransform t
+                updateUniformsForBezs (unShader sh) pj mv False a m
+                drawBuffer (shProgram $ unShader sh) vao GL_TRIANGLES num
         return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders the given textured beziers.
-textureBezUnitRenderer :: Maybe GLint -> Context -> BezShader
-                        -> [Bezier (V2 Float)] -> [Triangle (V2 Float)] -> IO GLRenderer
+textureBezUnitRenderer :: Maybe GLint -> Context -> SumShader
+                        -> Vector (Bezier (V2 Float))
+                        -> Vector (Triangle (V2 Float)) -> IO GLRenderer
 textureBezUnitRenderer Nothing window sh bs ts =
     textureBezUnitRenderer (Just 0) window sh bs ts
-textureBezUnitRenderer (Just u) window (BRS src) bs ts =
+textureBezUnitRenderer (Just u) window sh bs ts =
     withVAO $ \vao -> withBuffers 3 $ \[pbuf, uvbuf, tbuf] -> do
-        let vs = concatMap (\(Bezier _ a b c) -> [a,b,c]) bs
-            uvs = concatMap (\(Triangle a b c) -> [a,b,c]) $ take (length bs) ts
-            f = map realToFrac . concatMap F.toList
-            uvs' = f uvs :: [GLfloat]
-            ps = f vs    :: [GLfloat]
-            ws = concatMap (\(Bezier w _ _ _) -> let w' = fromBool $ w == LT
-                                                 in [ 0, 0, w'
-                                                    , 0.5, 0, w'
-                                                    , 1, 1, w'
-                                                    ])
-                           bs :: [GLfloat]
+        let vs = V.concatMap (\(_,a,b,c) -> V.fromList [a,b,c]) bs
+            uvs = V.concatMap (\(a,b,c) -> V.fromList [a,b,c]) $
+                    V.take (V.length bs) ts
+            f = V.map realToFrac . V.concatMap (V.fromList . F.toList)
+            uvs' = f uvs :: Vector GLfloat
+            ps = f vs    :: Vector GLfloat
+            ws = V.concatMap (\(w,_,_,_) -> let w' = fromBool $ not w
+                                            in V.fromList [ 0, 0, w'
+                                                          , 0.5, 0, w'
+                                                          , 1, 1, w'
+                                                          ])
+                           bs :: Vector GLfloat
 
-        onlyEnableAttribs [PositionLoc, UVLoc, BezLoc]
+        enableAttribsForBezs True
         bufferAttrib PositionLoc 2 pbuf ps
         bufferAttrib UVLoc 2 uvbuf uvs'
         bufferAttrib BezLoc 3 tbuf ws
@@ -436,82 +635,68 @@ textureBezUnitRenderer (Just u) window (BRS src) bs ts =
         let cleanupFunction = do
                 withArray [pbuf, tbuf, uvbuf] $ glDeleteBuffers 3
                 withArray [vao] $ glDeleteVertexArrays 1
-            num = fromIntegral $ length vs
+            num = fromIntegral $ V.length vs
             renderFunction t = do
-                let mv = modelviewProjection t
+                let (mv,a,m) = unwrapTransform t
                 pj <- orthoContextProjection window
-                updateUniforms [UniformProjection pj
-                               ,UniformModelView mv
-                               ,UniformHasUV True
-                               ,UniformSampler $ fromIntegral u
-                               ] src
-                drawBuffer (shProgram src) vao GL_TRIANGLES num
+                updateUniformsForBezs (unShader sh) pj mv True a m
+                drawBuffer (shProgram $ unShader sh) vao GL_TRIANGLES num
         return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders textured beziers using the
 -- texture bound to GL_TEXTURE0.
-textureBezRenderer :: Context -> BezShader -> [Bezier (V2 Float)]
-                    -> [Triangle (V2 Float)] -> IO GLRenderer
+textureBezRenderer :: Context -> SumShader -> Vector (Bezier (V2 Float))
+                    -> Vector (Triangle (V2 Float)) -> IO GLRenderer
 textureBezRenderer = textureBezUnitRenderer Nothing
 
 -- | Creates and returns a renderer that renders a given string of
 -- triangles with the given filling.
-filledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)] -> Fill
-                      -> IO GLRenderer
+filledBezierRenderer :: Context -> SumShader -> Vector (Bezier (V2 Float))
+                     -> Fill GLuint -> IO GLRenderer
 filledBezierRenderer win sh bs (FillColor f) = do
-    let ts = map (\(Bezier _ a b c) -> f <$> Triangle a b c) bs
+    let ts = V.map (\(_,a,b,c) -> fmapTriangle f (a,b,c)) bs
     colorBezRenderer win sh bs ts
-filledBezierRenderer win sh bs (FillTexture bstr f) =
-    decodeImageAsTexture bstr >>= texFilledBezierRenderer win sh bs f
-filledBezierRenderer win sh bs (FillTextureFile fp f) =
-    loadImageAsTexture fp >>= texFilledBezierRenderer win sh bs f
-
-texFilledBezierRenderer win sh bs f mtex = do
-    let ts = map (\(Bezier _ a b c) -> f <$> Triangle a b c) bs
-    case mtex of
-        Just tx -> do (c,r) <- textureBezRenderer win sh bs ts
-                      let r' t = bindTexAround tx $ r t
-                      return (c, r')
-        Nothing -> do putStrLn "Could not create a filledBezRenderer."
-                      return (return (), const $ putStrLn "Non op renderer.")
+filledBezierRenderer win sh bs (FillTexture tx f) = do
+    let ts = V.map (\(_,a,b,c) -> fmapTriangle f (a,b,c)) bs
+    (c,r) <- textureBezRenderer win sh bs ts
+    let r' t = bindTexAround tx $ r t
+    return (c, r')
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.
-maskRenderer :: Context -> MaskShader -> GLuint -> [V2 Float]
-             -> [V2 Float] -> IO GLRenderer
-maskRenderer win (MRS src) mode vs uvs =
+maskRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
+             -> Vector (V2 Float) -> IO GLRenderer
+maskRenderer win sh mode vs uvs =
     withVAO $ \vao -> withBuffers 2 $ \[pbuf, uvbuf] -> do
-        let vs'  = map realToFrac $ concatMap F.toList vs :: [GLfloat]
-            uvs' = map realToFrac $ concatMap F.toList uvs :: [GLfloat]
+        let vs'  = V.map realToFrac $
+                     V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
+            uvs' = V.map realToFrac $
+                     V.concatMap (V.fromList . F.toList) uvs :: Vector GLfloat
 
-        onlyEnableAttribs [PositionLoc, UVLoc]
+        enableAttribsForMask
         bufferAttrib PositionLoc 2 pbuf vs'
         bufferAttrib UVLoc 2 uvbuf uvs'
         glBindVertexArray 0
 
         let cleanup = do withArray [pbuf, uvbuf] $ glDeleteBuffers 2
                          withArray [vao] $ glDeleteVertexArrays 1
-            num = fromIntegral $ length vs
+            num = fromIntegral $ V.length vs
             render t = do
-                let mv = modelviewProjection t
+                let (mv,a,m) = unwrapTransform t
                 pj <- orthoContextProjection win
-                updateUniforms [UniformProjection pj
-                               ,UniformModelView mv
-                               ,UniformMainTex 0
-                               ,UniformMaskTex 1
-                               ] src
-                drawBuffer (shProgram src) vao mode num
+                updateUniformsForMask (unShader sh) pj mv a m 0 1
+                drawBuffer (shProgram $ unShader sh) vao mode num
         return (cleanup,render)
 
 -- | Creates a rendering that masks an IO () drawing computation with the alpha
 -- value of another.
-alphaMask :: Context -> MaskShader -> IO () -> IO () -> IO GLRenderer
+alphaMask :: Context -> SumShader -> IO () -> IO () -> IO GLRenderer
 alphaMask win mrs r2 r1 = do
     mainTex <- toTextureUnit (Just GL_TEXTURE0) win r2
     maskTex <- toTextureUnit (Just GL_TEXTURE1) win r1
     (w,h)   <- ctxWindowSize win
-    let vs = map (fmap fromIntegral) [V2 0 0, V2 w 0, V2 w h, V2 0 h]
-        uvs = [V2 0 1, V2 1 1, V2 1 0, V2 0 0]
+    let vs = V.fromList $ map (fmap fromIntegral) [V2 0 0, V2 w 0, V2 w h, V2 0 h]
+        uvs = V.fromList [V2 0 1, V2 1 1, V2 1 0, V2 0 0]
     (c,f) <- maskRenderer win mrs GL_TRIANGLE_FAN vs uvs
     let f' _ = do glActiveTexture GL_TEXTURE0
                   glBindTexture GL_TEXTURE_2D mainTex
@@ -550,8 +735,7 @@ stencilMask r2 r1  = do
     r2
     glDisable GL_STENCIL_TEST
 
-
-transformRenderer :: Transform -> GLRenderer -> GLRenderer
+transformRenderer :: PictureTransform -> GLRenderer -> GLRenderer
 transformRenderer t (c, r) = (c, r . (t <>))
 --------------------------------------------------------------------------------
 -- Updating uniforms
@@ -569,31 +753,29 @@ orthoContextProjection window = do
     (ww, wh) <- ctxWindowSize window
     let (hw,hh) = (fromIntegral ww, fromIntegral wh)
     return $ ortho 0 hw hh 0 0 1
-
-setProjectionUniforms :: [Shader] -> Context -> Transform -> IO ()
-setProjectionUniforms srcs window t = do
-    pj <- orthoContextProjection window
-    mapM_ (updateUniform $ UniformProjection pj) srcs
-
-    let mv = modelviewProjection t
-    mapM_ (updateUniform $ UniformModelView mv) srcs
 --------------------------------------------------------------------------------
 -- Working with textures.
 --------------------------------------------------------------------------------
+loadImage :: FilePath -> IO (Maybe (V2 Int, GLuint))
+loadImage fp = readImage fp >>= maybeLoadTexture
+
 decodeImageAsTexture :: ByteString -> IO (Maybe GLuint)
-decodeImageAsTexture bstr = maybeLoadTexture $ decodeImage bstr
+decodeImageAsTexture bstr = fmap snd <$> maybeLoadTexture (decodeImage bstr)
 
 loadImageAsTexture :: FilePath -> IO (Maybe GLuint)
-loadImageAsTexture fp = readImage fp >>= maybeLoadTexture
+loadImageAsTexture fp = do
+  edyn <- readImage fp
+  fmap snd <$> maybeLoadTexture edyn
 
-maybeLoadTexture :: Either String DynamicImage -> IO (Maybe GLuint)
+maybeLoadTexture :: Either String DynamicImage -> IO (Maybe (V2 Int, GLuint))
 maybeLoadTexture strOrImg = case strOrImg of
     Left err -> putStrLn err >> return Nothing
     Right i  -> Just <$> loadTexture i
 
-loadTexture :: DynamicImage -> IO GLuint
+loadTexture :: DynamicImage -> IO (V2 Int, GLuint)
 loadTexture = loadTextureUnit Nothing
 
+allocAndActivateTex :: GLenum -> IO GLuint
 allocAndActivateTex u = do
     [t] <- allocaArray 1 $ \ptr -> do
         glGenTextures 1 ptr
@@ -602,23 +784,23 @@ allocAndActivateTex u = do
     glBindTexture GL_TEXTURE_2D t
     return t
 
-loadTextureUnit :: Maybe GLuint -> DynamicImage -> IO GLuint
+loadTextureUnit :: Maybe GLuint -> DynamicImage -> IO (V2 Int, GLuint)
 loadTextureUnit Nothing img = loadTextureUnit (Just GL_TEXTURE0) img
 loadTextureUnit (Just u) img = do
     t <- allocAndActivateTex u
-    loadJuicy img
+    (w,h) <- loadJuicy img
     glGenerateMipmap GL_TEXTURE_2D  -- Generate mipmaps now!!!
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S GL_REPEAT
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T GL_REPEAT
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_NEAREST_MIPMAP_NEAREST
     glBindTexture GL_TEXTURE_2D 0
-    return t
+    return (V2 w h, t)
 
 unloadTexture :: GLuint -> IO ()
 unloadTexture t = withArray [t] $ glDeleteTextures 1
 
-loadJuicy :: DynamicImage -> IO ()
+loadJuicy :: DynamicImage -> IO (Int,Int)
 loadJuicy (ImageY8 (Image w h d)) = bufferImageData w h d GL_RED GL_UNSIGNED_BYTE
 loadJuicy (ImageY16 (Image w h d)) = bufferImageData w h d GL_RED GL_UNSIGNED_SHORT
 loadJuicy (ImageYF (Image w h d)) = bufferImageData w h d GL_RED GL_FLOAT
@@ -668,6 +850,7 @@ toTextureUnit (Just u) win r = do
             glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
     return t
 
+initializeTexImage2D :: GLsizei -> GLsizei -> IO ()
 initializeTexImage2D w h = do
   glTexImage2D GL_TEXTURE_2D 0 GL_RGBA w h 0 GL_RGBA GL_UNSIGNED_BYTE nullPtr
   glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER GL_NEAREST
@@ -720,10 +903,8 @@ clipTexture rtex (V2 x1 y1, V2 x2 y2) = do
 --------------------------------------------------------------------------------
 -- Buffering, Vertex Array Objects, Uniforms, etc.
 --------------------------------------------------------------------------------
-bufferImageData :: forall a a1 a2. (Storable a2, Integral a1, Integral a) => a -> a1 -> Vector a2 -> GLenum -> GLenum -> IO ()
-bufferImageData w h dat imgfmt pxfmt = unsafeWith dat $ \ptr -> do
-    --glTexStorage2D GL_TEXTURE_2D 1 GL_RGBA8 (fromIntegral w) (fromIntegral h)
-    --glTexSubImage2D GL_TEXTURE_2D 0 0 0 (fromIntegral w) (fromIntegral h) GL_RGBA GL_UNSIGNED_BYTE (castPtr ptr)
+bufferImageData :: forall a a1 a2. (Storable a2, Integral a1, Integral a) => a -> a1 -> S.Vector a2 -> GLenum -> GLenum -> IO (a,a1)
+bufferImageData w h dat imgfmt pxfmt = S.unsafeWith dat $ \ptr -> do
     glTexImage2D
         GL_TEXTURE_2D
         0
@@ -736,6 +917,7 @@ bufferImageData w h dat imgfmt pxfmt = unsafeWith dat $ \ptr -> do
         (castPtr ptr)
     err <- glGetError
     when (err /= 0) $ putStrLn $ "glTexImage2D Error: " ++ show err
+    return (w,h)
 
 withVAO :: (GLuint -> IO b) -> IO b
 withVAO f = do
@@ -754,12 +936,16 @@ withBuffers n f = do
         peekArray (fromIntegral n) ptr
     f bufs
 
-bufferAttrib :: Storable a => AttribLoc -> GLint -> GLuint -> [a] -> IO ()
+bufferAttrib :: (Storable a, Unbox a)
+             => AttribLoc -> GLint -> GLuint -> Vector a -> IO ()
 bufferAttrib attr n buf as = do
     let loc = locToGLuint attr
-        asize = length as * glFloatSize
+        asize = V.length as * glFloatSize
+        f = S.convert :: (G.Vector Vector a, Storable a)
+                      => Vector a -> S.Vector a
     glBindBuffer GL_ARRAY_BUFFER buf
-    withArray as $ \ptr ->
+
+    S.unsafeWith (f as) $ \ptr ->
         glBufferData GL_ARRAY_BUFFER (fromIntegral asize) (castPtr ptr) GL_STATIC_DRAW
     glEnableVertexAttribArray loc
     glVertexAttribPointer loc n GL_FLOAT GL_FALSE 0 nullPtr

@@ -2,7 +2,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Gelatin.Core.Transform where
 
-import Linear
+import           Linear
+import qualified Data.Vector.Unboxed as V
+import           Data.Vector.Unboxed (Vector, Unbox)
 
 class Transformable a b where
     -- | Transform a type using the transform type.
@@ -10,6 +12,9 @@ class Transformable a b where
 
 instance Transformable a b => Transformable a [b] where
     transform = map . transform
+
+instance (Unbox b, Transformable a b) => Transformable a (Vector b) where
+  transform = V.map . transform
 --------------------------------------------------------------------------------
 -- Affine Transformation
 --------------------------------------------------------------------------------

@@ -83,7 +83,7 @@ startupGLFWBackend ww wh ws mmon mwin = do
     unless initd $ do putStrLn "could not initialize glfw"
                       exitFailure
     w  <- newWindow ww wh ws mmon mwin
-    sh <- loadShaders
+    sh <- loadSumShader
 
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
@@ -97,11 +97,11 @@ startupGLFWBackend ww wh ws mmon mwin = do
 updateWindowGLFW :: Window -> IO ()
 updateWindowGLFW = swapBuffers
 
-renderWithGLFW :: Window -> Rez -> Cache IO Transform -> Picture ()
-               -> IO (Cache IO Transform)
+renderWithGLFW :: Window -> Rez -> Cache IO PictureTransform
+               -> Picture GLuint () -> IO (Cache IO PictureTransform)
 renderWithGLFW window rez cache pic = do
   clearFrame rez
-  let strategy = paintedPrimitivesRenderStrategy
-  newCache <- renderPrims strategy rez cache $ toPaintedPrimitives pic
+  (r, newCache) <- compilePictureRenderer rez cache pic
+  snd r mempty
   updateWindowGLFW window
-  return newCache
+  cleanPictureRendererCache newCache pic

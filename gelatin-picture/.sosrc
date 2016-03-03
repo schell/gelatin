@@ -2,5 +2,5 @@
   - .*\.hs$
   - .*\.cabal$
   commands:
-  - stack build
+  - stack build --executable-profiling --library-profiling --ghc-options="-fprof-auto"
   - stack exec hlint \0

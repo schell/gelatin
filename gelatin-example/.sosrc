@@ -1,0 +1,11 @@
+- patterns:
+  - ([^\/]*)\/(.*\.hs)$
+  commands:
+  - stack build
+  - stack exec hlint \0
+  - stack exec gelatin-example
+- patterns:
+  - ([^\/]*)\/(.*\.cabal)$
+  commands:
+  - stack build
+  - stack exec hlint \0
