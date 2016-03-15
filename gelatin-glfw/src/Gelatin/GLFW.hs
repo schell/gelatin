@@ -97,11 +97,11 @@ startupGLFWBackend ww wh ws mmon mwin = do
 updateWindowGLFW :: Window -> IO ()
 updateWindowGLFW = swapBuffers
 
-renderWithGLFW :: Window -> Rez -> Cache IO Transform -> Picture ()
-               -> IO (Cache IO Transform)
+renderWithGLFW :: Window -> Rez -> Cache IO Transform
+               -> Picture Transform GLuint () -> IO (Cache IO Transform)
 renderWithGLFW window rez cache pic = do
   clearFrame rez
-  let strategy = pictureRenderStrategy
-  newCache <- renderPrims strategy rez cache $ compilePicture pic
+  (r, newCache) <- compilePictureRenderer rez cache pic
+  snd r mempty
   updateWindowGLFW window
-  return newCache
+  cleanPictureRendererCache newCache pic

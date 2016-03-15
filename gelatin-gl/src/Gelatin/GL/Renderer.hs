@@ -21,7 +21,9 @@ module Gelatin.GL.Renderer (
     colorPrimsRenderer,
     texturePrimsRenderer,
     -- * Line rendering
-    filledPolylineRenderer,
+    --filledPolylineRenderer,
+    colorPolylineRenderer,
+    texPolylineRenderer,
     -- * Triangle rendering
     colorRenderer,
     textureRenderer,
@@ -76,23 +78,32 @@ import System.Exit
 import qualified Data.Foldable as F
 import GHC.Stack
 import GHC.Generics
-import Linear
+import Linear hiding (trace)
 
 --------------------------------------------------------------------------------
 -- Rendering compiled pictures
 --------------------------------------------------------------------------------
-compiledPicRenderer :: Rez -> CompiledPicture -> IO (Either String GLRenderer)
-compiledPicRenderer rez (CompiledWithTex ps fp) = do
-  mtex <- loadImageAsTexture fp
-  case mtex of
-    Nothing  -> return $ Left $ "Could not load texture " ++ show fp
-    Just tex -> do rs <- mapM (texturePrimsRenderer rez) ps
-                   let (c,f) = foldl' appendRenderer emptyRenderer rs
-                       r t = bindTexAround tex $ f t
-                   return $ Right (c,r)
-compiledPicRenderer rez (CompiledWithColor ps) = do
+compiledPicRenderer :: Rez -> CompiledPicture GLuint
+                    -> IO GLRenderer
+compiledPicRenderer rez (CompiledTex op ps tx) = do
+  rs <- mapM (texturePrimsRenderer rez) ps
+  let (c,f) = foldl' appendRenderer emptyRenderer rs
+      r t = bindTexAround tx $ f t
+  return $ applySpecialOp op (c,r)
+compiledPicRenderer rez (CompiledColor op ps) = do
   rs <- mapM (colorPrimsRenderer rez) ps
-  return $ Right $ foldl' appendRenderer emptyRenderer rs
+  return $ applySpecialOp op $ foldl' appendRenderer emptyRenderer rs
+compiledPicRenderer rez (CompiledLine op s ps) = do
+  let f (GPLine _ seg segs) = GPLine s seg segs
+      f p = p
+  rs <- mapM (colorPrimsRenderer rez . f) ps
+  return $ applySpecialOp op $ foldl' appendRenderer emptyRenderer rs
+
+applySpecialOp :: SpecialOp -> GLRenderer -> GLRenderer
+applySpecialOp SOpNone r = r
+applySpecialOp SOpStencilMask (c,r) =
+  let s t  = stencilMask (r t) (r t)
+  in (c,s)
 --------------------------------------------------------------------------------
 -- Renderers for GPrims with specific attributes
 -- @(V2 Float, V4 Float)@
@@ -103,55 +114,78 @@ fromTris ts = atts
   where atts = foldr' fatt ([],[]) ts
         fatt ((va,ca),(vb,cb),(vc,cc)) (xs,ys) = (va:vb:vc:xs, ca:cb:cc:ys)
 
--- | Create a renderer for some colored geometry.
-colorPrimsRenderer :: Rez -> GPrims (V2 Float, V4 Float) -> IO GLRenderer
-colorPrimsRenderer rez (GPTris ts) =
-  let sh = shGeometry $ rezShader rez
-      ctx = rezContext rez
-  in uncurry (colorRenderer ctx sh GL_TRIANGLES) $ fromTris ts
-colorPrimsRenderer rez (GPBezs bs) =
+toBezAndTris :: [((V2 Float, a), (V2 Float, a), (V2 Float, a))]
+             -> ([Bezier (V2 Float)], [T.Triangle a])
+toBezAndTris = foldr' fatt ([],[])
+  where fatt ((va,ca),(vb,cb),(vc,cc)) (xs,ys) = ( bezier va vb vc :xs
+                                                 , T.Triangle ca cb cc :ys
+                                                 )
+
+renderBezsWith :: (Context -> BezShader -> [Bezier (V2 Float)] -> [T.Triangle a] -> t)
+               -> Rez -> [((V2 Float, a), (V2 Float, a), (V2 Float, a))] -> t
+renderBezsWith f rez bs = do
   let sh = shBezier $ rezShader rez
       ctx = rezContext rez
-      (vs,cs) = foldr' fatt ([],[]) bs
-      fatt ((va,ca),(vb,cb),(vc,cc)) (xs,ys) = ( bezier va vb vc :xs
-                                               , T.Triangle ca cb cc :ys
-                                               )
-  in colorBezRenderer ctx sh vs cs
-colorPrimsRenderer rez (GPTriSeq stype a b c ds) =
+      (vs,cs) = toBezAndTris bs
+  f ctx sh vs cs
+
+renderTriSeqWith :: (Eq a, Num a)
+                 => (Context -> GeomShader -> a -> [a1] -> [b] -> c)
+                 -> Rez -> SeqType -> (a1, b) -> (a1, b) -> (a1, b)
+                 -> [(a1, b)] -> c
+renderTriSeqWith f rez stype a b c ds = do
   let sh = shGeometry $ rezShader rez
       ctx = rezContext rez
       mode = if stype == SeqStrip
              then GL_TRIANGLE_STRIP else GL_TRIANGLE_FAN
-  in uncurry (colorRenderer ctx sh mode) $ unzip $ a:b:c:ds
+  uncurry (f ctx sh mode) $ unzip $ a:b:c:ds
+
+renderTrisWith :: (Eq a, Num a)
+               => (Context -> GeomShader -> a -> [V2 Float] -> [a1] -> c)
+               -> Rez -> [((V2 Float, a1), (V2 Float, a1), (V2 Float, a1))]
+               -> c
+renderTrisWith f rez ts = do
+  let sh = shGeometry $ rezShader rez
+      ctx = rezContext rez
+  uncurry (f ctx sh GL_TRIANGLES) $ fromTris ts
+
+renderLineWith :: (Show (f Float), Additive f)
+               => (Context -> ProjectedPolylineShader -> Float -> Float -> (LineCap, LineCap) -> [V2 Float] -> [f Float] -> c)
+               -> Rez -> Stroke -> LineSegment (V2 Float, f Float)
+               -> [LineSegment (V2 Float, f Float)] -> c
+renderLineWith f rez (Stroke w fth cs) l ls = do
+  let sh = shProjectedPolyline $ rezShader rez
+      ctx = rezContext rez
+  uncurry (f ctx sh w fth cs) $
+    unzip $ segmentsToPolyline l ls
+
+-- | Create a renderer for some colored geometry.
+colorPrimsRenderer :: Rez -> GPrims (V2 Float, V4 Float) -> IO GLRenderer
+colorPrimsRenderer rez (GPTris ts) = renderTrisWith colorRenderer rez ts
+colorPrimsRenderer rez (GPBezs bs) = renderBezsWith colorBezRenderer rez bs
+colorPrimsRenderer rez (GPTriSeq stype a b c ds) =
+  renderTriSeqWith colorRenderer rez stype a b c ds
+colorPrimsRenderer rez (GPLine s l ls) =
+  renderLineWith colorPolylineRenderer rez s l ls
 
 -- | Create a renderer for some textured geometry.
 texturePrimsRenderer :: Rez -> GPrims (V2 Float, V2 Float) -> IO GLRenderer
-texturePrimsRenderer rez (GPTris ts) =
-  let sh = shGeometry $ rezShader rez
-      ctx = rezContext rez
-  in uncurry (textureRenderer ctx sh GL_TRIANGLES) $ fromTris ts
-texturePrimsRenderer rez (GPBezs bs) =
-  let sh = shBezier $ rezShader rez
-      ctx = rezContext rez
-      (vs,cs) = foldr' fatt ([],[]) bs
-      fatt ((va,ca),(vb,cb),(vc,cc)) (xs,ys) = ( bezier va vb vc :xs
-                                               , T.Triangle ca cb cc :ys
-                                               )
-  in textureBezRenderer ctx sh vs cs
+texturePrimsRenderer rez (GPTris ts) = renderTrisWith textureRenderer rez ts
+texturePrimsRenderer rez (GPBezs bs) = renderBezsWith textureBezRenderer rez bs
 texturePrimsRenderer rez (GPTriSeq stype a b c ds) =
-  let sh = shGeometry $ rezShader rez
-      ctx = rezContext rez
-      mode = if stype == SeqStrip
-             then GL_TRIANGLE_STRIP else GL_TRIANGLE_FAN
-  in uncurry (textureRenderer ctx sh mode) $ unzip $ a:b:c:ds
+  renderTriSeqWith textureRenderer rez stype a b c ds
+texturePrimsRenderer rez (GPLine s l ls) =
+  renderLineWith texPolylineRenderer rez s l ls
 --------------------------------------------------------------------------------
 -- GLRenderers
 --------------------------------------------------------------------------------
-expandPolyline :: [V2 Float] -> Float -> Float
-               -> Maybe ([V2 Float], [V2 Float], [V2 Float], [V2 Float], Float)
-expandPolyline verts thickness feather
-    | (v1:v2:_) <- verts =
+expandPolyline :: [V2 Float] -> [f Float] -> Float -> Float
+               -> Maybe ([V2 Float], [f Float], [V2 Float], [V2 Float], [V2 Float], Float)
+expandPolyline verts colors thickness feather
+    | (v1:v2:_) <- verts
+    , (c1:_:_)  <- colors =
     let v3:v3n:_ = reverse verts
+        c3:_:_ = reverse $ take (length verts) colors
         -- clamp the lower bound of our thickness to 1
         absthick = max thickness 1
         d = fromIntegral (ceiling $ absthick + 2.5 * feather :: Integer)
@@ -162,7 +196,7 @@ expandPolyline verts thickness feather
         seqLens  = snd $ foldl seqfunc (0,[]) lens
         isClosed = distance v1 v3 <= 0.00001
         -- if the polyline is closed return a miter with the last point
-        startCap = ([cap,cap], uvs, [v2,v2],[prev,prev])
+        startCap = ([cap,cap], [c1,c1], uvs, [v2,v2],[prev,prev])
             where (uvs,cap,prev) = if isClosed
                                    -- no cap
                                    then ([V2 0 d, V2 0 (-d)],v1,v3n)
@@ -170,7 +204,7 @@ expandPolyline verts thickness feather
                                    else let c = d *^ signorm (v2 - v1)
                                         in ([V2 (-d) d, V2 (-d) (-d)],v1 - c, v1 - 2*c)
 
-        endCap = ([cap,cap], uvs,[next,next],[v3n,v3n])
+        endCap = ([cap,cap], [c3,c3], uvs,[next,next],[v3n,v3n])
             where (uvs,cap,next) = if isClosed
                                    -- no cap
                                    then ([V2 totalLen d, V2 totalLen (-d)], v3, v2)
@@ -178,122 +212,124 @@ expandPolyline verts thickness feather
                                    else let c = d *^ signorm (v3 - v3n)
                                         in ([V2 totalEnd d, V2 totalEnd (-d)], v3 + c, v3 + 2*c)
 
-        vcs  = zip verts seqLens :: [(V2 Float, Float)]
-        tris = startCap : zipWith3 strip vcs (drop 1 vcs) (drop 2 vcs)
+        vcs  = zip3 verts colors seqLens
+        tris = startCap : zipWith3 strp vcs (drop 1 vcs) (drop 2 vcs)
                         ++ [endCap]
         -- Expand the line into a triangle strip
-        strip (a,_) (b,l) (c,_) = ([b,b],[V2 l d,V2 l (-d)],[c,c],[a,a])
-        vs = concatMap (\(a,_,_,_) -> a) tris
-        us = concatMap (\(_,a,_,_) -> a) tris
-        ns = concatMap (\(_,_,a,_) -> a) tris
-        ps = concatMap (\(_,_,_,a) -> a) tris
-    in Just (vs, us, ns, ps, totalLen)
+        strp (a,_,_) (b,bc,l) (c,_,_) =
+          ([b,b],[bc,bc],[V2 l d,V2 l (-d)],[c,c],[a,a])
+        vs = concatMap (\(a,_,_,_,_) -> a) tris
+        cs = concatMap (\(_,a,_,_,_) -> a) tris
+        us = concatMap (\(_,_,a,_,_) -> a) tris
+        ns = concatMap (\(_,_,_,a,_) -> a) tris
+        ps = concatMap (\(_,_,_,_,a) -> a) tris
+
+      in Just (vs, cs, us, ns, ps, totalLen)
     | otherwise = Nothing
 
--- | Creates and returns a renderer that renders an expanded 2d polyline
--- projected in 3d space.
-filledPolylineRenderer :: Context -> ProjectedPolylineShader -> Fill
-                           -> Float -> Float -> (LineCap,LineCap) -> [V2 Float]
-                           -> IO GLRenderer
-filledPolylineRenderer win psh fill thickness feather caps verts = do
-    let empty = do putStrLn "could not expand polyline"
-                   return emptyRenderer
-        mpoly = expandPolyline verts thickness feather
-    flip (maybe empty) mpoly $ \(vs_,us_,ns_,ps_,totalLen) -> do
-        mtex <- case fill of
-            FillColor{} -> return Nothing
-            FillTexture bstr _ -> decodeImageAsTexture bstr
-            FillTextureFile fp _ -> loadImageAsTexture fp
+polylineRenderer :: Foldable f
+                 => Context -> ProjectedPolylineShader -> Float -> Float
+                 -> (LineCap,LineCap) -> Bool
+                 -> ([V2 Float],[f Float],[V2 Float],[V2 Float],[V2 Float],Float)
+                 -> IO GLRenderer
+polylineRenderer win (PPRS src) thickness feather caps isTex (vs_,cs_,us_,ns_,ps_,totalLen) = do
+  let vToGL :: Foldable f => [f Float] -> [GLfloat]
+      vToGL = map realToFrac . concatMap F.toList
+      vs = vToGL vs_
+      cs = vToGL cs_
+      us = vToGL us_
+      ns = vToGL ns_
+      ps = vToGL ps_
 
-        let vToGL :: Foldable f => [f Float] -> [GLfloat]
-            vToGL = map realToFrac . concatMap F.toList
-            vs  = vToGL vs_
-            us  = vToGL us_
-            ns  = vToGL ns_
-            ps  = vToGL ps_
-            PPRS src = psh
+  withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, buvbuf, nbuf, pbuf] -> do
+    onlyEnableAttribs [ PositionLoc
+                      , if isTex then UVLoc else ColorLoc
+                      , BezUVLoc
+                      , NextLoc
+                      , PrevLoc
+                      ]
+    bufferAttrib PositionLoc 2 vbuf vs
+    if isTex then bufferAttrib UVLoc 2 cbuf cs
+             else bufferAttrib ColorLoc 4 cbuf cs
+    bufferAttrib BezUVLoc 2 buvbuf us
+    bufferAttrib NextLoc 2 nbuf ns
+    bufferAttrib PrevLoc 2 pbuf ps
+    glBindVertexArray 0
 
-        withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, buvbuf, nbuf, pbuf] -> do
-            let commonLocs = [PositionLoc, BezUVLoc, NextLoc, PrevLoc]
-                colorLocs = ColorLoc : commonLocs
-                uvLocs = UVLoc : commonLocs
-                buffer f = do
-                    bufferAttrib PositionLoc 2 vbuf vs
-                    f
-                    bufferAttrib BezUVLoc 2 buvbuf us
-                    bufferAttrib NextLoc 2 nbuf ns
-                    bufferAttrib PrevLoc 2 pbuf ps
+    let num = fromIntegral $ length vs_
+        r t = do let mv = modelviewProjection t
+                 pj <- orthoContextProjection win
+                 updateUniforms [ UniformProjection pj
+                                , UniformModelView mv
+                                , UniformThickness thickness
+                                , UniformFeather feather
+                                , UniformSumLength totalLen
+                                , UniformLineCaps caps
+                                , UniformHasUV isTex
+                                , UniformSampler 0
+                                ] src
+                 drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
+        c = do withArray bufs $ glDeleteBuffers 5
+               withArray [vao] $ glDeleteVertexArrays 1
+    return (c,r)
 
-            hasUV <- case fill of
-                FillColor f -> do
-                    onlyEnableAttribs colorLocs
-                    buffer $ bufferAttrib ColorLoc 4 cbuf $ vToGL $ map f vs_
-                    return False
-                FillTexture _ f -> do
-                    onlyEnableAttribs uvLocs
-                    buffer $ bufferAttrib UVLoc 2 cbuf $ vToGL $ map f vs_
-                    return True
+-- | Creates and returns a renderer that renders a colored, expanded 2d polyline
+-- projected in 2d space.
+colorPolylineRenderer :: Context -> ProjectedPolylineShader -> Float -> Float
+                      -> (LineCap,LineCap) -> [V2 Float] -> [V4 Float]
+                      -> IO GLRenderer
+colorPolylineRenderer win psh thickness feather caps verts colors = do
+  let empty = putStrLn "could not expand polyline" >> return emptyRenderer
+      mpoly = expandPolyline verts colors thickness feather
+  flip (maybe empty) mpoly $
+    polylineRenderer win psh thickness feather caps False
 
-            glBindVertexArray 0
+-- | Creates and returns a renderer that renders a textured, expanded 2d
+-- polyline projected in 2d space.
+texPolylineRenderer :: Context -> ProjectedPolylineShader -> Float
+                    -> Float -> (LineCap,LineCap) -> [V2 Float] -> [V2 Float]
+                    -> IO GLRenderer
+texPolylineRenderer win psh thickness feather caps verts uvs = do
+  let empty = putStrLn "could not expand polyline" >> return emptyRenderer
+      mpoly = expandPolyline verts uvs thickness feather
+  flip (maybe empty) mpoly $
+    polylineRenderer win psh thickness feather caps True
 
-            let num = fromIntegral $ length vs_
-                r t = do let mv = modelviewProjection t
-                         pj <- orthoContextProjection win
-                         updateUniforms [ UniformProjection pj
-                                        , UniformModelView mv
-                                        , UniformThickness thickness
-                                        , UniformFeather feather
-                                        , UniformSumLength totalLen
-                                        , UniformLineCaps caps
-                                        , UniformHasUV hasUV
-                                        , UniformSampler 0
-                                        ] src
-                         drawBuffer (shProgram src) vao GL_TRIANGLE_STRIP num
-                c = do withArray bufs $ glDeleteBuffers 5
-                       withArray [vao] $ glDeleteVertexArrays 1
-            case (hasUV, mtex) of
-                (True, Just tx) -> return (c, bindTexAround tx . r)
-                (True, Nothing) -> do putStrLn "Could not creat a filledPolylineRenderer"
-                                      empty
-                (False,_)       -> return (c,r)
+-- | Creates and returns a renderer that renders a filled, expanded 2d polyline
+-- projected in 2d space.
+--filledPolylineRenderer :: Context -> ProjectedPolylineShader -> Fill -> Float
+--                       -> Float -> (LineCap,LineCap) -> [V2 Float]
+--                       -> IO GLRenderer
+--filledPolylineRenderer win psh fill thickness feather caps verts =
+--  case fill of
+--    FillColor f ->
+--      colorPolylineRenderer win psh thickness feather caps verts $ f verts
+--    FillTexture _ f -> do
+--      texPolylineRenderer win psh thickness feather caps verts $ f verts
 
 -- | Creates and returns a renderer that renders a given string of
 -- triangles with the given filling.
 filledTriangleRenderer :: Context -> GeomShader -> [T.Triangle (V2 Float)]
-                       -> Fill -> IO GLRenderer
+                       -> Fill GLuint -> IO GLRenderer
 filledTriangleRenderer win gsh ts (FillColor f) = do
-    let vs = T.trisToComp ts
-        -- If we can't find a color in the color map we'll just use
-        -- transparent black.
-        cs = map f vs
-    colorRenderer win gsh GL_TRIANGLES vs cs
-filledTriangleRenderer win gsh ts (FillTextureFile fp f) =
-    loadImageAsTexture fp >>= texFilledTriangleRenderer win gsh ts f
-filledTriangleRenderer win gsh ts (FillTexture bstr f) =
-    decodeImageAsTexture bstr >>= texFilledTriangleRenderer win gsh ts f
-
-texFilledTriangleRenderer :: Context -> GeomShader -> [T.Triangle (V2 Float)]
-                       -> (V2 Float -> V2 Float) -> Maybe GLuint -> IO GLRenderer
-texFilledTriangleRenderer win gsh ts f mtex = case mtex of
-    Just tx -> do
-        let vs = T.trisToComp ts
-            -- If we can't find a uv in the uv map we'll just use
-            -- 0,0
-            uvs = map f vs
-        (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
-        let r' t = bindTexAround tx $ r t
-        return (c, r')
-    _ -> do putStrLn "Could not create a filledTriangleRenderer."
-            return (return (), const $ putStrLn "Non op renderer.")
+  let vs = T.trisToComp ts
+      cs = map f vs
+  colorRenderer win gsh GL_TRIANGLES vs cs
+filledTriangleRenderer win gsh ts (FillTexture tx f) = do
+  let vs = T.trisToComp ts
+      uvs = map f vs
+  (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
+  let r' t = bindTexAround tx $ r t
+  return (c, r')
 
 -- | Binds the given texture to the zeroeth texture unit, runs the IO
 -- action and then unbinds the texture.
 bindTexAround :: GLuint -> IO () -> IO ()
 bindTexAround tx f = do
-    glActiveTexture GL_TEXTURE0
-    glBindTexture GL_TEXTURE_2D tx
-    f
-    glBindTexture GL_TEXTURE_2D 0
+  glActiveTexture GL_TEXTURE0
+  glBindTexture GL_TEXTURE_2D tx
+  f
+  glBindTexture GL_TEXTURE_2D 0
 
 --------------------------------------------------------------------------------
 -- Font decomposition into triangles and beziers
@@ -362,7 +398,7 @@ onContourPoints (Bezier _ a _ c :bs) = [a,c] ++ onContourPoints bs
 -- | Creates and returns a renderer that renders some text with a font.
 filledFontRenderer :: Context -> GeomShader -> BezShader
                   -> FontData -> Int -> Float -> String
-                  -> Fill -> IO GLRenderer
+                  -> Fill GLuint -> IO GLRenderer
 filledFontRenderer window gsh brs fd dpi px str fill = do
     let (bs,ts) = fontStringGeom fd dpi px str
     (cg,fg) <- filledTriangleRenderer window gsh ts fill
@@ -377,7 +413,6 @@ colorRenderer :: Context -> GeomShader -> GLuint -> [V2 Float]
               -> [V4 Float] -> IO GLRenderer
 colorRenderer window gsh mode vs gs = do
     let (GRS src) = gsh
-        srcs = [src]
 
     withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
         let ps = map realToFrac $ concatMap F.toList vs :: [GLfloat]
@@ -415,7 +450,6 @@ textureUnitRenderer Nothing w gs md vs uvs =
     textureUnitRenderer (Just 0) w gs md vs uvs
 textureUnitRenderer (Just u) win gsh mode vs uvs = do
     let (GRS src) = gsh
-        srcs = [src]
 
     withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
         let f xs = map realToFrac $ concatMap F.toList xs :: [GLfloat]
@@ -526,28 +560,16 @@ textureBezRenderer = textureBezUnitRenderer Nothing
 
 -- | Creates and returns a renderer that renders a given string of
 -- triangles with the given filling.
-filledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)] -> Fill
-                      -> IO GLRenderer
+filledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)]
+                     -> Fill GLuint -> IO GLRenderer
 filledBezierRenderer win sh bs (FillColor f) = do
     let ts = map (\(Bezier _ a b c) -> f <$> T.Triangle a b c) bs
     colorBezRenderer win sh bs ts
-filledBezierRenderer win sh bs (FillTexture bstr f) =
-    decodeImageAsTexture bstr >>= texFilledBezierRenderer win sh bs f
-filledBezierRenderer win sh bs (FillTextureFile fp f) =
-    loadImageAsTexture fp >>= texFilledBezierRenderer win sh bs f
-
--- | Creates a textured bezier renderer.
-texFilledBezierRenderer :: Context -> BezShader -> [Bezier (V2 Float)]
-                        -> (V2 Float -> V2 Float) -> Maybe GLuint
-                        -> IO GLRenderer
-texFilledBezierRenderer win sh bs f mtex = do
+filledBezierRenderer win sh bs (FillTexture tx f) = do
     let ts = map (\(Bezier _ a b c) -> f <$> T.Triangle a b c) bs
-    case mtex of
-        Just tx -> do (c,r) <- textureBezRenderer win sh bs ts
-                      let r' t = bindTexAround tx $ r t
-                      return (c, r')
-        Nothing -> do putStrLn "Could not create a filledBezRenderer."
-                      return (return (), const $ putStrLn "Non op renderer.")
+    (c,r) <- textureBezRenderer win sh bs ts
+    let r' t = bindTexAround tx $ r t
+    return (c, r')
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.

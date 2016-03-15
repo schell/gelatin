@@ -21,6 +21,8 @@ uniform vec2 cap;
 uniform bool hasUV;
 // Our texture sampler.
 uniform sampler2D sampler;
+// A multiplier color
+uniform vec4 mult;
 
 float capNone   = 0;
 float capButt   = 1;
@@ -72,10 +74,10 @@ void main() {
 
     d -= t;
     if (d < 0.0) {
-        fragColor = color;
+        fragColor = color * mult;
     } else {
         d /= feather;
-        fragColor = vec4(color.rgb, exp(-d*d)*color.a);
+        fragColor = vec4(color.rgb, exp(-d*d)*color.a) * mult;
     }
 }
 

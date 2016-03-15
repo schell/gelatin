@@ -8,6 +8,7 @@ out vec4 fragColor;
 
 uniform bool hasUV;
 uniform sampler2D sampler;
+uniform vec4 mult;
 
 void main() {
     vec2 p = fbez.xy;
@@ -43,5 +44,5 @@ void main() {
     } else {
         color = fcolor;
     }
-    fragColor = vec4(color.rgb, color.a * a);
+    fragColor = vec4(color.rgb, color.a * a) * mult;
 }

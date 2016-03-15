@@ -107,6 +107,7 @@ loadProjectedPolylineShader = do
                                                ,UniformLineCaps nocaps
                                                ,UniformSampler 0
                                                ,UniformHasUV False
+                                               ,UniformMultiplierColor 0
                                                ]
         attribs = [PositionLoc,ColorLoc,BezUVLoc,NextLoc,PrevLoc,UVLoc]
         def = ShaderDefBS[(vertSourceProjPoly, GL_VERTEX_SHADER)
@@ -121,6 +122,7 @@ loadGeomShader = do
                                                ,UniformModelView 0
                                                ,UniformSampler 0
                                                ,UniformHasUV False
+                                               ,UniformMultiplierColor 0
                                                ]
         attribs = [PositionLoc,ColorLoc,UVLoc]
         def = ShaderDefBS [(vertSourceGeom, GL_VERTEX_SHADER)
@@ -135,6 +137,7 @@ loadBezShader = do
                                                ,UniformModelView 0
                                                ,UniformSampler 0
                                                ,UniformHasUV False
+                                               ,UniformMultiplierColor 0
                                                ]
         attribs = [PositionLoc,ColorLoc,UVLoc,BezLoc]
         def = ShaderDefBS [(vertSourceBezier, GL_VERTEX_SHADER)
@@ -149,6 +152,7 @@ loadMaskShader = do
                                                ,UniformModelView 0
                                                ,UniformMainTex 0
                                                ,UniformMaskTex 0
+                                               ,UniformMultiplierColor 0
                                                ]
         attribs = [PositionLoc,UVLoc]
         def = ShaderDefBS [(vertSourceMask, GL_VERTEX_SHADER)
@@ -167,7 +171,9 @@ loadShader (ShaderDefBS ss uniforms attribs) = do
         then do P.putStrLn $ "Warning! Could not find the uniform " ++ show u
                 return Nothing
         else return $ Just (u, loc)
-    return $ Shader program (catMaybes ulocs)
+    let sh = Shader program (catMaybes ulocs)
+    updateUniform (UniformMultiplierColor 1) sh
+    return sh
 loadShader (ShaderDefFP fps uniforms attribs) = do
     cwd <- getCurrentDirectory
     srcs <- forM fps $ \(fp, shaderType) -> do
@@ -187,6 +193,7 @@ data Uniform = UniformProjection (M44 Float)
              | UniformSampler Int
              | UniformMainTex Int
              | UniformMaskTex Int
+             | UniformMultiplierColor (V4 Float)
              deriving (Show, Ord, Eq)
 
 glslUniformIdentifier :: Uniform -> String
@@ -200,6 +207,7 @@ glslUniformIdentifier (UniformHasUV _)      = "hasUV"
 glslUniformIdentifier (UniformSampler _)    = "sampler"
 glslUniformIdentifier (UniformMainTex _)    = "mainTex"
 glslUniformIdentifier (UniformMaskTex _)    = "maskTex"
+glslUniformIdentifier (UniformMultiplierColor _)    = "mult"
 
 updateUniforms :: [Uniform] -> Shader -> IO ()
 updateUniforms us s = mapM_ (`updateUniform` s) us
@@ -223,6 +231,8 @@ uniformUpdateFunc (UniformHasUV has) u = glUniform1i u $ if has then 1 else 0
 uniformUpdateFunc (UniformSampler s) u = glUniform1i u $ fromIntegral s
 uniformUpdateFunc (UniformMainTex t) u = glUniform1i u $ fromIntegral t
 uniformUpdateFunc (UniformMaskTex t) u = glUniform1i u $ fromIntegral t
+uniformUpdateFunc (UniformMultiplierColor c) u =
+  with c $ glUniform4fv u 1 . castPtr
 
 withUniform :: String -> Shader -> (GLuint -> GLint -> IO ()) -> IO ()
 withUniform name (Shader p ls) f =

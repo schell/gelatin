@@ -5,12 +5,13 @@ out vec4 fragColor;
 
 uniform bool hasUV;
 uniform sampler2D sampler;
+uniform vec4 mult;
 
 
 void main() {
     if (hasUV) {
-        fragColor = texture(sampler, fuv.st);
+        fragColor = texture(sampler, fuv.st) * mult;
     } else {
-        fragColor = fcolor;
+        fragColor = fcolor * mult;
     }
 }

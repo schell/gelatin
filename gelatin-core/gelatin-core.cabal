@@ -20,7 +20,6 @@ library
                        Gelatin.Core.Color,
                        Gelatin.Core.Fill,
                        Gelatin.Core.Font,
-                       Gelatin.Core.Geometry,
                        Gelatin.Core.Line,
                        Gelatin.Core.Path,
                        Gelatin.Core.Primitives,
