@@ -13,23 +13,20 @@ maintainer:          schell.scivally@synapsegroup.com
 category:            Graphics
 build-type:          Simple
 cabal-version:       >=1.10
-extra-doc-files:     docimages/*.png
-extra-source-files:    shaders/2d.frag,
-                       shaders/2d.vert,
-                       shaders/bezier.frag,
-                       shaders/bezier.vert,
-                       shaders/mask.frag,
-                       shaders/mask.vert,
-                       docimages/*.png
+data-files:          shaders/*.frag, 
+                     shaders/*.vert
 
 library
+  ghc-options:         -Wall
   exposed-modules:     Gelatin.GL,
                        Gelatin.GL.Renderer,
                        Gelatin.GL.Shader,
-                       Gelatin.GL.Common
+                       Gelatin.GL.Common,
+                       Paths_gelatin_gl
   build-depends:       base            >= 4.8     && < 4.9,
                        bytestring,
                        gelatin-picture >= 0.0.0.1,
+                       gelatin-core    >= 0.0.0.1,
                        linear          >= 1.20    && < 1.21,
                        gl              >= 0.7     && < 0.8,
                        FontyFruity     >= 0.5     && < 0.6,
@@ -37,9 +34,12 @@ library
                        bytestring      >= 0.10    && < 0.11,
                        vector          >= 0.11    && < 0.12,
                        directory       >= 1.2     && < 1.3,
-                       file-embed      >= 0.0.8.2,
+                       filepath        >= 1.4     && < 1.5,
                        renderable      >= 0.2,
-                       hashable        >= 1.2     && < 1.3
+                       hashable        >= 1.2     && < 1.3,
+                       transformers    >= 0.4     && < 0.5,
+                       free            >= 4.12    && < 4.13,
+                       containers      >= 0.5     && < 0.6
   hs-source-dirs:      src
   default-language:    Haskell2010
 

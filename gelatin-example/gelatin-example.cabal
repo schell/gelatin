@@ -10,12 +10,13 @@ maintainer:          schell@synapsegroup.com
 copyright:           2016 Schell Scivally
 category:            Graphics
 build-type:          Simple
--- extra-source-files:
+data-files:          assets/*.jpg, assets/*.ttf, assets/*.txt
 cabal-version:       >=1.10
 
 executable gelatin-example
   hs-source-dirs:      src
   main-is:             Main.hs
+  other-modules:       Paths_gelatin_example
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , gelatin-core
@@ -31,7 +32,7 @@ executable gelatin-example
                      , linear
                      , hashable
                      , bytestring
-                     , file-embed
+                     , vector
   default-language:    Haskell2010
 
 source-repository head

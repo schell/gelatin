@@ -1,38 +1,35 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Gelatin.Core.Stroke where
 
-import Gelatin.Core.Fill
 import Gelatin.Core.Line
-import Gelatin.Core.Color
 import Data.Hashable
-import Linear
+import Data.Maybe (fromMaybe)
+import GHC.Generics
 
-data Stroke = Stroke { strokeFill     :: Fill 
-                     , strokeWidth    :: Float
+data Stroke = Stroke { strokeWidth    :: Float
                      , strokeFeather  :: Float
                      , strokeLineCaps :: (LineCap,LineCap)
-                     } deriving (Show)
+                     } deriving (Show, Generic)
 
-data StrokeHash = StrokeHash Stroke [V2 Float]
+instance Hashable Stroke
 
-instance Hashable StrokeHash where
-    hashWithSalt s (StrokeHash (Stroke fill w f cs) vs) =
-        s `hashWithSalt` FillHash fill vs `hashWithSalt` 
-            w `hashWithSalt` f `hashWithSalt` cs 
-
-data StrokeAttr = StrokeNone 
-                | StrokeFill Fill
+data StrokeAttr = StrokeNone
                 | StrokeWidth Float
                 | StrokeFeather Float
                 | StrokeCaps (LineCap,LineCap)
-                deriving (Show)
+                deriving (Show, Generic)
+
+instance Hashable StrokeAttr
 
 emptyStroke :: Stroke
-emptyStroke = Stroke (solid 0) 2 1 (LineCapRound,LineCapRound)
+emptyStroke = Stroke 2 1 (LineCapRound,LineCapRound)
 
 strokeAttr :: Maybe Stroke -> StrokeAttr -> Maybe Stroke
 strokeAttr _ StrokeNone = Nothing
 strokeAttr Nothing c = strokeAttr (Just emptyStroke) c
-strokeAttr (Just s) (StrokeFill f) = Just $ s {strokeFill = f}
 strokeAttr (Just s) (StrokeWidth w) = Just $ s {strokeWidth = w}
 strokeAttr (Just s) (StrokeFeather t) = Just $ s {strokeFeather = t}
 strokeAttr (Just s) (StrokeCaps cs) = Just $ s {strokeLineCaps = cs}
+
+strokeWith :: [StrokeAttr] -> Stroke
+strokeWith atts = fromMaybe emptyStroke $ foldl strokeAttr Nothing atts
