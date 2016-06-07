@@ -7,7 +7,6 @@ import           Gelatin.GL.Shader
 import           Data.Renderable
 import           Data.Hashable
 import qualified Data.Vector as B
-import qualified Data.Vector.Unboxed as V
 import           Data.Vector.Unboxed (Vector, Unbox)
 import           GHC.Generics
 import           Linear

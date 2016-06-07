@@ -44,13 +44,13 @@ picture fd tex = do
                                                   (V2 400 200, blue)
 
   move (V2 0 300) $ draw $ letters $
-    stroked (Name 0) [StrokeWidth 3, StrokeFeather 1] fd 128 64 "Hi there." $
+    stroked [StrokeWidth 3, StrokeFeather 1] fd 128 64 "Hi there." (Uid 0) $
       const white
   move (V2 0 364) $ draw $ letters $
-    filled (Name 0) fd 128 64 "Hey there!" $
-      FillTexture tex $ \(V2 x y) -> V2 (x/100) (y/64)
+    filled fd 128 64 "Hey there!" $
+      FillTexture (Uid 0) tex $ \(V2 x y) -> V2 (x/100) (y/64)
   move (V2 0 428) $ draw $ letters $
-    filled (Name 0) fd 128 64 "o/ Hi all." $
+    filled fd 128 64 "o/ Hi all." $
       solid grey
 
   let (bs,ts) = fontStringGeom fd 72 64 "FontData"

@@ -48,7 +48,7 @@ import Linear hiding (rotate, trace)
 compileLettering :: Lettering a () -> B.Vector (CompiledPicture a)
 compileLettering = compile . freeL
   where compile (Pure ()) = B.empty
-        compile (Free (Stroked _ s fd dpi px str f n)) =
+        compile (Free (Stroked s fd dpi px str _ f n)) =
           case stringCurvesToPaths fd dpi px str of
             [] -> compile n
             cs -> let prims = compilePrims $ line $ path cs
@@ -62,11 +62,11 @@ compileLettering = compile . freeL
                                        path pps
                       stk = strokeWith s
                     in CompiledLine SOpNone stk prims `B.cons` compile n
-        compile (Free (Filled _ fd dpi px str (FillColor f) n)) =
+        compile (Free (Filled fd dpi px str (FillColor _ f) n)) =
           let (bs,ts) = letteringToGeom fd dpi px str f
           in CompiledColor SOpStencilMask (compilePrims ts) `B.cons`
              (CompiledColor SOpNone (compilePrims bs) `B.cons` compile n)
-        compile (Free (Filled _ fd dpi px str (FillTexture tx f) n)) =
+        compile (Free (Filled fd dpi px str (FillTexture _ tx f) n)) =
           let (bs,ts) = letteringToGeom fd dpi px str f
           in CompiledTex SOpStencilMask (compilePrims ts) tx `B.cons`
              (CompiledTex SOpNone (compilePrims bs) tx `B.cons` compile n)

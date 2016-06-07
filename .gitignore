@@ -8,3 +8,5 @@ cabal.config
 */.stack-work/
 .stack-work/
 *.sw[a-z]
+*.hp
+*.prof

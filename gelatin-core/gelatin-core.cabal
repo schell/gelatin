@@ -19,6 +19,7 @@ library
                        Gelatin.Core.Bezier,
                        Gelatin.Core.Bounds,
                        Gelatin.Core.Color,
+                       Gelatin.Core.Common,
                        Gelatin.Core.Fill,
                        Gelatin.Core.Font,
                        Gelatin.Core.Line,

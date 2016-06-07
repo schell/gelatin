@@ -36,7 +36,6 @@ module Gelatin.Picture (
   -- * Lettering
   stroked,
   filled,
-  Name(..),
   Lettering,
   LetteringCmd(..),
   letterBounds,
@@ -84,11 +83,11 @@ import           Control.Monad.Free
 import           Control.Monad.Free.Church
 import           Gelatin.Core.Bounds
 import           Gelatin.Core.Bezier
+import           Gelatin.Core.Common
 import           Gelatin.Core.Stroke
 import           Gelatin.Core.Font
 import           Gelatin.Core.Fill
 import           Gelatin.Core.Transform
-import           Gelatin.Core.Triangle
 import           Linear hiding (rotate, trace)
 import           Data.Hashable
 import qualified Data.Vector as B
@@ -242,13 +241,10 @@ instance (Hashable (f Float), Unbox (f Float), Additive f)
 --------------------------------------------------------------------------------
 -- Defining Lettering
 --------------------------------------------------------------------------------
-newtype Name = Name { unName :: Int }
-             deriving (Show, Eq, Ord)
-
 data LetteringCmd a n where
-  Stroked :: Name -> [StrokeAttr] -> FontData -> Int -> Float -> String
-          -> (V2 Float -> V4 Float) -> n -> LetteringCmd a n
-  Filled  :: Name -> FontData -> Int -> Float -> String -> Fill a -> n
+  Stroked :: [StrokeAttr] -> FontData -> Int -> Float -> String
+          -> Uid -> (V2 Float -> V4 Float) -> n -> LetteringCmd a n
+  Filled  :: FontData -> Int -> Float -> String -> Fill a -> n
           -> LetteringCmd a n
   deriving (Functor)
 
@@ -257,12 +253,12 @@ type Lettering a = F (LetteringCmd a)
 freeL :: Lettering a () -> Free (LetteringCmd a) ()
 freeL = fromF
 
-stroked :: Name -> [StrokeAttr] -> FontData -> Int -> Float -> String
-        -> (V2 Float -> V4 Float) -> Lettering a ()
-stroked n ats fd dpi px str f = liftF $ Stroked n ats fd dpi px str f ()
+stroked :: [StrokeAttr] -> FontData -> Int -> Float -> String
+        -> Uid -> (V2 Float -> V4 Float) -> Lettering a ()
+stroked ats fd dpi px str uid f = liftF $ Stroked ats fd dpi px str uid f ()
 
-filled :: Name -> FontData -> Int -> Float -> String -> Fill a -> Lettering a ()
-filled n fd dpi px str f = liftF $ Filled n fd dpi px str f ()
+filled :: FontData -> Int -> Float -> String -> Fill a -> Lettering a ()
+filled fd dpi px str f = liftF $ Filled fd dpi px str f ()
 
 -- | A convenience function for turning lettering into a tuple of a list of
 -- inner or outer beziers and a list of triangle fans. The triangles should be
@@ -285,9 +281,9 @@ letteringToGeom fd dpi px str f =
 letterBounds :: Lettering a () -> (V2 Float, V2 Float)
 letterBounds = boundsBounds . bounds . freeL
   where bounds (Pure ()) = V.singleton (0,0)
-        bounds (Free (Stroked _ _ fd dpi px str _ n)) =
+        bounds (Free (Stroked _ fd dpi px str _ _ n)) =
           calc fd dpi px str `V.cons` bounds n
-        bounds (Free (Filled _ fd dpi px str _ n)) =
+        bounds (Free (Filled fd dpi px str _ n)) =
           calc fd dpi px str `V.cons` bounds n
         calc fd dpi px str =
           let (tl, br) = polyBounds $ V.concat $ snd $
@@ -298,19 +294,16 @@ letterBounds = boundsBounds . bounds . freeL
 instance Hashable a => Hashable (Lettering a ()) where
   hashWithSalt s0 = hashup s0 . fromF
     where hashup s (Pure ()) = s
-          hashup s (Free (Stroked nm st fd dpi px str _ n)) =
-            let s1 = s `hashWithSalt` unName nm `hashWithSalt` st
+          hashup s (Free (Stroked st fd dpi px str uid _ n)) =
+            let s1 = s `hashWithSalt` uid `hashWithSalt` st
                 s2 = fontHash fd s1
                 s3 = s2 `hashWithSalt` dpi `hashWithSalt` px `hashWithSalt` str
             in s3 `hashup` n
-          hashup s (Free (Filled nm fd dpi px str f n)) =
-            let s1 = s `hashWithSalt` unName nm
-                s2 = fontHash fd s1
-                s3 = s2 `hashWithSalt` dpi `hashWithSalt` px `hashWithSalt` str
-                s4 = case f of
-                       FillColor _ -> s3
-                       FillTexture t _ -> s3 `hashWithSalt` t
-                in s4 `hashup` n
+          hashup s (Free (Filled fd dpi px str f n)) =
+            let s1 = fontHash fd s
+                s2 = s1 `hashWithSalt` dpi `hashWithSalt` px `hashWithSalt` str
+                s3 = s2 `hashWithSalt` f
+                in s3 `hashup` n
 --------------------------------------------------------------------------------
 -- Defining drawings
 --------------------------------------------------------------------------------

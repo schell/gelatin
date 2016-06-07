@@ -45,7 +45,6 @@ import Graphics.GL.Types
 import Gelatin.Core
 import Control.Monad
 import System.Exit
-import System.Directory
 import System.FilePath
 import Foreign.Ptr
 import Foreign.C.String

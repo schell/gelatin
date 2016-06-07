@@ -5,6 +5,7 @@ module Gelatin.Core (
 import Gelatin.Core.Bezier as C
 import Gelatin.Core.Bounds as C
 import Gelatin.Core.Color as C
+import Gelatin.Core.Common as C
 import Gelatin.Core.Fill as C
 import Gelatin.Core.Font as C
 import Gelatin.Core.Line as C

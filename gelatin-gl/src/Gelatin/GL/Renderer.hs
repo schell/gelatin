@@ -81,7 +81,6 @@ import           System.Exit
 import qualified Data.Foldable as F
 import           GHC.Stack
 import           GHC.Generics
-import Debug.Trace
 import           Linear hiding (trace)
 
 --------------------------------------------------------------------------------
@@ -369,11 +368,11 @@ texPolylineRenderer win psh thickness feather caps verts uvs = do
 -- triangles with the given filling.
 filledTriangleRenderer :: Context -> SumShader -> Vector (Triangle (V2 Float))
                        -> Fill GLuint -> IO GLRenderer
-filledTriangleRenderer win gsh ts (FillColor f) = do
+filledTriangleRenderer win gsh ts (FillColor _ f) = do
   let vs = trisToComp ts
       cs = V.map f vs
   colorRenderer win gsh GL_TRIANGLES vs cs
-filledTriangleRenderer win gsh ts (FillTexture tx f) = do
+filledTriangleRenderer win gsh ts (FillTexture _ tx f) = do
   let vs = trisToComp ts
       uvs = V.map f vs
   (c, r) <- textureRenderer win gsh GL_TRIANGLES vs uvs
@@ -494,12 +493,12 @@ filledFontRenderer :: Context -> SumShader
 filledFontRenderer window sh fd dpi px str fill = do
     let (bs,ts) = fontStringGeom fd dpi px str
     (cg,fg) <- case fill of
-                 (FillColor f) -> do
+                 (FillColor _ f) -> do
                    rs <- forM ts $ \vs ->
                      let cs = V.map f vs
                      in colorRenderer window sh GL_TRIANGLE_FAN vs cs
                    return $ foldl' appendRenderer emptyRenderer rs
-                 (FillTexture tx f) -> do
+                 (FillTexture _ tx f) -> do
                    rs <- forM ts $ \vs ->
                      let uvs = V.map f vs
                      in textureRenderer window sh GL_TRIANGLE_FAN vs uvs
@@ -653,10 +652,10 @@ textureBezRenderer = textureBezUnitRenderer Nothing
 -- triangles with the given filling.
 filledBezierRenderer :: Context -> SumShader -> Vector (Bezier (V2 Float))
                      -> Fill GLuint -> IO GLRenderer
-filledBezierRenderer win sh bs (FillColor f) = do
+filledBezierRenderer win sh bs (FillColor _ f) = do
     let ts = V.map (\(_,a,b,c) -> fmapTriangle f (a,b,c)) bs
     colorBezRenderer win sh bs ts
-filledBezierRenderer win sh bs (FillTexture tx f) = do
+filledBezierRenderer win sh bs (FillTexture _ tx f) = do
     let ts = V.map (\(_,a,b,c) -> fmapTriangle f (a,b,c)) bs
     (c,r) <- textureBezRenderer win sh bs ts
     let r' t = bindTexAround tx $ r t
