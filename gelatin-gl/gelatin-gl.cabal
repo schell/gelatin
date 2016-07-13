@@ -13,7 +13,7 @@ maintainer:          schell.scivally@synapsegroup.com
 category:            Graphics
 build-type:          Simple
 cabal-version:       >=1.10
-data-files:          shaders/*.frag, 
+data-files:          shaders/*.frag,
                      shaders/*.vert
 
 library
@@ -23,7 +23,7 @@ library
                        Gelatin.GL.Shader,
                        Gelatin.GL.Common,
                        Paths_gelatin_gl
-  build-depends:       base            >= 4.8     && < 4.9,
+  build-depends:       base            >= 4.6     && < 4.9,
                        bytestring,
                        gelatin-picture >= 0.0.0.1,
                        gelatin-core    >= 0.0.0.1,

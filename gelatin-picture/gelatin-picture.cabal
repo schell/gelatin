@@ -26,7 +26,7 @@ library
                        FlexibleInstances,
                        MultiParamTypeClasses,
                        TupleSections
-  build-depends:       base         >=4.8     && <4.9,
+  build-depends:       base         >=4.6     && <4.9,
                        free         >=4.12    && <4.13,
                        mtl          >=2.2     && <2.3,
                        gelatin-core >= 0.0.0.1,

@@ -30,7 +30,7 @@ library
                        Gelatin.Core.Triangle,
                        Gelatin.Core
   other-extensions:    MultiParamTypeClasses, FlexibleInstances
-  build-depends:       base       >=4.8 && <4.9,
+  build-depends:       base       >=4.6 && <4.9,
                        bytestring,
                        linear     >= 1.20 && < 1.21,
                        hashable   >= 1.2 && < 1.3,

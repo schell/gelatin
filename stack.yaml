@@ -8,7 +8,7 @@ packages:
 - 'gelatin-core'
 - 'gelatin-picture'
 - 'gelatin-gl'
-- 'gelatin-glfw'
+  #- 'gelatin-glfw'
 - 'gelatin-sdl2'
 - 'gelatin-example'
 - location:
@@ -19,7 +19,7 @@ packages:
     commit: 99c143ebb569c286aa5252587923f8c34423e969
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
-extra-deps: 
+extra-deps:
 - renderable-0.2.0.0
 
 # Override default flag values for local packages and extra-deps
