@@ -27,8 +27,7 @@ picture fd tex = do
     move 150 $ withMult blue  example
 
     draw $ do
-      colored $ triList [((V2 200 200, red), (V2 220 200, green), (V2 220 240, blue))
-                        ]
+      colored $ triList [((V2 200 200, red), (V2 220 200, green), (V2 220 240, blue))]
 
       polylines [ StrokeWidth 8
                 , StrokeFeather 1
@@ -52,13 +51,6 @@ picture fd tex = do
   move (V2 0 428) $ draw $ letters $
     filled fd 128 64 "o/ Hi all." $
       solid grey
-
-  let (bs,ts) = fontStringGeom fd 72 64 "FontData"
-      colorBez :: V4 Float -> (Bezier (V2 Float) -> Triangle Color2d)
-      colorBez clr (_,a,b,c) = ((a, clr), (b, clr), (c, clr))
-      beziers = V.map (colorBez $ red `alpha` 0.4) bs
-  move (V2 0 500) $ draw $
-    colored $ bezs beziers
 
 isQuit :: Event -> Bool
 isQuit (Event _ payload) = isKeyQ payload || payload == QuitEvent

@@ -10,12 +10,19 @@ import           Data.Vector.Unboxed (Vector)
 
 type BBox = (V2 Float, V2 Float)
 
-polyBounds :: Vector (V2 Float) -> (V2 Float, V2 Float)
-polyBounds = V.foldl' f (0,0)
+polyBounds :: Vector (V2 Float) -> BBox
+polyBounds = V.foldl' f (br,tl)
   where f :: (V2 Float, V2 Float) -> (V2 Float) -> (V2 Float, V2 Float)
         f (V2 nx ny, V2 xx xy) (V2 x y) = ( V2 (min nx x) (min ny y)
                                           , V2 (max xx x) (max xy y)
                                           )
+        inf = 1/0
+        ninf = (-1)/0
+        tl = V2 ninf ninf
+        br = V2 inf inf
+
+pointsBounds :: [V2 Float] -> BBox
+pointsBounds = polyBounds . V.fromList
 
 boundsBounds :: Vector BBox -> BBox
 boundsBounds bs = polyBounds $
