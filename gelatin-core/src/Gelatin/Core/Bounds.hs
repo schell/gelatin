@@ -11,7 +11,9 @@ import           Data.Vector.Unboxed (Vector)
 type BBox = (V2 Float, V2 Float)
 
 polyBounds :: Vector (V2 Float) -> BBox
-polyBounds = V.foldl' f (br,tl)
+polyBounds vs
+  | V.null vs = (0,0)
+  | otherwise = V.foldl' f (br,tl) vs
   where f :: (V2 Float, V2 Float) -> (V2 Float) -> (V2 Float, V2 Float)
         f (V2 nx ny, V2 xx xy) (V2 x y) = ( V2 (min nx x) (min ny y)
                                           , V2 (max xx x) (max xy y)
@@ -36,3 +38,7 @@ instance Transformable Transform (V2 Float, V2 Float) where
 pointInBounds :: V2 Float -> BBox -> Bool
 pointInBounds (V2 px py) (V2 minx miny, V2 maxx maxy) =
   (px >= minx && px <= maxx) && (py >= miny && py <= maxy)
+
+applyTfrmToBounds :: Transform -> BBox -> BBox
+applyTfrmToBounds t (tl,br) = pointsBounds [transformV2 t tl, transformV2 t br]
+

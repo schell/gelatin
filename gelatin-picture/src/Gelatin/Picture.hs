@@ -25,6 +25,7 @@ module Gelatin.Picture (
   withAlpha,
   withMult,
   PictureTransform(..),
+  applyPicTfrmToBounds,
   -- * Creating drawings within pictures
   colored,
   textured,
@@ -366,6 +367,9 @@ instance Monoid PictureTransform where
   mempty = PictureTransform mempty 1 1
   mappend (PictureTransform at aa am) (PictureTransform bt ba bm) =
     PictureTransform (at `mappend` bt) (aa * ba) (am * bm)
+
+applyPicTfrmToBounds :: PictureTransform -> BBox -> BBox
+applyPicTfrmToBounds (PictureTransform tfrm _ _) = applyTfrmToBounds tfrm
 --------------------------------------------------------------------------------
 -- Defining whole pictures
 --------------------------------------------------------------------------------

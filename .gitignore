@@ -10,3 +10,5 @@ cabal.config
 *.sw[a-z]
 *.hp
 *.prof
+*.tags
+*.out

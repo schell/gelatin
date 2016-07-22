@@ -1,26 +1,21 @@
 # For more information, see: http://docs.haskellstack.org/en/stable/yaml_configuration.html
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: lts-5.2
+resolver: nightly-2016-07-14
 
 # Local packages, usually specified by relative directory name
 packages:
 - 'gelatin-core'
 - 'gelatin-picture'
 - 'gelatin-gl'
-  #- 'gelatin-glfw'
 - 'gelatin-sdl2'
 - 'gelatin-example'
-- location:
-    git: https://github.com/schell/sdl2.git
-    commit: b3e8c9cb707ca45cf443b5103c5fd6dff1bb1fd3
-- location:
-    git: https://github.com/schell/FontyFruity
-    commit: 99c143ebb569c286aa5252587923f8c34423e969
+- '../renderable'
+- '../sdl2'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
-- renderable-0.2.0.0
+- FontyFruity-0.5.3.2
 
 # Override default flag values for local packages and extra-deps
 flags: {}

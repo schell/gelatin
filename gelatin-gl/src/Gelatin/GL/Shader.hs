@@ -184,12 +184,14 @@ uniformsForTris pj mv hasUV a m = P.map f allUniforms
         f (UniformAlpha _) = UniformAlpha a
         f (UniformMult _) = UniformMult m
         f x = x
+{-# INLINE uniformsForTris #-}
 
 uniformsForBezs :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float
                 -> [Uniform]
 uniformsForBezs pj mv hasUV a m = P.map f $ uniformsForTris pj mv hasUV a m
   where f (UniformPrimType _) = UniformPrimType PrimBez
         f x = x
+{-# INLINE uniformsForBezs #-}
 
 uniformsForLines :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float
                  -> Float -> Float -> Float -> (LineCap,LineCap) -> [Uniform]
@@ -201,6 +203,7 @@ uniformsForLines pj mv hasUV a m thickness feather sumlength caps =
           f (UniformSumLength _) = UniformSumLength sumlength
           f (UniformLineCaps _) = UniformLineCaps caps
           f x = x
+{-# INLINE uniformsForLines #-}
 
 uniformsForMask :: M44 Float -> M44 Float -> Float -> V4 Float -> GLuint -> GLuint
                 -> [Uniform]
@@ -209,18 +212,21 @@ uniformsForMask pj mv a m main mask = P.map f $ uniformsForTris pj mv True a m
         f (UniformMainTex _) = UniformMainTex main
         f (UniformMaskTex _) = UniformMaskTex mask
         f x = x
+{-# INLINE uniformsForMask #-}
 
 -- | Updates uniforms for rendering triangles.
 updateUniformsForTris :: Shader -> M44 Float -> M44 Float -> Bool -> Float
                       -> V4 Float -> IO ()
 updateUniformsForTris sh pj mv hasUV a m =
   updateUniforms (uniformsForTris pj mv hasUV a m) sh
+{-# INLINE updateUniformsForTris #-}
 
 -- | Updates uniforms for rendering loop-blinn beziers.
 updateUniformsForBezs :: Shader -> M44 Float -> M44 Float -> Bool -> Float
                       -> V4 Float -> IO ()
 updateUniformsForBezs sh pj mv hasUV a m =
   updateUniforms (uniformsForBezs pj mv hasUV a m) sh
+{-# INLINE updateUniformsForBezs #-}
 
 -- | Updates uniforms for rendering projected polylines.
 updateUniformsForLines :: Shader -> M44 Float -> M44 Float -> Bool -> Float
@@ -229,20 +235,24 @@ updateUniformsForLines :: Shader -> M44 Float -> M44 Float -> Bool -> Float
 updateUniformsForLines sh pj mv hasUV a m thickness feather sumlength caps =
   let us = uniformsForLines pj mv hasUV a m thickness feather sumlength caps
   in updateUniforms us sh
+{-# INLINE updateUniformsForLines #-}
 
 -- | Updates uniforms for rendering alpha masking.
 updateUniformsForMask :: Shader -> M44 Float -> M44 Float -> Float -> V4 Float
                       -> GLuint -> GLuint -> IO ()
 updateUniformsForMask sh pj mv a m main mask =
   updateUniforms (uniformsForMask pj mv a m main mask) sh
+{-# INLINE updateUniformsForMask #-}
 
 updateUniforms :: [Uniform] -> Shader -> IO ()
 updateUniforms us s = mapM_ (`updateUniform` s) us
+{-# INLINE updateUniforms #-}
 
 updateUniform :: Uniform -> Shader -> IO ()
 updateUniform u s = withUniform (glslUniformIdentifier u) s $ \p loc -> do
     glUseProgram p
     uniformUpdateFunc u loc
+{-# INLINE updateUniform #-}
 
 uniformUpdateFunc :: Uniform -> GLint -> IO ()
 uniformUpdateFunc (UniformPrimType p) u =
@@ -263,6 +273,7 @@ uniformUpdateFunc (UniformMaskTex t) u = glUniform1i u $ fromIntegral t
 uniformUpdateFunc (UniformAlpha a) u = glUniform1f u $ realToFrac a
 uniformUpdateFunc (UniformMult v) u =
   let (V4 r g b a) = realToFrac <$> v in glUniform4f u r g b a
+{-# INLINE uniformUpdateFunc #-}
 
 withUniform :: String -> Shader -> (GLuint -> GLint -> IO ()) -> IO ()
 withUniform name (Shader p ls) f =
@@ -270,6 +281,7 @@ withUniform name (Shader p ls) f =
         Nothing  -> do P.putStrLn $ "could not find uniform " ++ name
                        exitFailure
         Just loc -> f p loc
+{-# INLINE withUniform #-}
 --------------------------------------------------------------------------------
 -- $layout
 -- Attributes layout locations are unique and global.
