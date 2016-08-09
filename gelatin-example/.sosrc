@@ -1,11 +1,10 @@
 - patterns:
   - ([^\/]*)\/(.*\.hs)$
   commands:
-  - stack build
+  - stack build --trace --fast --ghc-options="-fprof-cafs -fprof-auto"
   - stack exec hlint \0
-  - stack exec gelatin-example
+  - stack exec gelatin-example -- +RTS -p -hy -sstderr
 - patterns:
   - ([^\/]*)\/(.*\.cabal)$
   commands:
-  - stack build
   - stack exec hlint \0

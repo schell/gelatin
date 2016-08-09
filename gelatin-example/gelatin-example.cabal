@@ -19,17 +19,17 @@ executable gelatin-example
   other-modules:       Paths_gelatin_example
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
-                     , gelatin-core
-                     , gelatin-picture
-                     , gelatin-gl
+                     , gelatin
                      , gelatin-sdl2
+                     , gelatin-fruity
                      , sdl2
-                     , renderable
+                     , halive
                      , FontyFruity
                      , filepath
                      , directory
                      , text
                      , linear
+                     , lens
                      , hashable
                      , bytestring
                      , vector

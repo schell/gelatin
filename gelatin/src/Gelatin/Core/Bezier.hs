@@ -15,6 +15,7 @@ module Gelatin.Core.Bezier (
     fmapBezier,
     fmapQuadraticBezier,
     fmapCubicBezier,
+    triangleArea,
     -- * Conversion
     bezToPath,
     bezToBez3,
@@ -34,9 +35,12 @@ module Gelatin.Core.Bezier (
     subdivideAdaptive4,
     cleanSeqDupes,
     -- * Shapes
-    arc,
-    ellipse,
-    corner
+    arcBez4,
+    arcBez3,
+    ellipseBez4,
+    ellipseBez3,
+    cornerBez4,
+    cornerBez3
 ) where
 
 import           Gelatin.Core.Transform
@@ -74,8 +78,10 @@ instance Transformable Transform a => Transformable Transform (CubicBezier a) wh
 -- bezier's three points will be used to determine the orientation.
 bezier :: (Ord a, Fractional a) => V2 a -> V2 a -> V2 a -> Bezier (V2 a)
 bezier a b c = (triangleArea a b c > 0, a, b, c)
-    where triangleArea (V2 x2 y2) (V2 x0 y0) (V2 x1 y1) =
-            (x1-x0)*(y2-y0)-(x2-x0)*(y1-y0)
+
+triangleArea :: Num a => V2 a -> V2 a -> V2 a -> a
+triangleArea (V2 x2 y2) (V2 x0 y0) (V2 x1 y1) =
+        (x1-x0)*(y2-y0)-(x2-x0)*(y1-y0)
 
 bezToPath :: (RealFloat a, Unbox a) => Bezier (V2 a) -> Path (V2 a)
 bezToPath = Path . subdivideAdaptive 100 0 . bezToBez3
@@ -207,11 +213,15 @@ subdivideAdaptive4 s a = cleanSeqDupes . V.concatMap (subdivideAdaptive s a) . d
 
 -- | Removes sequential duplicates from a vector.
 cleanSeqDupes :: (Eq a, Unbox a) => Vector a -> Vector a
-cleanSeqDupes = snd . V.foldl' f (Nothing, V.empty)
-  where f (Nothing,vs) b = (Just b, vs `V.snoc` b)
-        f (Just a, vs) b = if a == b
-                             then (Just a, vs)
-                             else (Just b, vs `V.snoc` b)
+cleanSeqDupes vs
+  | V.length vs > 1 = vs1 `V.snoc` V.last vs
+  | otherwise = vs
+  where vs1 = V.map fst $ V.filter (uncurry (/=)) $ V.zip vs (V.drop 1 vs)
+--cleanSeqDupes = snd . V.foldl' f (Nothing, V.empty)
+--  where f (Nothing,vs) b = (Just b, vs `V.snoc` b)
+--        f (Just a, vs) b = if a == b
+--                             then (Just a, vs)
+--                             else (Just b, vs `V.snoc` b)
 
 subdivide :: (RealFloat a, Unbox a)
           => a -> a -> Int -> V2 a -> V2 a -> V2 a -> Vector (V2 a)
@@ -271,10 +281,14 @@ subdivide mDistanceToleranceSquare mAngleTolerance level
 kappa :: Fractional a => a
 kappa = 0.5522847498307936
 
-corner :: RealFloat a => a -> a -> CubicBezier (V2 a)
-corner xr yr = bez4 (V2 0 yr) (V2 0 y) (V2 x 0) (V2 xr 0)
+cornerBez4 :: RealFloat a => a -> a -> CubicBezier (V2 a)
+cornerBez4 xr yr = bez4 (V2 0 yr) (V2 0 y) (V2 x 0) (V2 xr 0)
     where x = xr * kappa
           y = yr * kappa
+
+cornerBez3 :: (RealFloat a, Unbox a)
+           => a -> a -> Vector (QuadraticBezier (V2 a))
+cornerBez3 xr yr = demoteCubic $ cornerBez4 xr yr
 
 -- | Generate a cubic Bezier representing an arc on the unit circle of total
 -- angle `size` radians, beginning `start` radians above the x-axis. Up to four
@@ -307,8 +321,8 @@ curveEpsilon = 0.00001
 -- | Create a list of cubic beziers representing an arc along an ellipse with
 -- width `w`, height `h` and total angle `stop - start` radians, beginning
 -- `start` radians above the x-axis.
-arc,arc' :: RealFloat a => a -> a -> a -> a -> [CubicBezier (V2 a)]
-arc w h start stop = if stop - start >= 2*pi
+arcBez4,arc' :: RealFloat a => a -> a -> a -> a -> [CubicBezier (V2 a)]
+arcBez4 w h start stop = if stop - start >= 2*pi
                      then close $ arc' w h start (start + 2*pi)
                      else arc' w h start stop
         -- This is a full arc so make sure the first and last points are equal
@@ -317,13 +331,21 @@ arc w h start stop = if stop - start >= 2*pi
         close cs = cs
 
 arc' w h start stop
-    | (stop - start) > curveEpsilon = a : arc w h (start + arcToDraw) stop
+    | (stop - start) > curveEpsilon = a : arcBez4 w h (start + arcToDraw) stop
     | otherwise = []
         where arcToDraw = min (stop - start) (pi/2)
               s = realToFrac <$> V2 w h
               a = transform (Transform 0 s 0) $ acuteArc start arcToDraw
 
+arcBez3 :: (RealFloat a, Unbox a)
+        => a -> a -> a -> a -> Vector (QuadraticBezier (V2 a))
+arcBez3 w h start stop = V.concat $ map demoteCubic $ arcBez4 w h start stop
+
 -- | Create a list of cubic beziers that represent an entire closed
 -- ellipse.
-ellipse :: RealFloat a => a -> a -> [CubicBezier (V2 a)]
-ellipse xr yr = arc xr yr 0 (2*pi)
+ellipseBez4 :: RealFloat a => a -> a -> [CubicBezier (V2 a)]
+ellipseBez4 xr yr = arcBez4 xr yr 0 (2*pi)
+
+ellipseBez3 :: (RealFloat a, Unbox a)
+            => a -> a -> Vector (QuadraticBezier (V2 a))
+ellipseBez3 xr yr = V.concat $ map demoteCubic $ ellipseBez4 xr yr

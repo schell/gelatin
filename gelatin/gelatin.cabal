@@ -1,0 +1,46 @@
+name:                gelatin
+version:             0.0.0.1
+synopsis:            A graphics description language.
+description:         Shared types and computations for the gelatin rendering
+                     system.
+homepage:            https://github.com/schell/gelatin
+license:             MIT
+license-file:        LICENSE
+author:              Schell Scivally
+maintainer:          schell@zyghost.com
+category:            Graphics
+build-type:          Simple
+
+cabal-version:       >=1.10
+
+library
+  ghc-options:         -Wall
+  exposed-modules:     Data.Hashable.Vector
+                     , Gelatin.Core.Bezier
+                     , Gelatin.Core.Bounds
+                     , Gelatin.Core.Color
+                     --, Gelatin.Core.Common
+                     , Gelatin.Core.Font
+                     , Gelatin.Core.Path
+                     , Gelatin.Core.Stroke
+                     , Gelatin.Core.Transform
+                     , Gelatin.Core.Triangle
+                     , Gelatin.Picture.Extras
+                     , Gelatin.Picture.Raw
+                     , Gelatin.Core
+                     , Gelatin.Picture
+                     , Gelatin
+
+  build-depends:       base       >=4.6 && <5.0
+                     , linear     >=1.20
+                     , hashable   >=1.2
+                     , containers >=0.5
+                     , free       >=4.12
+                     , vector     >=0.11
+                     , mtl        >=2.2
+                     , bytestring
+                     , lens
+
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+

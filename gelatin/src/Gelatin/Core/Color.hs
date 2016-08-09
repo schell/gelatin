@@ -435,8 +435,8 @@ darkSlateGray = V4 (47/255) (79/255) (79/255) 1
 transparent :: (Num a, Fractional a) => V4 a
 transparent = V4 0 0 0 0
 
-alpha :: (Num a, Fractional a) => V4 a -> a -> V4 a
-alpha (V4 r g b _) = V4 r g b
+setAlpha :: (Num a, Fractional a) => V4 a -> a -> V4 a
+setAlpha (V4 r g b _) = V4 r g b
 
 hex :: (Num b, Fractional b) => Int -> V4 b
 hex n = ((/255) . fromIntegral) <$> V4 r g b a

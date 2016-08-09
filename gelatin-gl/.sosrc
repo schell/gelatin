@@ -2,5 +2,5 @@
   - .*\.hs$
   - stack.yaml
   commands:
-  - stack build --fast --executable-profiling --library-profiling
+  - stack build --fast
   - stack exec hlint \0

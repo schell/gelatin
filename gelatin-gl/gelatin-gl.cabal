@@ -20,25 +20,21 @@ library
   ghc-options:         -Wall
   exposed-modules:     Gelatin.GL,
                        Gelatin.GL.Renderer,
+                       Gelatin.GL.Picture,
                        Gelatin.GL.Shader,
                        Gelatin.GL.Common,
                        Paths_gelatin_gl
   build-depends:       base            >= 4.6     && < 5.0
                      , bytestring
-                     , gelatin-picture >= 0.0.0.1
-                     , gelatin-core    >= 0.0.0.1
+                     , gelatin         >= 0.0.0.1
                      , linear          >= 1.20
                      , gl              >= 0.7
-                     , FontyFruity     >= 0.5
                      , JuicyPixels     >= 3.2
                      , bytestring      >= 0.10
                      , vector          >= 0.11
                      , directory       >= 1.2
                      , filepath        >= 1.4
-                     , renderable      >= 0.2.0.1
-                     , hashable        >= 1.2
                      , transformers    >= 0.4
-                     , free            >= 4.12
                      , containers      >= 0.5
   hs-source-dirs:      src
   default-language:    Haskell2010

@@ -16,6 +16,7 @@ packages:
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
 - FontyFruity-0.5.3.2
+- halive-0.1.0.7
 
 # Override default flag values for local packages and extra-deps
 flags: {}

@@ -64,11 +64,8 @@ startupSDL2BackendWithConfig cfg str = do
 updateWindowSDL2 :: Window -> IO ()
 updateWindowSDL2 = glSwapWindow
 
-renderWithSDL2 :: Window -> Rez -> Cache IO PictureTransform
-               -> Picture GLuint () -> IO (Cache IO PictureTransform)
-renderWithSDL2 window rez cache pic = do
+renderWithSDL2 :: Window -> Rez -> IO () -> IO ()
+renderWithSDL2 window rez f = do
   clearFrame rez
-  (r, newCache) <- compilePictureRenderer rez cache pic
-  snd r mempty
+  f
   updateWindowSDL2 window
-  cleanPictureRendererCache newCache pic

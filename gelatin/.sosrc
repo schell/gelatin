@@ -1,7 +1,6 @@
 - patterns:
   - .*\.hs$
-  - stack.yaml$
   - .*\.cabal$
   commands:
-  - stack build --fast
+  - stack build
   - stack exec hlint \0

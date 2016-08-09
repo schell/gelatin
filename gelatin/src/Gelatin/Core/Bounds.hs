@@ -6,17 +6,17 @@ module Gelatin.Core.Bounds where
 import Linear
 import Gelatin.Core.Transform
 import qualified Data.Vector.Unboxed as V
-import           Data.Vector.Unboxed (Vector)
+import           Data.Vector.Unboxed (Vector, Unbox)
 
 type BBox = (V2 Float, V2 Float)
 
-polyBounds :: Vector (V2 Float) -> BBox
+polyBounds :: (Unbox a, Real a) => Vector (V2 a) -> BBox
 polyBounds vs
   | V.null vs = (0,0)
   | otherwise = V.foldl' f (br,tl) vs
-  where f :: (V2 Float, V2 Float) -> (V2 Float) -> (V2 Float, V2 Float)
-        f (V2 nx ny, V2 xx xy) (V2 x y) = ( V2 (min nx x) (min ny y)
-                                          , V2 (max xx x) (max xy y)
+  where f :: Real a => (V2 Float, V2 Float) -> (V2 a) -> (V2 Float, V2 Float)
+        f (V2 nx ny, V2 xx xy) (V2 x y) = ( V2 (min nx (realToFrac x)) (min ny (realToFrac y))
+                                          , V2 (max xx (realToFrac x)) (max xy (realToFrac y))
                                           )
         inf = 1/0
         ninf = (-1)/0
