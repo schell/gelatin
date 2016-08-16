@@ -8,8 +8,6 @@ module Gelatin.Core.Path where
 import Gelatin.Core.Bounds
 import Gelatin.Core.Transform
 import Linear
-import Data.Hashable
-import Data.Hashable.Vector
 import GHC.Generics
 import qualified Data.Vector.Unboxed as V
 import Data.Vector.Unboxed (Vector, Unbox)
@@ -45,8 +43,9 @@ pointInside p path = pathHasPoint (unPath path) p
 -- the boundary (Jordan Curve theorem)
 pathHasPoint :: (Ord a, Fractional a, Unbox a) => Vector (V2 a) -> V2 a -> Bool
 pathHasPoint vs v = V.foldr' (\s a -> if s then not a else a) False $
-  V.zipWith3 f vs (V.drop 1 vs) (V.drop 2 vs)
-  where f a b c = if t1 a b c && t2 a b c then True else False
+  V.zipWith3 f vv vs (V.drop 1 vs)
+  where vv = V.replicate (V.length vs) v
+        f a b c = if t1 a b c && t2 a b c then True else False
         t1 p p1 p2 = (y p2 > y p) /= (y p1 > y p)
         t2 p p1 p2 = x p < (x p1 - x p2) * (y p - y p2) / (y p1 - y p2) + x p2
         x (V2 a _) = a

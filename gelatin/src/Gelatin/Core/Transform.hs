@@ -55,6 +55,9 @@ transformV2 :: RealFloat a => Transform -> V2 a -> V2 a
 transformV2 t (V2 x y) = V2 x' y'
     where V3 x' y' _ = transformV3 t $ realToFrac <$> V3 x y 1
 
+transformV2' :: Num a => M44 a -> V2 a ->  V2 a
+transformV2' mv = demoteV3 . m41ToV3 . (mv !*!) . v3ToM41 . promoteV2
+
 transformV3 :: RealFloat a => Transform -> V3 a -> V3 a
 transformV3 t v = m41ToV3 $ toM44 t !*! v3ToM41 v
 

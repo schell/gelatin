@@ -13,6 +13,7 @@ module Gelatin.GL.Renderer (
     loadTextureUnit,
     unloadTexture,
     loadImageAsTexture,
+    bindTexsAround,
     bindTexAround,
     -- * Line rendering
     colorPolylineRenderer,
@@ -63,11 +64,7 @@ import           Linear hiding (trace)
 -- Quick Helpers
 --------------------------------------------------------------------------------
 unwrapTransform :: PictureTransform -> (M44 Float, Float, V4 Float)
-unwrapTransform t =
-  let mv = modelviewProjection $ ptfrmAffine t
-      a  = ptfrmAlpha t
-      m  = ptfrmMultiply t
-  in (mv, a, m)
+unwrapTransform t = (ptfrmMV t, ptfrmAlpha t, ptfrmMultiply t)
 --------------------------------------------------------------------------------
 -- GLRenderers
 --------------------------------------------------------------------------------
@@ -215,14 +212,17 @@ texPolylineRenderer win psh thickness feather caps verts uvs = do
   flip (maybe empty) mpoly $
     polylineRenderer win psh thickness feather caps True
 
--- | Binds the given texture to the zeroeth texture unit, runs the IO
--- action and then unbinds the texture.
-bindTexAround :: GLuint -> IO () -> IO ()
-bindTexAround tx f = do
-  glActiveTexture GL_TEXTURE0
-  glBindTexture GL_TEXTURE_2D tx
+-- | Binds the given textures to GL_TEXTURE0, GL_TEXTURE1, ... in ascending
+-- order of the texture unit, runs the IO action and then unbinds the textures.
+bindTexsAround :: [GLuint] -> IO () -> IO ()
+bindTexsAround ts f = do
+  mapM_ (uncurry bindTex) (zip ts [GL_TEXTURE0 ..])
   f
   glBindTexture GL_TEXTURE_2D 0
+  where bindTex tex u = glActiveTexture u >> glBindTexture GL_TEXTURE_2D tex
+
+bindTexAround :: GLuint -> IO () -> IO ()
+bindTexAround tx f = bindTexsAround [tx] f
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
@@ -416,22 +416,6 @@ stencilMask r2 r1  = do
 
 transformRenderer :: PictureTransform -> GLRenderer -> GLRenderer
 transformRenderer t (c, r) = (c, r . (t <>))
---------------------------------------------------------------------------------
--- Updating uniforms
---------------------------------------------------------------------------------
-modelviewProjection :: Transform -> M44 Float
-modelviewProjection (Transform (V2 x y) (V2 w h) r) =
-    let sxy = V3 w h 1
-        txy = V3 x y 0
-        rxy = V3 0 0 1
-        rot = if r /= 0 then mat4Rotate r rxy else identity
-    in mat4Translate txy !*! rot !*! mat4Scale sxy
-
-orthoContextProjection :: Context -> IO (M44 Float)
-orthoContextProjection window = do
-    (ww, wh) <- ctxWindowSize window
-    let (hw,hh) = (fromIntegral ww, fromIntegral wh)
-    return $ ortho 0 hw hh 0 0 1
 --------------------------------------------------------------------------------
 -- Working with textures.
 --------------------------------------------------------------------------------
@@ -641,6 +625,3 @@ clearErrors :: String -> IO ()
 clearErrors str = do
     err' <- glGetError
     when (err' /= 0) $ errorWithStackTrace $ unwords [str, show err']
-
-glFloatSize :: Int
-glFloatSize = sizeOf (undefined :: GLfloat)

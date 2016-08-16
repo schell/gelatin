@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Gelatin.Fruity (
   module TT,
   coloredString,
@@ -11,7 +12,6 @@ import           Data.Vector.Unboxed (Vector, Unbox)
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector as B
 import           Control.Arrow (first,second)
-import           Control.Lens
 import           Linear
 --------------------------------------------------------------------------------
 -- Font decomposition into triangles and beziers
@@ -50,13 +50,17 @@ fruityBeziers = fromFonty (unBeziers . toBeziers . V.map (fmap realToFrac))
 -- | Collects the points that lie directly on the contour of the font
 -- outline.
 onContourPoints :: Unbox a => Vector (Bezier a) -> Vector a
-onContourPoints = V.foldl' f mempty
-  where f bs (False,a,b,c) = bs V.++ V.fromList [a,b,c]
-        f bs (_,a,_,c) = bs V.++ V.fromList [a,c]
+onContourPoints = V.concatMap f
+  where f (False,a,b,c) = V.fromList [a,b,c]
+        f (_,a,_,c) = V.fromList [a,c]
+--onContourPoints = V.foldl' f mempty
+--  where f bs (False,a,b,c) = bs V.++ V.fromList [a,b,c]
+--        f bs (_,a,_,c) = bs V.++ V.fromList [a,c]
 
 stringCurve :: Font -> Int -> Float -> String -> [[Vector (Float, Float)]]
 stringCurve font dpi px str = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
-    where sz = pixelSizeInPointAtDpi px dpi
+    where --sz = pixelSizeInPointAtDpi px dpi
+          sz = PointSize px
 
 stringOutline :: Font -> Int -> Float -> String
               -> B.Vector (RawGeometry (V2 Float))
@@ -65,10 +69,6 @@ stringOutline font dpi px str =
     fromFonty (cleanSeqDupes . V.concatMap divide . toBeziers . V.map (fmap realToFrac)) $
       stringCurve font dpi px str
   where divide (_,a,b,c) = subdivideAdaptive 100 0 $ bez3 a b c
-
---stringOutline font dpi px str =
---  B.fromList $ map RawLine $ concat $ fromFonty (V.map (fmap realToFrac)) $
---    stringCurve font dpi px str
 
 fontBezAndTris :: Font -> Int -> Float -> String
                -> (RawGeometry (V2 Float), B.Vector (RawGeometry (V2 Float)))
@@ -80,31 +80,29 @@ fontBezAndTris font dpi px str =
        , B.map RawTriangleFan $ B.fromList ts
        )
 
-supportedString :: (B.Vector (RawGeometry (V2 Float)) -> SupportedGeometry)
-                -> Maybe t
-                -> Font -> Int -> Float -> String
-                -> Picture t
-supportedString f mtex font dpi px str = picture $ do
-  let ffirst   = first (f . B.singleton)
-      fsecond  = second f
-      g        = fsecond . ffirst
-      (bs, ts) = g $ fontBezAndTris font dpi px str
-  draw $ do
-    drawGeometry .= ts
-    drawTexture  .= mtex
-    drawOptions  .= [StencilMaskOption]
-  draw $ do
-    drawGeometry .= bs
-    drawTexture  .= mtex
+coloredString :: Monoid (PictureData t (V2 Float) Float (V2 Float, V4 Float))
+              => Font -> Int -> Float -> String -> (V2 Float -> V4 Float)
+              -> Picture t (V2 Float) Float (V2 Float, V4 Float) ()
+coloredString font dpi px str fill = do
+  let g        = mapRawGeometry h
+      h v      = (v, fill v)
+      (bs, ts) = second (B.map g) $ first g $ fontBezAndTris font dpi px str
+  embed $ do
+    setRawGeometry ts
+    setRenderingOptions [StencilMaskOption]
+  embed $ setRawGeometry $ B.singleton bs
 
-coloredString :: Font -> Int -> Float -> String -> (V2 Float -> V4 Float)
-              -> Picture t
-coloredString font dpi px str fill = supportedString g Nothing font dpi px str
-  where g   = ColorGeometry . B.map (mapVertices h)
-        h v = (v, fill v)
-
-texturedString :: Font -> Int -> Float -> String -> t -> (V2 Float -> V2 Float)
-              -> Picture t
-texturedString font dpi px str t fill = supportedString g (Just t) font dpi px str
-  where g   = TextureGeometry . B.map (mapVertices h)
-        h v = (v, fill v)
+texturedString :: Monoid (PictureData t (V2 Float) Float (V2 Float, V2 Float))
+               => Font -> Int -> Float -> String -> t -> (V2 Float -> V2 Float)
+               -> Picture t (V2 Float) Float (V2 Float, V2 Float) ()
+texturedString font dpi px str t fill = do
+  let g   = mapRawGeometry h
+      h v = (v, fill v)
+      (bs, ts) = second (B.map g) $ first g $ fontBezAndTris font dpi px str
+  embed $ do
+    setRawGeometry ts
+    setRenderingOptions [StencilMaskOption]
+    setTextures [t]
+  embed $ do
+    setRawGeometry $ B.singleton bs
+    setTextures [t]

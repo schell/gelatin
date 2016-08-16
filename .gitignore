@@ -12,3 +12,4 @@ cabal.config
 *.prof
 *.tags
 *.out
+*.tmp

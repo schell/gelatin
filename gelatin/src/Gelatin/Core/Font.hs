@@ -1,7 +1,6 @@
 module Gelatin.Core.Font where
 
 import Gelatin.Core.Bezier
-import Gelatin.Core.Triangle
 import Gelatin.Core.Path
 import Data.Hashable
 import Linear
