@@ -1,0 +1,4 @@
+module Lib
+    ( someFunc
+    ) where
+

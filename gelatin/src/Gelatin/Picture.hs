@@ -1,19 +1,24 @@
 module Gelatin.Picture (
   -- * Defining Vertex Data
-    Vertices(..)
+    VerticesT(..)
+  , runVerticesT
+  , Vertices
+  , runVertices
   , tri
   , bez
   , to
   , segment
   , vertices
   , mapVertices
-  , runVertices
   -- * Making shapes
   , module S
   -- * Defining Geometry (Vertex Data + Drawing Operation)
   , RawGeometry(..)
   , mapRawGeometry
-  , Geometry(..)
+  , GeometryT(..)
+  , runGeometryT
+  , Geometry
+  , runGeometry
   , add
   , triangles
   , beziers
@@ -22,8 +27,9 @@ module Gelatin.Picture (
   , line
   , geometry
   , mapGeometry
-  , runGeometry
   -- * The Picture API
+  , PictureT
+  , runPictureT
   , Picture
   , runPicture
   , embed
@@ -52,14 +58,17 @@ module Gelatin.Picture (
   , pictureOrigin
   , pictureCenter
   -- * Measuring Pictures (Outside of their definition)
-  , pictureBounds'
-  , pictureSize'
-  , pictureOrigin'
-  , pictureCenter'
+  , runPictureBoundsT
+  , runPictureSizeT
+  , runPictureOriginT
+  , runPictureCenterT
+  , runPictureBounds
+  , runPictureSize
+  , runPictureOrigin
+  , runPictureCenter
   -- * Underlying PictureData Exported for renderers
   , RenderingOption(..)
   , PictureData(..)
-
 ) where
 
 import Gelatin.Picture.Internal

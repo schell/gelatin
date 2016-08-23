@@ -18,33 +18,40 @@ import           Linear hiding (rotate)
 --------------------------------------------------------------------------------
 -- General Geometry Types
 --------------------------------------------------------------------------------
-newtype Vertices a = Vertices { unVertices :: State (Vector a) () }
+newtype VerticesT a m b = Vertices { unVertices :: StateT (Vector a) m b }
+type Vertices a = VerticesT a Identity ()
 --------------------------------------------------------------------------------
 -- Pretty General Operators
 --------------------------------------------------------------------------------
 snoc3 :: Unbox a => Vector a -> a -> a -> a -> Vector a
 snoc3 v a b = V.snoc (V.snoc (V.snoc v a) b)
 
-tri :: Unbox a => a -> a -> a -> State (Vector a) ()
+tri :: (Monad m, Unbox a) => a -> a -> a -> StateT (Vector a) m ()
 tri a b c = modify $ \v -> snoc3 v a b c
 
-bez :: Unbox a => a -> a -> a -> State (Vector a) ()
+bez :: (Monad m, Unbox a) => a -> a -> a -> StateT (Vector a) m ()
 bez = tri
 
-to :: Unbox a => a -> State (Vector a) ()
+to :: (Monad m, Unbox a) => a -> StateT (Vector a) m ()
 to = modify . flip V.snoc
 
-segment :: Unbox a => a -> a -> State (Vector a) ()
+segment :: (Monad m, Unbox a) => a -> a -> StateT (Vector a) m ()
 segment a b = to a >> to b
 
-vertices :: Unbox a => State (Vector a) () -> Vertices a
+vertices :: (Monad m, Unbox a) => StateT (Vector a) m b -> VerticesT a m b
 vertices = Vertices
 
-mapVertices :: (Unbox a, Unbox b) => (a -> b) -> Vertices a -> Vertices b
-mapVertices f = Vertices . put . V.map f . runVertices
+runVerticesT :: (Monad m, Unbox a) => VerticesT a m b -> m (Vector a)
+runVerticesT = flip execStateT V.empty . unVertices
 
 runVertices :: Unbox a => Vertices a -> Vector a
-runVertices = flip execState V.empty . unVertices
+runVertices = runIdentity . runVerticesT
+
+mapVertices :: (Monad m, Unbox a, Unbox c)
+            => (a -> c) -> VerticesT a m b -> VerticesT c m ()
+mapVertices f s = Vertices $ do
+  vs <- lift $ runVerticesT s
+  put $ V.map f vs
 --------------------------------------------------------------------------------
 -- Mixing drawing types and transforming them
 --------------------------------------------------------------------------------
@@ -61,34 +68,41 @@ mapRawGeometry f (RawTriangleStrip vs) = RawTriangleStrip $ V.map f vs
 mapRawGeometry f (RawTriangleFan vs) = RawTriangleFan $ V.map f vs
 mapRawGeometry f (RawLine vs) = RawLine $ V.map f vs
 
-newtype Geometry a = Geometry { unGeometry :: State (B.Vector (RawGeometry a)) ()}
+newtype GeometryT a m b = Geometry { unGeometry :: StateT (B.Vector (RawGeometry a)) m b}
+type Geometry a = GeometryT a Identity ()
 
-add :: a -> State (B.Vector a) ()
+add :: Monad m => a -> StateT (B.Vector a) m ()
 add a = modify (`B.snoc` a)
 
-triangles :: Unbox a => Vertices a -> RawGeometry a
-triangles = RawTriangles . runVertices
+triangles :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
+triangles = (RawTriangles <$>) . runVerticesT
 
-beziers :: Unbox a => Vertices a -> RawGeometry a
-beziers = RawBeziers . runVertices
+beziers :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
+beziers = (RawBeziers <$>) . runVerticesT
 
-strip :: Unbox a => Vertices a -> RawGeometry a
-strip = RawTriangleStrip . runVertices
+strip :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
+strip = (RawTriangleStrip <$>) . runVerticesT
 
-fan :: Unbox a => Vertices a -> RawGeometry a
-fan = RawTriangleFan . runVertices
+fan :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
+fan = (RawTriangleFan <$>) . runVerticesT
 
-line :: Unbox a => Vertices a -> RawGeometry a
-line = RawLine . runVertices
+line :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
+line = (RawLine <$>) . runVerticesT
 
-geometry :: State (B.Vector (RawGeometry a)) () -> Geometry a
+geometry :: StateT (B.Vector (RawGeometry a)) m b -> GeometryT a m b
 geometry = Geometry
 
-mapGeometry :: (Unbox a, Unbox b) => (a -> b) -> Geometry a -> Geometry b
-mapGeometry f = Geometry . put . B.map (mapRawGeometry f) . runGeometry
+runGeometryT :: Monad m => GeometryT a m b -> m (B.Vector (RawGeometry a))
+runGeometryT = flip execStateT B.empty . unGeometry
 
 runGeometry :: Geometry a -> B.Vector (RawGeometry a)
-runGeometry = flip execState B.empty . unGeometry
+runGeometry = runIdentity . runGeometryT
+
+mapGeometry :: (Monad m, Unbox a, Unbox c)
+            => (a -> c) -> GeometryT a m b -> GeometryT c m ()
+mapGeometry f s = Geometry $ do
+  gs <- lift $ runGeometryT s
+  put $ B.map (mapRawGeometry f) gs
 
 vertexData :: Unbox v
            => RawGeometry v -> Vector v
@@ -146,93 +160,104 @@ data PictureData texture spatial rotation vertex =
               }
 makeLenses ''PictureData
 --------------------------------------------------------------------------------
--- Picture Construction & Combination
+-- Picture Construction
 --------------------------------------------------------------------------------
-type Picture t s r v = State (PictureData t s r v)
+type PictureT t s r v = StateT (PictureData t s r v)
 
-invalidateBoundary :: Picture t s r v ()
+runPictureT :: (Monad m, Monoid (PictureData t s r v))
+            => PictureT t s r v m a -> m (a, PictureData t s r v)
+runPictureT = flip runStateT mempty
+--------------------------------------------------------------------------------
+-- Identity Parameterized Pictures
+--------------------------------------------------------------------------------
+type Picture t s r v = PictureT t s r v Identity
+
+runPicture :: Monoid (PictureData t s r v)
+           => Picture t s r v a -> (a, PictureData t s r v)
+runPicture = runIdentity . runPictureT
+--------------------------------------------------------------------------------
+-- Picture Combination & Operations
+--------------------------------------------------------------------------------
+invalidateBoundary :: Monad m =>  PictureT t s r v m ()
 invalidateBoundary = picDataBounds .= Nothing
 
-runPicture :: Monoid (PictureData t s r v) => Picture t s r v a -> (a, PictureData t s r v)
-runPicture = flip runState mempty
-
-embed :: Monoid (PictureData t s r v) => Picture t s r v () -> Picture t s r v ()
+embed :: (Monad m, Monoid (PictureData t s r v))
+      => PictureT t s r v m () -> PictureT t s r v m ()
 embed p = do
   invalidateBoundary
-  let dat = snd $ runPicture p
+  dat <- snd <$> lift (runPictureT p)
   picDataChildren %= (`B.snoc` dat)
 
-overlay :: Monoid (PictureData t s r v)
-        => Picture t s r v () -> Picture t s r v () -> Picture t s r v ()
+overlay :: (Monad m, Monoid (PictureData t s r v))
+        => PictureT t s r v m () -> PictureT t s r v m ()
+        -> PictureT t s r v m ()
 overlay a b = do
   invalidateBoundary
   embed a >> embed b
---------------------------------------------------------------------------------
--- Getters & Setters
---------------------------------------------------------------------------------
-setRawGeometry :: B.Vector (RawGeometry v) -> Picture t s r v ()
+
+setRawGeometry :: Monad m => B.Vector (RawGeometry v) -> PictureT t s r v m ()
 setRawGeometry vs = do
   picDataGeometry .= vs
   invalidateBoundary
 
-getRawGeometry :: Picture t s r v (B.Vector (RawGeometry v))
+getRawGeometry :: Monad m => PictureT t s r v m (B.Vector (RawGeometry v))
 getRawGeometry = use picDataGeometry
 
-setGeometry :: Geometry v -> Picture t s r v ()
+setGeometry :: Monad m => Geometry v -> PictureT t s r v m ()
 setGeometry = setRawGeometry . runGeometry
 
-applyAffine :: Affine s r -> Picture t s r v ()
+applyAffine :: Monad m => Affine s r -> PictureT t s r v m ()
 applyAffine f = do
   invalidateBoundary
   picDataAffine %= (f:)
 
-move :: Num s => s -> Picture t s r v ()
+move :: (Monad m, Num s ) => s -> PictureT t s r v m ()
 move = applyAffine . Translate
 
-scale :: (Num s, Fractional s) => s -> Picture t s r v ()
+scale :: (Monad m, Num s, Fractional s) => s -> PictureT t s r v m ()
 scale = applyAffine . Scale
 
-rotate :: Num r => r -> Picture t s r v ()
+rotate :: (Monad m, Num r ) => r -> PictureT t s r v m ()
 rotate = applyAffine . Rotate
 
-setAlpha :: Float -> Picture t s r v ()
+setAlpha :: Monad m => Float -> PictureT t s r v m ()
 setAlpha = (picDataAlpha .=)
 
-getAlpha :: Picture t s r v Float
+getAlpha :: Monad m => PictureT t s r v m Float
 getAlpha = use picDataAlpha
 
-alpha :: Float -> Picture t s r v ()
+alpha :: Monad m => Float -> PictureT t s r v m ()
 alpha = (picDataAlpha %=) . (*)
 
-setMultiply :: V4 Float -> Picture t s r v ()
+setMultiply :: Monad m => V4 Float -> PictureT t s r v m ()
 setMultiply = (picDataMultiply .=)
 
-getMultiply :: Picture t s r v (V4 Float)
+getMultiply ::Monad m => PictureT t s r v m (V4 Float)
 getMultiply = use picDataMultiply
 
-multiply :: V4 Float -> Picture t s r v ()
+multiply :: Monad m => V4 Float -> PictureT t s r v m ()
 multiply = (picDataMultiply %=) . (*)
 
-setStroke :: [StrokeAttr] -> Picture t s r v ()
+setStroke :: Monad m => [StrokeAttr] -> PictureT t s r v m ()
 setStroke = (picDataStroke .=)
 
-getStroke :: Picture t s r v [StrokeAttr]
+getStroke :: Monad m => PictureT t s r v m [StrokeAttr]
 getStroke = use picDataStroke
 
-setTextures :: [t] -> Picture t s r v ()
+setTextures :: Monad m => [t] -> PictureT t s r v m ()
 setTextures = (picDataTextures .=)
 
-getTextures :: Picture t s r v [t]
+getTextures :: Monad m => PictureT t s r v m [t]
 getTextures = use picDataTextures
 
-setRenderingOptions :: [RenderingOption] -> Picture t s r v ()
+setRenderingOptions :: Monad m => [RenderingOption] -> PictureT t s r v m ()
 setRenderingOptions = (picDataOptions .=)
 
-getRenderingOptions :: Picture t s r v [RenderingOption]
+getRenderingOptions :: Monad m => PictureT t s r v m [RenderingOption]
 getRenderingOptions = use picDataOptions
 
-
-pictureBounds :: (Num s, Unbox v, Monoid (PictureData t s r v)) => Picture t s r v (s, s)
+pictureBounds :: (Monad m, Num s, Unbox v, Monoid (PictureData t s r v))
+              => PictureT t s r v m (s, s)
 pictureBounds = use picDataBounds >>= \case
   Nothing -> do
     dat <- get
@@ -241,36 +266,58 @@ pictureBounds = use picDataBounds >>= \case
     return bounds
   Just bb -> return bb
 
-pictureDataBounds :: (Num s, Unbox v, Monoid (PictureData t s r v))
-                  => PictureData t s r v -> (s,s)
-pictureDataBounds = evalState pictureBounds
-
-pictureBounds' :: (Num s, Unbox v, Monoid (PictureData t s r v))
-               => Picture t s r v a -> (s, s)
-pictureBounds' = fst . runPicture . (>> pictureBounds)
-
-pictureSize :: (Num s, Unbox v, Monoid (PictureData t s r v))  => Picture t s r v s
+pictureSize :: ((Monad m, Num s, Unbox v, Monoid (PictureData t s r v))  )
+            => PictureT t s r v m s
 pictureSize = do
   (tl,br) <- pictureBounds
   return $ br - tl
 
-pictureSize' :: (Num s, Unbox v, Monoid (PictureData t s r v))
-             => Picture t s r v a -> s
-pictureSize' = fst . runPicture . (>> pictureSize)
-
-pictureOrigin :: (Num s, Unbox v, Monoid (PictureData t s r v)) => Picture t s r v s
+pictureOrigin :: ((Monad m, Num s, Unbox v, Monoid (PictureData t s r v)) ) => PictureT t s r v m s
 pictureOrigin = fst <$> pictureBounds
 
-pictureOrigin' :: (Num s, Unbox v, Monoid (PictureData t s r v))
-               => Picture t s r v a -> s
-pictureOrigin' = fst . runPicture . (>> pictureOrigin)
-
-pictureCenter :: (Num s, Fractional s, Unbox v, Monoid (PictureData t s r v))
-              => Picture t s r v s
+pictureCenter :: (Monad m, Num s, Fractional s, Unbox v, Monoid (PictureData t s r v))
+              => PictureT t s r v m s
 pictureCenter = do
   (tl,br) <- pictureBounds
   return $ tl + (br - tl)/2
+--------------------------------------------------------------------------------
+-- Conveniences for measuring pictures from outside the PictureT monad
+--------------------------------------------------------------------------------
+pictureDataBounds :: (Num s, Unbox v, Monoid (PictureData t s r v))
+                  => PictureData t s r v -> (s,s)
+pictureDataBounds = evalState pictureBounds
 
-pictureCenter' :: (Num s, Fractional s, Unbox v, Monoid (PictureData t s r v))
+runPictureBoundsT :: (Monad m, Num s, Unbox v, Monoid (PictureData t s r v))
+                  => PictureT t s r v m a -> m (s, s)
+runPictureBoundsT = (fst <$>) . runPictureT . (>> pictureBounds)
+
+
+runPictureSizeT :: (Monad m, Num s, Unbox v, Monoid (PictureData t s r v))
+                => PictureT t s r v m a -> m s
+runPictureSizeT = (fst <$>) . runPictureT . (>> pictureSize)
+
+runPictureOriginT :: (Monad m, Num s, Unbox v, Monoid (PictureData t s r v))
+                  => PictureT t s r v m a -> m s
+runPictureOriginT = (fst <$>) . runPictureT . (>> pictureOrigin)
+
+runPictureCenterT :: (Monad m, Num s, Fractional s, Unbox v, Monoid (PictureData t s r v))
+                  => PictureT t s r v m a -> m s
+runPictureCenterT = (fst <$>) . runPictureT . (>> pictureCenter)
+--------------------------------------------------------------------------------
+-- Conveniences for measuring pictures from outside the Picture monad
+--------------------------------------------------------------------------------
+runPictureBounds :: (Num s, Unbox v, Monoid (PictureData t s r v))
+                 => Picture t s r v a -> (s, s)
+runPictureBounds = runIdentity . runPictureBoundsT
+
+runPictureSize :: (Num s, Unbox v, Monoid (PictureData t s r v))
                => Picture t s r v a -> s
-pictureCenter' = fst . runPicture . (>> pictureCenter)
+runPictureSize = runIdentity . runPictureSizeT
+
+runPictureOrigin :: (Num s, Unbox v, Monoid (PictureData t s r v))
+                 => Picture t s r v s -> s
+runPictureOrigin = runIdentity . runPictureOriginT
+
+runPictureCenter :: (Num s, Fractional s, Unbox v, Monoid (PictureData t s r v))
+                 => Picture t s r v a -> s
+runPictureCenter = runIdentity . runPictureCenterT
