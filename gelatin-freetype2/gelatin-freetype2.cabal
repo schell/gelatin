@@ -15,22 +15,39 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Gelatin.Freetype2.Internal
-                     , Gelatin.Freetype2
+  exposed-modules:     Gelatin.FreeType2.Internal
+                     , Gelatin.FreeType2.Utils
+                     , Gelatin.FreeType2
 
   build-depends:       base >= 4.7 && < 5
                      , gelatin
+                     , gelatin-gl
                      , freetype2
+                     , transformers
+                     , mtl
+                     , containers
+                     , either
 
   default-language:    Haskell2010
 
 executable gelatin-freetype2-exe
   hs-source-dirs:      app
   main-is:             Main.hs
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
+                     , gelatin
                      , gelatin-freetype2
+                     , gelatin-sdl2
+                     , gelatin-gl
+                     , freetype2
+                     , sdl2
                      , halive
+                     , transformers
+                     , mtl
+                     , containers
+                     , pretty-show
+                     , vector
+
   default-language:    Haskell2010
 
 test-suite gelatin-freetype2-test

@@ -30,13 +30,14 @@ library
                      , Gelatin.Picture
                      , Gelatin
 
-  build-depends:       base       >=4.6 && <5.0
-                     , linear     >=1.20
-                     , hashable   >=1.2
-                     , containers >=0.5
-                     , free       >=4.12
-                     , vector     >=0.11
-                     , mtl        >=2.2
+  build-depends:       base         >=4.6 && <5.0
+                     , linear       >=1.20
+                     , hashable     >=1.2
+                     , containers   >=0.5
+                     , free         >=4.12
+                     , vector       >=0.11
+                     , mtl          >=2.2
+                     , transformers >=0.4
                      , bytestring
                      , lens
 

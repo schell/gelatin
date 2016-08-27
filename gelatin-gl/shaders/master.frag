@@ -19,13 +19,16 @@ uniform vec2 cap;
 uniform float alpha;
 uniform vec4 mult;
 
+uniform vec4 replaceColor;
+uniform bool shouldColorReplace;
+
 // Primitive types
 const int PrimTri  = 0;
 const int PrimBez  = 1;
 const int PrimLine = 2;
 const int PrimMask = 4;
 
-// Types for rendering line caps 
+// Types for rendering line caps
 const float CapNone   = 0;
 const float CapButt   = 1;
 const float CapSquare = 2;
@@ -33,16 +36,10 @@ const float CapRound  = 3;
 const float CapTriOut = 4;
 const float CapTriIn  = 5;
 
-// Types for applying a custom per fragment color operation
-const int ColorOpMult = 0;
-const int ColorOpAdd = 1;
-const int ColorOpSub = 2;
-const int ColorOpReplace = 3;
-
 // Colors a fragment based solely on either an input color or a texture.
 vec4 coord_fragment(bool isUV,
                     sampler2D s,
-                    vec4 clr, 
+                    vec4 clr,
                     vec2 uvs) {
   if (isUV) {
     return texture(s, uvs.st);
@@ -93,7 +90,7 @@ vec4 bez_fragment(bool isUV,
     return vec4(color.rgb, color.a * a);
 }
 
-// Renders a polyline cap fragment. 
+// Renders a polyline cap fragment.
 float capd(float type, float u, float v, float t ) {
     // None
     if ( type == CapNone) discard;
@@ -110,14 +107,14 @@ float capd(float type, float u, float v, float t ) {
     discard;
 }
 
-vec4 line_fragment(float thick, 
-                   float fthr, 
-                   float slen, 
-                   vec2 cp, 
-                   bool isUV, 
-                   sampler2D s, 
-                   vec4 clr, 
-                   vec2 bzuv, 
+vec4 line_fragment(float thick,
+                   float fthr,
+                   float slen,
+                   vec2 cp,
+                   bool isUV,
+                   sampler2D s,
+                   vec4 clr,
+                   vec2 bzuv,
                    vec2 uvs) {
     float u = bzuv.x;
     float v = bzuv.y;
@@ -164,7 +161,13 @@ vec4 mask_fragment(sampler2D main,
 
 // Runs a color op on the fragment.
 vec4 color_op_fragment(vec4 c, float a, vec4 m) {
-  vec4 c1 = c * m;
+  vec4 c1 = vec4(0);
+  if (shouldColorReplace) {
+    // Use a replacement color multiplied by the current red channel value.
+    c1 = vec4(replaceColor.r, replaceColor.g, replaceColor.b, replaceColor.a * c.r) * m;
+  } else {
+    c1 = c * m;
+  }
   return vec4(c1.rgb, c1.a * a);
 }
 
@@ -182,7 +185,7 @@ void main() {
                                 sampler, fcolor, fbezuv, fuv);
       break;
     }
-    case PrimMask: 
+    case PrimMask:
       out_color = mask_fragment(mainTex, maskTex, fuv);
       break;
     default:

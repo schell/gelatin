@@ -7,6 +7,7 @@ module Gelatin.GL.Renderer (
     GLRenderer,
     Context(..),
     -- * Loading and using textures
+    allocAndActivateTex,
     loadImage,
     maybeLoadTexture,
     loadTexture,
@@ -21,7 +22,6 @@ module Gelatin.GL.Renderer (
     -- * Triangle rendering
     colorRenderer,
     textureRenderer,
-    textureUnitRenderer,
     -- * Bezier rendering
     colorBezRenderer,
     textureBezRenderer,
@@ -63,8 +63,8 @@ import           Linear hiding (trace)
 --------------------------------------------------------------------------------
 -- Quick Helpers
 --------------------------------------------------------------------------------
-unwrapTransform :: PictureTransform -> (M44 Float, Float, V4 Float)
-unwrapTransform t = (ptfrmMV t, ptfrmAlpha t, ptfrmMultiply t)
+unwrapTransform :: PictureTransform -> (M44 Float, Float, V4 Float, Maybe (V4 Float))
+unwrapTransform t = (ptfrmMV t, ptfrmAlpha t, ptfrmMultiply t, ptfrmReplace t)
 --------------------------------------------------------------------------------
 -- GLRenderers
 --------------------------------------------------------------------------------
@@ -181,10 +181,10 @@ polylineRenderer win sh thickness feather caps isTex (vs_,cs_,us_,ns_,ps_,totalL
     glBindVertexArray 0
 
     let num = fromIntegral $ V.length vs_
-        r t = do let (mv, a, m) = unwrapTransform t
+        r t = do let (mv, a, m, mr) = unwrapTransform t
                  pj <- orthoContextProjection win
-                 updateUniformsForLines (unShader sh) pj mv isTex a m thickness
-                                        feather totalLen caps
+                 updateUniformsForLines (unShader sh) pj mv isTex a m mr
+                                        thickness feather totalLen caps
                  drawBuffer (shProgram $ unShader sh) vao GL_TRIANGLE_STRIP num
         c = do withArray bufs $ glDeleteBuffers 5
                withArray [vao] $ glDeleteVertexArrays 1
@@ -239,9 +239,9 @@ colorRenderer window sh mode vs gs =
     glBindVertexArray 0
     let num = fromIntegral $ V.length vs
         renderFunction t = do
-            let (mv,a,m) = unwrapTransform t
+            let (mv,a,m,mr) = unwrapTransform t
             pj <- orthoContextProjection window
-            updateUniformsForTris (unShader sh) pj mv False a m
+            updateUniformsForTris (unShader sh) pj mv False a m mr
             drawBuffer (shProgram $ unShader sh) vao mode num
         cleanupFunction = do
             withArray [pbuf, cbuf] $ glDeleteBuffers 2
@@ -249,19 +249,10 @@ colorRenderer window sh mode vs gs =
     return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders a textured
--- geometry using the texture bound to GL_TEXTURE0.
+-- geometry.
 textureRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
                 -> Vector (V2 Float) -> IO GLRenderer
-textureRenderer = textureUnitRenderer Nothing
-
--- | Creates and returns a renderer that renders the given textured
--- geometry using the specified texture binding.
--- TODO: ACTUALLY USE THE TEXTURE UNIT
-textureUnitRenderer :: Maybe GLint -> Context -> SumShader -> GLuint
-                    -> Vector (V2 Float) -> Vector (V2 Float) -> IO GLRenderer
-textureUnitRenderer Nothing w sh md vs uvs =
-    textureUnitRenderer (Just 0) w sh md vs uvs
-textureUnitRenderer (Just _) win sh mode vs uvs =
+textureRenderer win sh mode vs uvs =
   withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
   let f xs = V.map realToFrac $ V.concatMap (V.fromList . F.toList) xs :: Vector GLfloat
       ps = f vs
@@ -274,9 +265,9 @@ textureUnitRenderer (Just _) win sh mode vs uvs =
 
   let num = fromIntegral $ V.length vs
       renderFunction t = do
-        let (mv,a,m) = unwrapTransform t
+        let (mv,a,m,mr) = unwrapTransform t
         pj <- orthoContextProjection win
-        updateUniformsForTris (unShader sh) pj mv True a m
+        updateUniformsForTris (unShader sh) pj mv True a m mr
         drawBuffer (shProgram $ unShader sh) vao mode num
       cleanupFunction = do
         withArray [pbuf, cbuf] $ glDeleteBuffers 2
@@ -326,8 +317,8 @@ bezRenderer isTex window sh vs cvs = do
         num = fromIntegral $ V.length vs
         renderFunction t = do
             pj <- orthoContextProjection window
-            let (mv,a,m) = unwrapTransform t
-            updateUniformsForBezs (unShader sh) pj mv isTex a m
+            let (mv,a,m,mr) = unwrapTransform t
+            updateUniformsForBezs (unShader sh) pj mv isTex a m mr
             drawBuffer (shProgram $ unShader sh) vao GL_TRIANGLES num
     return (cleanupFunction,renderFunction)
 
@@ -361,7 +352,7 @@ maskRenderer win sh mode vs uvs =
                          withArray [vao] $ glDeleteVertexArrays 1
             num = fromIntegral $ V.length vs
             render t = do
-                let (mv,a,m) = unwrapTransform t
+                let (mv,a,m,_) = unwrapTransform t
                 pj <- orthoContextProjection win
                 updateUniformsForMask (unShader sh) pj mv a m 0 1
                 drawBuffer (shProgram $ unShader sh) vao mode num
@@ -585,7 +576,7 @@ withVAO f = do
         peekArray 1 ptr
     glBindVertexArray vao
     r <- f vao
-    glBindVertexArray vao
+    clearErrors "withVAO"
     return r
 
 withBuffers :: Int -> ([GLuint] -> IO b) -> IO b
@@ -617,9 +608,9 @@ drawBuffer :: GLuint
 drawBuffer program vao mode num = do
     glUseProgram program
     glBindVertexArray vao
-    clearErrors "glBindVertex"
+    clearErrors "drawBuffer:glBindVertex"
     glDrawArrays mode 0 num
-    clearErrors "glDrawArrays"
+    clearErrors "drawBuffer:glDrawArrays"
 
 clearErrors :: String -> IO ()
 clearErrors str = do

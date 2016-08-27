@@ -23,7 +23,7 @@ pictures tex = (colorPic, texPic)
             setGeometry $ geometry geom
 
           embed $ do
-            setPosition (V2 0 200)
+            move (V2 0 200)
             setStroke [StrokeWidth 2, StrokeFeather 0.5]
             setGeometry $ geometry geom
 
@@ -98,9 +98,9 @@ main = do
       renderWithSDL2 window rez $ do
         snd colorPicRender mempty
         snd texPicRender mempty
-        snd colorTextRender $ PictureTransform (V2 0 400) 1 (0, V3 0 0 1) 1 1
-        snd texTextRender   $ PictureTransform (V2 0 500) 1 (0, V3 0 0 1) 1 1
-        snd outlineRender   $ PictureTransform (V2 0 600) 1 (0, V3 0 0 1) 1 1
+        snd colorTextRender $ PictureTransform (V2 0 400) 1 1
+        snd texTextRender   $ PictureTransform (V2 0 500) 1 1
+        snd outlineRender   $ PictureTransform (V2 0 600) 1 1
       fst colorPicRender
       fst texPicRender
       fst colorTextRender

@@ -3,6 +3,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Gelatin.Picture.Internal where
 
@@ -10,36 +12,53 @@ import           Gelatin.Core
 import qualified Data.Vector as B
 import qualified Data.Vector.Unboxed as V
 import           Data.Vector.Unboxed (Vector, Unbox)
-import           Data.Maybe (fromMaybe)
+import           Data.Foldable (foldr')
+import           Control.Monad.Trans.Class
+import           Control.Monad.IO.Class
 import           Control.Monad.State.Strict
 import           Control.Lens hiding (to)
+import           Control.Arrow
 import           Linear hiding (rotate)
 
 --------------------------------------------------------------------------------
--- General Geometry Types
+-- A Monad for defining vertex data
 --------------------------------------------------------------------------------
 newtype VerticesT a m b = Vertices { unVertices :: StateT (Vector a) m b }
 type Vertices a = VerticesT a Identity ()
+
+instance Functor m => Functor (VerticesT a m) where
+  fmap f (Vertices s) = Vertices $ fmap f s
+
+instance Monad m => Applicative (VerticesT a m) where
+  pure = Vertices . pure
+  (Vertices f) <*> (Vertices x) = Vertices $ f <*> x
+
+instance Monad m => Monad (VerticesT a m) where
+  return = pure
+  (Vertices m) >>= f = Vertices $ m >>= unVertices . f
+
+instance MonadTrans (VerticesT a) where
+  lift = Vertices . lift
+
+instance MonadIO m => MonadIO (VerticesT a m) where
+  liftIO = lift . liftIO
 --------------------------------------------------------------------------------
 -- Pretty General Operators
 --------------------------------------------------------------------------------
 snoc3 :: Unbox a => Vector a -> a -> a -> a -> Vector a
 snoc3 v a b = V.snoc (V.snoc (V.snoc v a) b)
 
-tri :: (Monad m, Unbox a) => a -> a -> a -> StateT (Vector a) m ()
-tri a b c = modify $ \v -> snoc3 v a b c
+tri :: (Monad m, Unbox a) => a -> a -> a -> VerticesT a m ()
+tri a b c = Vertices $ modify $ \v -> snoc3 v a b c
 
-bez :: (Monad m, Unbox a) => a -> a -> a -> StateT (Vector a) m ()
+bez :: (Monad m, Unbox a) => a -> a -> a -> VerticesT a m ()
 bez = tri
 
-to :: (Monad m, Unbox a) => a -> StateT (Vector a) m ()
-to = modify . flip V.snoc
+to :: (Monad m, Unbox a) => a -> VerticesT a m ()
+to = Vertices . modify . flip V.snoc
 
-segment :: (Monad m, Unbox a) => a -> a -> StateT (Vector a) m ()
+segment :: (Monad m, Unbox a) => a -> a -> VerticesT a m ()
 segment a b = to a >> to b
-
-vertices :: (Monad m, Unbox a) => StateT (Vector a) m b -> VerticesT a m b
-vertices = Vertices
 
 runVerticesT :: (Monad m, Unbox a) => VerticesT a m b -> m (Vector a)
 runVerticesT = flip execStateT V.empty . unVertices
@@ -67,30 +86,57 @@ mapRawGeometry f (RawBeziers vs) = RawBeziers $ V.map f vs
 mapRawGeometry f (RawTriangleStrip vs) = RawTriangleStrip $ V.map f vs
 mapRawGeometry f (RawTriangleFan vs) = RawTriangleFan $ V.map f vs
 mapRawGeometry f (RawLine vs) = RawLine $ V.map f vs
-
-newtype GeometryT a m b = Geometry { unGeometry :: StateT (B.Vector (RawGeometry a)) m b}
+--------------------------------------------------------------------------------
+-- A Monad for defining geometry
+--------------------------------------------------------------------------------
+newtype GeometryT a m b =
+  Geometry { unGeometry :: StateT (B.Vector (RawGeometry a)) m b}
 type Geometry a = GeometryT a Identity ()
 
-add :: Monad m => a -> StateT (B.Vector a) m ()
+instance Functor m => Functor (GeometryT a m) where
+  fmap f (Geometry s) = Geometry $ fmap f s
+
+instance Monad m => Applicative (GeometryT a m) where
+  pure = Geometry . pure
+  (Geometry f) <*> (Geometry x) = Geometry $ f <*> x
+
+instance Monad m => Monad (GeometryT a m) where
+  return = pure
+  (Geometry m) >>= f = Geometry $ m >>= unGeometry . f
+
+instance MonadTrans (GeometryT a) where
+  lift = Geometry . lift
+
+instance MonadIO m => MonadIO (GeometryT a m) where
+  liftIO = lift . liftIO
+
+add :: Monad m => RawGeometry a -> StateT (B.Vector (RawGeometry a)) m ()
 add a = modify (`B.snoc` a)
 
-triangles :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
-triangles = (RawTriangles <$>) . runVerticesT
+triangles :: (Unbox a, Monad m) => VerticesT a m () -> GeometryT a m ()
+triangles vs = Geometry $ do
+  v <- lift $ runVerticesT vs
+  add $ RawTriangles v
 
-beziers :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
-beziers = (RawBeziers <$>) . runVerticesT
+beziers :: (Monad m, Unbox a) => VerticesT a m () -> GeometryT a m ()
+beziers vs = Geometry $ do
+  v <- lift $ runVerticesT vs
+  add $ RawBeziers v
 
-strip :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
-strip = (RawTriangleStrip <$>) . runVerticesT
+strip :: (Monad m, Unbox a) => VerticesT a m () -> GeometryT a m ()
+strip vs = Geometry $ do
+  v <- lift $ runVerticesT vs
+  add $ RawTriangleStrip v
 
-fan :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
-fan = (RawTriangleFan <$>) . runVerticesT
+fan :: (Monad m, Unbox a) => VerticesT a m () -> GeometryT a m ()
+fan vs = Geometry $ do
+  v <- lift $ runVerticesT vs
+  add $ RawTriangleFan v
 
-line :: (Monad m, Unbox a) => VerticesT a m b -> m (RawGeometry a)
-line = (RawLine <$>) . runVerticesT
-
-geometry :: StateT (B.Vector (RawGeometry a)) m b -> GeometryT a m b
-geometry = Geometry
+line :: (Monad m, Unbox a) => VerticesT a m () -> GeometryT a m ()
+line vs = Geometry $ do
+  v <- lift $ runVerticesT vs
+  add $ RawLine v
 
 runGeometryT :: Monad m => GeometryT a m b -> m (B.Vector (RawGeometry a))
 runGeometryT = flip execStateT B.empty . unGeometry
@@ -122,6 +168,17 @@ data Affine a r = Translate a
                 | Scale a
                 | Rotate r
                 deriving (Show, Eq)
+
+affineToModelView :: (Num a, Real a, Floating a, Epsilon a)
+                  => Affine (V2 a) a -> M44 a
+affineToModelView (Translate v) = mat4Translate $ promoteV2 v
+affineToModelView (Scale v) = mat4Scale $ promoteV2 v
+affineToModelView (Rotate r) = mat4Rotate r (V3 0 0 1)
+
+affinesToModelview :: (Num a, Real a, Floating a, Epsilon a)
+                   => [Affine (V2 a) a] -> M44 a
+affinesToModelview = foldr' f identity
+    where f a mv = (!*! mv) $ affineToModelView a
 --------------------------------------------------------------------------------
 -- Picture Data
 --------------------------------------------------------------------------------
@@ -132,6 +189,10 @@ data PictureData texture spatial rotation vertex =
               -- ^ This picture's alpha value.
               , _picDataMultiply  :: V4 Float
               -- ^ This picture's multiply color.
+              , _picDataReplaceColor :: Maybe (V4 Float)
+              -- ^ This picture's replacement color value.
+              -- | TODO: Explain what replacement color does (hint - it lets you
+              --         change the color of text drawn with an atlas texture
               , _picDataStroke    :: [StrokeAttr]
               -- ^ The stroke attributes to use for drawing lines.
               , _picDataAffine    :: [Affine spatial rotation]
@@ -160,6 +221,75 @@ data PictureData texture spatial rotation vertex =
               }
 makeLenses ''PictureData
 --------------------------------------------------------------------------------
+-- Helpers for Common Picture Types
+--------------------------------------------------------------------------------
+emptyPictureDataV2VX :: (Unbox a, Unbox b, Real a, Floating a, Fractional a, Epsilon a)
+                     => PictureData t (V2 a) a (V2 a, b)
+emptyPictureDataV2VX =
+    PictureData { _picDataGeometry  = B.empty
+                , _picDataAffine    = []
+                , _picDataCalcBounds = calculateBoundsV2VX
+                , _picDataAlpha     = 1
+                , _picDataMultiply  = 1
+                , _picDataReplaceColor = Nothing
+                , _picDataStroke    = []
+                , _picDataToSpatial = fst
+                , _picDataBounds    = Nothing
+                , _picDataTextures  = []
+                , _picDataOptions   = []
+                , _picDataChildren  = B.empty
+                }
+
+embedPictureData :: Monoid (PictureData t s r v)
+                 => [PictureData t s r v] -> PictureData t s r v
+embedPictureData ps = mempty { _picDataChildren = B.fromList ps }
+
+bothToFrac :: (Real a, Fractional b) => (V2 a, V2 a) -> (V2 b, V2 b)
+bothToFrac= second (fmap realToFrac) . first (fmap realToFrac)
+
+calcV2VX_applyTfrm :: Num a => V4 (V4 a) -> V2 a -> V2 a
+calcV2VX_applyTfrm mv = demoteV3 . m41ToV3 . (mv !*!) . v3ToM41 . promoteV2
+{-# INLINE calcV2VX_applyTfrm #-}
+
+calcV2VX_mv :: (Real a, Floating a, Epsilon a)
+            => PictureData t (V2 a) a v -> M44 Float
+calcV2VX_mv dat = (fmap realToFrac) <$> affinesToModelview (_picDataAffine dat)
+
+calcV2VX_extractSpatial :: (Unbox a, Unbox b, Real a, Floating a, Epsilon a)
+                        => PictureData t (V2 a) a (V2 a,b) -> V.Vector (V2 Float)
+calcV2VX_extractSpatial dat =
+  let gs = _picDataGeometry dat
+      mv = calcV2VX_mv dat
+      extractAndTfrm = calcV2VX_applyTfrm mv . fmap realToFrac . fst
+      f = V.map extractAndTfrm . vertexData . (gs B.!)
+  in V.concatMap f $ V.enumFromTo 0 (B.length gs - 1)
+
+calcV2VX_kids :: (Fractional a, Real a, Unbox a, Unbox b, Floating a, Epsilon a)
+              => PictureData t (V2 a) a (V2 a, b)
+              -> (B.Vector (PictureData t (V2 a) a (V2 a, b)), V.Vector (V2 Float, V2 Float))
+calcV2VX_kids dat =
+  let (ks, kbs) = B.unzip $ B.map calculateBoundsV2VX $ _picDataChildren dat
+      kidBounds = V.map bothToFrac $ B.convert kbs
+  in (ks, kidBounds)
+
+calculateBoundsV2VX :: (Unbox a, Unbox b, Real a, Fractional a, Floating a, Epsilon a)
+                    => PictureData t (V2 a) a (V2 a, b)
+                    -> (PictureData t (V2 a) a (V2 a, b), (V2 a, V2 a))
+calculateBoundsV2VX dat =
+  let vs :: V.Vector (V2 Float)
+      vs = calcV2VX_extractSpatial dat
+      (ks, kidBounds) = calcV2VX_kids dat
+      bounds    = boundsBounds (polyBounds vs `V.cons` kidBounds)
+      boundsFin :: Fractional a => (V2 a, V2 a)
+      boundsFin = bothToFrac bounds
+  in (dat{ _picDataBounds = Just boundsFin, _picDataChildren = ks }, boundsFin)
+
+instance (Unbox a, Unbox b, Real a, Floating a, Fractional a, Epsilon a)
+  => Monoid (PictureData t (V2 a) a (V2 a, b)) where
+  mempty = emptyPictureDataV2VX
+  mappend a b = embedPictureData [a,b]
+  mconcat = embedPictureData
+--------------------------------------------------------------------------------
 -- Picture Construction
 --------------------------------------------------------------------------------
 type PictureT t s r v = StateT (PictureData t s r v)
@@ -182,11 +312,12 @@ invalidateBoundary :: Monad m =>  PictureT t s r v m ()
 invalidateBoundary = picDataBounds .= Nothing
 
 embed :: (Monad m, Monoid (PictureData t s r v))
-      => PictureT t s r v m () -> PictureT t s r v m ()
+      => PictureT t s r v m b -> PictureT t s r v m b
 embed p = do
   invalidateBoundary
-  dat <- snd <$> lift (runPictureT p)
+  (b,dat) <- lift (runPictureT p)
   picDataChildren %= (`B.snoc` dat)
+  return b
 
 overlay :: (Monad m, Monoid (PictureData t s r v))
         => PictureT t s r v m () -> PictureT t s r v m ()
@@ -203,8 +334,10 @@ setRawGeometry vs = do
 getRawGeometry :: Monad m => PictureT t s r v m (B.Vector (RawGeometry v))
 getRawGeometry = use picDataGeometry
 
-setGeometry :: Monad m => Geometry v -> PictureT t s r v m ()
-setGeometry = setRawGeometry . runGeometry
+setGeometry :: Monad m => GeometryT v m () -> PictureT t s r v m ()
+setGeometry gs = do
+  v <- lift $ runGeometryT gs
+  setRawGeometry v
 
 applyAffine :: Monad m => Affine s r -> PictureT t s r v m ()
 applyAffine f = do
@@ -237,6 +370,12 @@ getMultiply = use picDataMultiply
 
 multiply :: Monad m => V4 Float -> PictureT t s r v m ()
 multiply = (picDataMultiply %=) . (*)
+
+setReplacementColor :: Monad m => V4 Float -> PictureT t s r v m ()
+setReplacementColor = (picDataReplaceColor .=) . Just
+
+clearReplacementColor :: Monad m => PictureT t s r v m ()
+clearReplacementColor = picDataReplaceColor .= Nothing
 
 setStroke :: Monad m => [StrokeAttr] -> PictureT t s r v m ()
 setStroke = (picDataStroke .=)

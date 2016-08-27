@@ -131,6 +131,8 @@ data Uniform = UniformPrimType PrimType
              | UniformMaskTex GLuint
              | UniformAlpha Float
              | UniformMult (V4 Float)
+             | UniformShouldReplaceColor Bool
+             | UniformReplaceColor (V4 Float)
              deriving (Show, Ord, Eq)
 
 allUniforms :: [Uniform]
@@ -147,6 +149,8 @@ allUniforms = [UniformPrimType PrimTri
               ,UniformMaskTex 0
               ,UniformAlpha 1
               ,UniformMult 1
+              ,UniformShouldReplaceColor False
+              ,UniformReplaceColor 0
               ]
 
 applyAlpha :: Float -> [Uniform] -> [Uniform]
@@ -160,43 +164,49 @@ applyMult v us = UniformMult v : P.filter f us
         f _ = True
 
 glslUniformIdentifier :: Uniform -> String
-glslUniformIdentifier (UniformPrimType _)   = "primitive"
-glslUniformIdentifier (UniformProjection _) = "projection"
-glslUniformIdentifier (UniformModelView _)  = "modelview"
-glslUniformIdentifier (UniformThickness _)  = "thickness"
-glslUniformIdentifier (UniformFeather _)    = "feather"
-glslUniformIdentifier (UniformSumLength _)  = "sumlength"
-glslUniformIdentifier (UniformLineCaps _)   = "cap"
-glslUniformIdentifier (UniformHasUV _)      = "hasUV"
-glslUniformIdentifier (UniformSampler _)    = "sampler"
-glslUniformIdentifier (UniformMainTex _)    = "mainTex"
-glslUniformIdentifier (UniformMaskTex _)    = "maskTex"
-glslUniformIdentifier (UniformAlpha _)      = "alpha"
-glslUniformIdentifier (UniformMult _)       = "mult"
+glslUniformIdentifier (UniformPrimType _)           = "primitive"
+glslUniformIdentifier (UniformProjection _)         = "projection"
+glslUniformIdentifier (UniformModelView _)          = "modelview"
+glslUniformIdentifier (UniformThickness _)          = "thickness"
+glslUniformIdentifier (UniformFeather _)            = "feather"
+glslUniformIdentifier (UniformSumLength _)          = "sumlength"
+glslUniformIdentifier (UniformLineCaps _)           = "cap"
+glslUniformIdentifier (UniformHasUV _)              = "hasUV"
+glslUniformIdentifier (UniformSampler _)            = "sampler"
+glslUniformIdentifier (UniformMainTex _)            = "mainTex"
+glslUniformIdentifier (UniformMaskTex _)            = "maskTex"
+glslUniformIdentifier (UniformAlpha _)              = "alpha"
+glslUniformIdentifier (UniformMult _)               = "mult"
+glslUniformIdentifier (UniformShouldReplaceColor _) = "shouldColorReplace"
+glslUniformIdentifier (UniformReplaceColor _)       = "replaceColor"
 
-uniformsForTris :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float
+uniformsForTris :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float -> Maybe (V4 Float)
                 -> [Uniform]
-uniformsForTris pj mv hasUV a m = P.map f allUniforms
+uniformsForTris pj mv hasUV a m mr = P.map f allUniforms
   where f (UniformPrimType _) = UniformPrimType PrimTri
         f (UniformProjection _) = UniformProjection pj
         f (UniformModelView _) = UniformModelView mv
         f (UniformHasUV _) = UniformHasUV hasUV
         f (UniformAlpha _) = UniformAlpha a
         f (UniformMult _) = UniformMult m
+        f s@(UniformShouldReplaceColor _) = if isJust mr
+                                              then UniformShouldReplaceColor True
+                                              else s
+        f (UniformReplaceColor c) = UniformReplaceColor $ fromMaybe c mr
         f x = x
 {-# INLINE uniformsForTris #-}
 
-uniformsForBezs :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float
+uniformsForBezs :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float -> Maybe (V4 Float)
                 -> [Uniform]
-uniformsForBezs pj mv hasUV a m = P.map f $ uniformsForTris pj mv hasUV a m
+uniformsForBezs pj mv hasUV a m mr = P.map f $ uniformsForTris pj mv hasUV a m mr
   where f (UniformPrimType _) = UniformPrimType PrimBez
         f x = x
 {-# INLINE uniformsForBezs #-}
 
-uniformsForLines :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float
+uniformsForLines :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float -> Maybe (V4 Float)
                  -> Float -> Float -> Float -> (LineCap,LineCap) -> [Uniform]
-uniformsForLines pj mv hasUV a m thickness feather sumlength caps =
-  P.map f $ uniformsForTris pj mv hasUV a m
+uniformsForLines pj mv hasUV a m mr thickness feather sumlength caps =
+  P.map f $ uniformsForTris pj mv hasUV a m mr
     where f (UniformPrimType _) = UniformPrimType PrimLine
           f (UniformThickness _) = UniformThickness thickness
           f (UniformFeather _) = UniformFeather feather
@@ -207,7 +217,7 @@ uniformsForLines pj mv hasUV a m thickness feather sumlength caps =
 
 uniformsForMask :: M44 Float -> M44 Float -> Float -> V4 Float -> GLuint -> GLuint
                 -> [Uniform]
-uniformsForMask pj mv a m main mask = P.map f $ uniformsForTris pj mv True a m
+uniformsForMask pj mv a m main mask = P.map f $ uniformsForTris pj mv True a m Nothing
   where f (UniformPrimType _) = UniformPrimType PrimMask
         f (UniformMainTex _) = UniformMainTex main
         f (UniformMaskTex _) = UniformMaskTex mask
@@ -216,24 +226,24 @@ uniformsForMask pj mv a m main mask = P.map f $ uniformsForTris pj mv True a m
 
 -- | Updates uniforms for rendering triangles.
 updateUniformsForTris :: Shader -> M44 Float -> M44 Float -> Bool -> Float
-                      -> V4 Float -> IO ()
-updateUniformsForTris sh pj mv hasUV a m =
-  updateUniforms (uniformsForTris pj mv hasUV a m) sh
+                      -> V4 Float -> Maybe (V4 Float) -> IO ()
+updateUniformsForTris sh pj mv hasUV a m mr =
+  updateUniforms (uniformsForTris pj mv hasUV a m mr) sh
 {-# INLINE updateUniformsForTris #-}
 
 -- | Updates uniforms for rendering loop-blinn beziers.
 updateUniformsForBezs :: Shader -> M44 Float -> M44 Float -> Bool -> Float
-                      -> V4 Float -> IO ()
-updateUniformsForBezs sh pj mv hasUV a m =
-  updateUniforms (uniformsForBezs pj mv hasUV a m) sh
+                      -> V4 Float -> Maybe (V4 Float) -> IO ()
+updateUniformsForBezs sh pj mv hasUV a m mr =
+  updateUniforms (uniformsForBezs pj mv hasUV a m mr) sh
 {-# INLINE updateUniformsForBezs #-}
 
 -- | Updates uniforms for rendering projected polylines.
 updateUniformsForLines :: Shader -> M44 Float -> M44 Float -> Bool -> Float
-                       -> V4 Float -> Float -> Float -> Float
+                       -> V4 Float -> Maybe (V4 Float) -> Float -> Float -> Float
                        -> (LineCap,LineCap) -> IO ()
-updateUniformsForLines sh pj mv hasUV a m thickness feather sumlength caps =
-  let us = uniformsForLines pj mv hasUV a m thickness feather sumlength caps
+updateUniformsForLines sh pj mv hasUV a m mr thickness feather sumlength caps =
+  let us = uniformsForLines pj mv hasUV a m mr thickness feather sumlength caps
   in updateUniforms us sh
 {-# INLINE updateUniformsForLines #-}
 
@@ -273,6 +283,10 @@ uniformUpdateFunc (UniformMaskTex t) u = glUniform1i u $ fromIntegral t
 uniformUpdateFunc (UniformAlpha a) u = glUniform1f u $ realToFrac a
 uniformUpdateFunc (UniformMult v) u =
   let (V4 r g b a) = realToFrac <$> v in glUniform4f u r g b a
+uniformUpdateFunc (UniformShouldReplaceColor s) u =
+  glUniform1i u $ if s then 1 else 0
+uniformUpdateFunc (UniformReplaceColor c) u =
+  let (V4 r g b a) = realToFrac <$> c in glUniform4f u r g b a
 {-# INLINE uniformUpdateFunc #-}
 
 withUniform :: String -> Shader -> (GLuint -> GLint -> IO ()) -> IO ()

@@ -8,7 +8,6 @@ module Gelatin.Picture (
   , bez
   , to
   , segment
-  , vertices
   , mapVertices
   -- * Making shapes
   , module S
@@ -19,13 +18,11 @@ module Gelatin.Picture (
   , runGeometryT
   , Geometry
   , runGeometry
-  , add
   , triangles
   , beziers
   , strip
   , fan
   , line
-  , geometry
   , mapGeometry
   -- * The Picture API
   , PictureT
@@ -46,6 +43,8 @@ module Gelatin.Picture (
   , setMultiply
   , getMultiply
   , multiply
+  , setReplacementColor
+  , clearReplacementColor
   , setStroke
   , getStroke
   , setTextures
