@@ -1,6 +1,7 @@
 name:                gelatin-freetype2
 version:             0.0.0.1
-synopsis:            Initial project template from stack
+synopsis:            FreeType2 based text rendering for the gelatin realtime
+                     rendering system.
 description:         Please see README.md
 homepage:            https://github.com/schell/gelatin/gelatin-freetype2#readme
 license:             BSD3
@@ -30,25 +31,25 @@ library
 
   default-language:    Haskell2010
 
-executable gelatin-freetype2-exe
-  hs-source-dirs:      app
-  main-is:             Main.hs
-  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
-  build-depends:       base
-                     , gelatin
-                     , gelatin-freetype2
-                     , gelatin-sdl2
-                     , gelatin-gl
-                     , freetype2
-                     , sdl2
-                     , halive
-                     , transformers
-                     , mtl
-                     , containers
-                     , pretty-show
-                     , vector
-
-  default-language:    Haskell2010
+--executable gelatin-freetype2-exe
+--  hs-source-dirs:      app
+--  main-is:             Main.hs
+--  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
+--  build-depends:       base
+--                     , gelatin
+--                     , gelatin-freetype2
+--                     , gelatin-sdl2
+--                     , gelatin-gl
+--                     , freetype2
+--                     , sdl2
+--                     , halive
+--                     , transformers
+--                     , mtl
+--                     , containers
+--                     , pretty-show
+--                     , vector
+--
+--  default-language:    Haskell2010
 
 test-suite gelatin-freetype2-test
   type:                exitcode-stdio-1.0
