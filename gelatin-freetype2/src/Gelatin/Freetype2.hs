@@ -7,6 +7,7 @@ module Gelatin.FreeType2
   , freeAtlas
   , withAtlas
   , freetypePicture
+  , asciiChars
   ) where
 
 import Gelatin.FreeType2.Internal

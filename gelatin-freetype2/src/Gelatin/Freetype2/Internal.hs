@@ -202,6 +202,9 @@ makeCharQuad Atlas{..} useKerning (penx, mLast) char = do
 
       return (px + ax, mndx)
 
+asciiChars :: String
+asciiChars = map toEnum [32..126]
+
 stringTris :: MonadIO m => Atlas -> Bool -> String -> VerticesT (V2 Float, V2 Float) m ()
 stringTris atlas useKerning =
   foldM_ (makeCharQuad atlas useKerning) (0, Nothing)

@@ -73,6 +73,7 @@ outlinedTextPicture font = do
 --------------------------------------------------------------------------------
 freetype2Picture :: FilePath -> TexturePictureT IO ()
 freetype2Picture font = do
+  -- The characters to load for our text altlas (dupes are nubbed)
   let chars = "FreetypePictureswithkerning2,! "
   void $ withAtlas font (PixelSize 100 100) chars $ \atlas -> do
     embed $ freetypePicture atlas orange "Freetype2 Pictures,"
