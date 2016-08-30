@@ -22,6 +22,7 @@ executable gelatin-example
                      , gelatin
                      , gelatin-sdl2
                      , gelatin-fruity
+                     , gelatin-freetype2
                      , sdl2
                      , halive
                      , FontyFruity

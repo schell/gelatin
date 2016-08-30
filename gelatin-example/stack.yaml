@@ -41,6 +41,7 @@ packages:
 - ../gelatin-gl
 - ../gelatin-sdl2
 - ../gelatin-fruity
+- ../gelatin-freetype2
 - ../../sdl2
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
@@ -51,6 +52,7 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - halive-0.1.0.7
+- freetype2-0.1.1
 
 # Override default flag values for local packages and extra-deps
 flags: {}

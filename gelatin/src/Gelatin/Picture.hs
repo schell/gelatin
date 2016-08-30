@@ -30,6 +30,7 @@ module Gelatin.Picture (
   , Picture
   , runPicture
   , embed
+  , embedAt
   , overlay
   , setRawGeometry
   , getRawGeometry
@@ -68,6 +69,10 @@ module Gelatin.Picture (
   -- * Underlying PictureData Exported for renderers
   , RenderingOption(..)
   , PictureData(..)
+  -- * Affine transformation helpers
+  , Affine(..)
+  , affineToModelview
+  , affinesToModelview
 ) where
 
 import Gelatin.Picture.Internal

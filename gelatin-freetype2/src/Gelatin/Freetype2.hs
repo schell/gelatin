@@ -1,5 +1,7 @@
 module Gelatin.FreeType2
   ( GlyphSize(..)
+  , glyphWidth
+  , glyphHeight
   , Atlas(..)
   , allocAtlas
   , freeAtlas

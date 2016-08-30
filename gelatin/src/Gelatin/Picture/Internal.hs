@@ -169,16 +169,16 @@ data Affine a r = Translate a
                 | Rotate r
                 deriving (Show, Eq)
 
-affineToModelView :: (Num a, Real a, Floating a, Epsilon a)
+affineToModelview :: (Num a, Real a, Floating a, Epsilon a)
                   => Affine (V2 a) a -> M44 a
-affineToModelView (Translate v) = mat4Translate $ promoteV2 v
-affineToModelView (Scale v) = mat4Scale $ promoteV2 v
-affineToModelView (Rotate r) = mat4Rotate r (V3 0 0 1)
+affineToModelview (Translate v) = mat4Translate $ promoteV2 v
+affineToModelview (Scale v) = mat4Scale $ promoteV2 v
+affineToModelview (Rotate r) = mat4Rotate r (V3 0 0 1)
 
 affinesToModelview :: (Num a, Real a, Floating a, Epsilon a)
                    => [Affine (V2 a) a] -> M44 a
 affinesToModelview = foldr' f identity
-    where f a mv = (!*! mv) $ affineToModelView a
+    where f a mv = (!*! mv) $ affineToModelview a
 --------------------------------------------------------------------------------
 -- Picture Data
 --------------------------------------------------------------------------------
@@ -317,6 +317,17 @@ embed p = do
   invalidateBoundary
   (b,dat) <- lift (runPictureT p)
   picDataChildren %= (`B.snoc` dat)
+  return b
+
+embedAt :: (Monad m, Monoid (PictureData t s r v))
+          => Int -> PictureT t s r v m b -> PictureT t s r v m b
+embedAt k p = do
+  invalidateBoundary
+  (b,dat)  <- lift (runPictureT p)
+  cs <- use picDataChildren
+  let xs = B.take k cs
+      ys = B.cons dat $ B.drop k cs
+  picDataChildren .= (xs B.++ ys)
   return b
 
 overlay :: (Monad m, Monoid (PictureData t s r v))
