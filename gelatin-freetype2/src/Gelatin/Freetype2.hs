@@ -3,6 +3,7 @@ module Gelatin.FreeType2
   , glyphWidth
   , glyphHeight
   , Atlas(..)
+  , GlyphMetrics(..)
   , allocAtlas
   , freeAtlas
   , withAtlas

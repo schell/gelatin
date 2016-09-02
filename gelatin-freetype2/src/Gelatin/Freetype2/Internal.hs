@@ -13,6 +13,7 @@ import           Graphics.Rendering.FreeType.Internal.Bitmap as BM
 
 data GlyphSize = CharSize Float Float Int Int
                | PixelSize Int Int
+               deriving (Show, Eq)
 
 glyphWidth :: GlyphSize -> Float
 glyphWidth (CharSize x y _ _) = if x == 0 then y else x
@@ -36,10 +37,11 @@ data Atlas = Atlas { atlasTexture     :: GLuint
                    , atlasLibrary     :: FT_Library
                    , atlasFontFace    :: FT_Face
                    , atlasMetrics     :: IntMap GlyphMetrics
+                   , atlasGlyphSize   :: GlyphSize
                    } deriving (Show, Eq)
 
 emptyAtlas :: FT_Library -> FT_Face -> GLuint -> Atlas
-emptyAtlas lib face t = Atlas t 0 lib face mempty
+emptyAtlas lib face t = Atlas t 0 lib face mempty (PixelSize 0 0)
 
 data AtlasMeasure = AM { amWH :: V2 Int
                        , amXY :: V2 Int
@@ -151,7 +153,10 @@ allocAtlas fontFilePath gs str = do
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER GL_LINEAR
     glBindTexture GL_TEXTURE_2D 0
     glPixelStorei GL_UNPACK_ALIGNMENT 4
-    return atlas{ atlasTextureSize = V2 w h }
+    return
+      atlas{ atlasTextureSize = V2 w h
+           , atlasGlyphSize = gs
+           }
   case e of
     Left err -> liftIO (print err) >> return Nothing
     Right (atlas,_) -> return $ Just atlas
