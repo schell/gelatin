@@ -47,7 +47,7 @@ unloadMissingWords atlas str = do
 --------------------------------------------------------------------------------
 data GlyphSize = CharSize Float Float Int Int
                | PixelSize Int Int
-               deriving (Show, Eq)
+               deriving (Show, Eq, Ord)
 
 glyphWidth :: GlyphSize -> Float
 glyphWidth (CharSize x y _ _) = if x == 0 then y else x
