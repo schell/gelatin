@@ -3,14 +3,48 @@
 module Gelatin.FreeType2.Internal where
 import           Gelatin.GL
 import           Gelatin.FreeType2.Utils
+import           Gelatin.Picture.Internal
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.State.Strict
+import           Data.Maybe (fromMaybe)
 import           Data.IntMap (IntMap)
 import qualified Data.IntMap as IM
+import           Data.Map (Map)
+import qualified Data.Map as M
 import           Graphics.Rendering.FreeType.Internal.GlyphMetrics as GM
 import           Graphics.Rendering.FreeType.Internal.Bitmap as BM
+--------------------------------------------------------------------------------
+-- WordMap
+--------------------------------------------------------------------------------
+type WordMap = Map String (V2 Float, GLRenderer)
 
+loadWords :: MonadIO m
+          => Rez -> Atlas -> String -> m Atlas
+loadWords rz atlas str = do
+  wm <- liftIO $ foldM loadWord (atlasWordMap atlas) $ words str
+  return atlas{atlasWordMap=wm}
+  where loadWord wm word
+          | Just _ <- M.lookup word wm = return wm
+          | otherwise = do
+            let pic = do freetypePicture atlas red word
+                         pictureSize
+            (sz,dat) <- runPictureT pic
+            r  <- compileTexturePictureData rz dat
+            return $ M.insert word (sz,r) wm
+
+unloadMissingWords :: MonadIO m => Atlas -> String -> m Atlas
+unloadMissingWords atlas str = do
+  let wm = atlasWordMap atlas
+      ws = M.fromList $ zip (words str) [(0::Int)..]
+      missing = M.difference wm ws
+      retain  = M.difference wm missing
+      dealoc  = (liftIO . fst . snd) <$> missing
+  sequence_ dealoc
+  return atlas{atlasWordMap=retain}
+--------------------------------------------------------------------------------
+-- Glyph
+--------------------------------------------------------------------------------
 data GlyphSize = CharSize Float Float Int Int
                | PixelSize Int Int
                deriving (Show, Eq)
@@ -31,17 +65,20 @@ data GlyphMetrics = GlyphMetrics { glyphTexBB       :: (V2 Int, V2 Int)
                                  , glyphVertBearing :: V2 Int
                                  , glyphAdvance     :: V2 Int
                                  } deriving (Show, Eq)
-
+--------------------------------------------------------------------------------
+-- Atlas
+--------------------------------------------------------------------------------
 data Atlas = Atlas { atlasTexture     :: GLuint
                    , atlasTextureSize :: V2 Int
                    , atlasLibrary     :: FT_Library
                    , atlasFontFace    :: FT_Face
                    , atlasMetrics     :: IntMap GlyphMetrics
                    , atlasGlyphSize   :: GlyphSize
-                   } deriving (Show, Eq)
+                   , atlasWordMap     :: WordMap
+                   }
 
 emptyAtlas :: FT_Library -> FT_Face -> GLuint -> Atlas
-emptyAtlas lib face t = Atlas t 0 lib face mempty (PixelSize 0 0)
+emptyAtlas lib face t = Atlas t 0 lib face mempty (PixelSize 0 0) mempty
 
 data AtlasMeasure = AM { amWH :: V2 Int
                        , amXY :: V2 Int
@@ -162,8 +199,9 @@ allocAtlas fontFilePath gs str = do
     Right (atlas,_) -> return $ Just atlas
 
 freeAtlas :: MonadIO m => Atlas -> m ()
-freeAtlas Atlas{..} = do
-  _ <- liftIO $ ft_Done_FreeType atlasLibrary
+freeAtlas a = do
+  _ <- liftIO $ ft_Done_FreeType (atlasLibrary a)
+  _ <- liftIO $ unloadMissingWords a ""
   return ()
 
 withAtlas :: MonadIO m => FilePath -> GlyphSize -> String -> (Atlas -> m a) -> m (Maybe a)
@@ -213,11 +251,69 @@ asciiChars = map toEnum [32..126]
 stringTris :: MonadIO m => Atlas -> Bool -> String -> VerticesT (V2 Float, V2 Float) m ()
 stringTris atlas useKerning =
   foldM_ (makeCharQuad atlas useKerning) (0, Nothing)
-
-freetypePicture :: MonadIO m => Atlas -> V4 Float -> String -> TexturePictureT m ()
-freetypePicture atlas@Atlas{..} color str = do
+--------------------------------------------------------------------------------
+-- Picture
+--------------------------------------------------------------------------------
+-- | Constructs a @PictureT GLuint (V2 Float) (V2 Float, V2 Float) m ()@
+-- in all red. Colorization can then be done using @setReplacementColor@
+freetypePictureNoColor :: MonadIO m => Atlas -> String -> TexturePictureT m ()
+freetypePictureNoColor atlas@Atlas{..} str = do
   eKerning <- withFreeType (Just atlasLibrary) $ hasKerning atlasFontFace
   setTextures [atlasTexture]
   let useKerning = either (const False) id eKerning
   setGeometry $ triangles $ stringTris atlas useKerning str
+-- | Constructs a @PictureT GLuint (V2 Float) (V2 Float, V2 Float) m ()@ using
+-- the given colored string.
+freetypePicture :: MonadIO m
+                => Atlas -> V4 Float -> String -> TexturePictureT m ()
+freetypePicture atlas color str = do
+  freetypePictureNoColor atlas str
   setReplacementColor color
+--------------------------------------------------------------------------------
+-- Performance Rendering
+--------------------------------------------------------------------------------
+-- | Constructs a @GLRenderer@ from the given colored string. Skipping the step
+-- given by @freetypePicture@ allows the atlas' WordMap to be used to construct
+-- the string, which greatly improves performance, allowing longer strings to be
+-- compiled and renderered in real time.
+-- Note that since resources are stored in the atlas' WordMap the returned
+-- renderer contains a clean up operation that does nothing. It is expected that
+-- you manage the resources manually through the atlas.
+freetypeGLRenderer :: MonadIO m
+                   => Rez -> Atlas -> V4 Float -> String
+                   -> m (GLRenderer, V2 Float, Atlas)
+freetypeGLRenderer rz atlas0 color str = do
+  atlas <- loadWords rz atlas0 str
+  let glyphw  = glyphWidth $ atlasGlyphSize atlas
+      spacew  = fromMaybe glyphw $ do
+        metrics <- IM.lookup (fromEnum ' ') $ atlasMetrics atlas
+        let V2 x _ = glyphAdvance metrics
+        return $ fromIntegral x
+      glyphh = glyphHeight $ atlasGlyphSize atlas
+      renderWord :: PictureTransform -> Float -> String -> IO ()
+      renderWord _ _ ""       = return ()
+      renderWord t x (' ':cs) = renderWord t (x + spacew) cs
+      renderWord t x cs       = do
+        let word = takeWhile (/= ' ') cs
+            rest = drop (length word) cs
+        case M.lookup word (atlasWordMap atlas) of
+          Nothing          -> renderWord t x rest
+          Just (V2 w _, r) -> do
+            let tt = mempty
+                       {ptfrmMV = affineToModelview $ Translate $ V2 x 0
+                       ,ptfrmReplace = Just color
+                       }
+            snd r $ t `mappend` tt
+            renderWord t (x + w) rest
+      rr t = renderWord t 0 str
+      measureWord x ""       = x
+      measureWord x (' ':cs) = measureWord (x + spacew) cs
+      measureWord x cs       =
+        let word = takeWhile (/= ' ') cs
+            rest = drop (length word) cs
+            n    = case M.lookup word (atlasWordMap atlas) of
+                     Nothing          -> x
+                     Just (V2 w _, _) -> x + w
+        in measureWord n rest
+      ww = measureWord 0 str
+  return ((return (), rr), V2 ww glyphh, atlas)

@@ -3,11 +3,15 @@ module Gelatin.FreeType2
   , glyphWidth
   , glyphHeight
   , Atlas(..)
+  , loadWords
+  , unloadMissingWords
   , GlyphMetrics(..)
   , allocAtlas
   , freeAtlas
   , withAtlas
+  , freetypePictureNoColor
   , freetypePicture
+  , freetypeGLRenderer
   , asciiChars
   ) where
 
