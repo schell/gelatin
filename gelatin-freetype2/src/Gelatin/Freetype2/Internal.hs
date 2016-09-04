@@ -75,10 +75,11 @@ data Atlas = Atlas { atlasTexture     :: GLuint
                    , atlasMetrics     :: IntMap GlyphMetrics
                    , atlasGlyphSize   :: GlyphSize
                    , atlasWordMap     :: WordMap
+                   , atlasFilePath    :: FilePath
                    }
 
 emptyAtlas :: FT_Library -> FT_Face -> GLuint -> Atlas
-emptyAtlas lib face t = Atlas t 0 lib face mempty (PixelSize 0 0) mempty
+emptyAtlas lib face t = Atlas t 0 lib face mempty (PixelSize 0 0) mempty ""
 
 data AtlasMeasure = AM { amWH :: V2 Int
                        , amXY :: V2 Int
@@ -193,6 +194,7 @@ allocAtlas fontFilePath gs str = do
     return
       atlas{ atlasTextureSize = V2 w h
            , atlasGlyphSize = gs
+           , atlasFilePath = fontFilePath
            }
   case e of
     Left err -> liftIO (print err) >> return Nothing
