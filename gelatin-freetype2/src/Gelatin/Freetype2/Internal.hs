@@ -305,7 +305,7 @@ freetypeGLRenderer rz atlas0 color str = do
                        {ptfrmMV = affineToModelview $ Translate $ V2 x 0
                        ,ptfrmReplace = Just color
                        }
-            snd r $ t `mappend` tt
+            snd r $ tt `mappend` t
             renderWord t (x + w) rest
       rr t = renderWord t 0 str
       measureWord x ""       = x
