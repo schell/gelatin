@@ -266,6 +266,7 @@ textureRenderer win sh mode vs uvs =
   let num = fromIntegral $ V.length vs
       renderFunction t = do
         let (mv,a,m,mr) = unwrapTransform t
+        print mr
         pj <- orthoContextProjection win
         updateUniformsForTris (unShader sh) pj mv True a m mr
         drawBuffer (shProgram $ unShader sh) vao mode num
