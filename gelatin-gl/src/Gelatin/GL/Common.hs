@@ -19,7 +19,7 @@ instance Monoid PictureTransform where
   mempty = PictureTransform identity 1 1 Nothing
   mappend (PictureTransform amv aa am ar)
           (PictureTransform bmv ba bm br) =
-    PictureTransform (amv !*! bmv) (aa * ba) (am * bm) (msum br ar)
+    PictureTransform (amv !*! bmv) (aa * ba) (am * bm) (msum [br, ar])
 
 orthoContextProjection :: Context -> IO (M44 Float)
 orthoContextProjection window = do
