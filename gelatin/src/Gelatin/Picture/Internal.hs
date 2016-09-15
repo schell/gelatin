@@ -60,6 +60,11 @@ to = Vertices . modify . flip V.snoc
 segment :: (Monad m, Unbox a) => a -> a -> VerticesT a m ()
 segment a b = to a >> to b
 
+addVertexList :: (Monad m, Unbox a) => [a] -> VerticesT a m ()
+addVertexList ys = Vertices $ do
+  xs <- get
+  put $ xs V.++ (V.fromList ys)
+
 runVerticesT :: (Monad m, Unbox a) => VerticesT a m b -> m (Vector a)
 runVerticesT = flip execStateT V.empty . unVertices
 
@@ -162,24 +167,6 @@ vertexData (RawLine vs)          = vs
 --------------------------------------------------------------------------------
 data RenderingOption = StencilMaskOption
 --------------------------------------------------------------------------------
--- Affine Transformation
---------------------------------------------------------------------------------
-data Affine a r = Translate a
-                | Scale a
-                | Rotate r
-                deriving (Show, Eq)
-
-affineToModelview :: (Num a, Real a, Floating a, Epsilon a)
-                  => Affine (V2 a) a -> M44 a
-affineToModelview (Translate v) = mat4Translate $ promoteV2 v
-affineToModelview (Scale v) = mat4Scale $ promoteV2 v
-affineToModelview (Rotate r) = mat4Rotate r (V3 0 0 1)
-
-affinesToModelview :: (Num a, Real a, Floating a, Epsilon a)
-                   => [Affine (V2 a) a] -> M44 a
-affinesToModelview = foldr' f identity
-    where f a mv = (!*! mv) $ affineToModelview a
---------------------------------------------------------------------------------
 -- Picture Data
 --------------------------------------------------------------------------------
 data PictureData texture spatial rotation vertex =
@@ -223,7 +210,7 @@ makeLenses ''PictureData
 --------------------------------------------------------------------------------
 -- Helpers for Common Picture Types
 --------------------------------------------------------------------------------
-emptyPictureDataV2VX :: (Unbox a, Unbox b, Real a, Floating a, Fractional a, Epsilon a)
+emptyPictureDataV2VX :: (Unbox a, Unbox b, RealFrac a, Floating a, Epsilon a)
                      => PictureData t (V2 a) a (V2 a, b)
 emptyPictureDataV2VX =
     PictureData { _picDataGeometry  = B.empty
@@ -253,7 +240,7 @@ calcV2VX_applyTfrm mv = demoteV3 . m41ToV3 . (mv !*!) . v3ToM41 . promoteV2
 
 calcV2VX_mv :: (Real a, Floating a, Epsilon a)
             => PictureData t (V2 a) a v -> M44 Float
-calcV2VX_mv dat = (fmap realToFrac) <$> affinesToModelview (_picDataAffine dat)
+calcV2VX_mv dat = (fmap realToFrac) <$> affine2sModelview (_picDataAffine dat)
 
 calcV2VX_extractSpatial :: (Unbox a, Unbox b, Real a, Floating a, Epsilon a)
                         => PictureData t (V2 a) a (V2 a,b) -> V.Vector (V2 Float)
@@ -264,15 +251,17 @@ calcV2VX_extractSpatial dat =
       f = V.map extractAndTfrm . vertexData . (gs B.!)
   in V.concatMap f $ V.enumFromTo 0 (B.length gs - 1)
 
-calcV2VX_kids :: (Fractional a, Real a, Unbox a, Unbox b, Floating a, Epsilon a)
+calcV2VX_kids :: (RealFrac a, Unbox a, Unbox b, Floating a, Epsilon a)
               => PictureData t (V2 a) a (V2 a, b)
-              -> (B.Vector (PictureData t (V2 a) a (V2 a, b)), V.Vector (V2 Float, V2 Float))
+              -> ( B.Vector (PictureData t (V2 a) a (V2 a, b))
+                 , V.Vector (V2 Float, V2 Float)
+                 )
 calcV2VX_kids dat =
   let (ks, kbs) = B.unzip $ B.map calculateBoundsV2VX $ _picDataChildren dat
       kidBounds = V.map bothToFrac $ B.convert kbs
   in (ks, kidBounds)
 
-calculateBoundsV2VX :: (Unbox a, Unbox b, Real a, Fractional a, Floating a, Epsilon a)
+calculateBoundsV2VX :: (Unbox a, Unbox b, RealFrac a, Floating a, Epsilon a)
                     => PictureData t (V2 a) a (V2 a, b)
                     -> (PictureData t (V2 a) a (V2 a, b), (V2 a, V2 a))
 calculateBoundsV2VX dat =
@@ -284,7 +273,7 @@ calculateBoundsV2VX dat =
       boundsFin = bothToFrac bounds
   in (dat{ _picDataBounds = Just boundsFin, _picDataChildren = ks }, boundsFin)
 
-instance (Unbox a, Unbox b, Real a, Floating a, Fractional a, Epsilon a)
+instance (Unbox a, Unbox b, RealFrac a, Floating a, Epsilon a)
   => Monoid (PictureData t (V2 a) a (V2 a, b)) where
   mempty = emptyPictureDataV2VX
   mappend a b = embedPictureData [a,b]

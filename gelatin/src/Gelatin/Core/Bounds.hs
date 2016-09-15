@@ -32,12 +32,9 @@ boundsBounds bs = polyBounds $
     where f :: Vector (V2 Float) -> (V2 Float, V2 Float) -> Vector (V2 Float)
           f vs (v1,v2) = vs `V.snoc` v1 `V.snoc` v2
 
---instance Transformable Transform (V2 Float, V2 Float) where
---  transform t (a,b) = (transform t a, transform t b)
-
 pointInBounds :: V2 Float -> BBox -> Bool
 pointInBounds (V2 px py) (V2 minx miny, V2 maxx maxy) =
   (px >= minx && px <= maxx) && (py >= miny && py <= maxy)
 
-applyTfrmToBounds :: Transform -> BBox -> BBox
+applyTfrmToBounds :: M44 Float -> BBox -> BBox
 applyTfrmToBounds t (tl,br) = pointsBounds [transformV2 t tl, transformV2 t br]

@@ -18,7 +18,6 @@ module Gelatin.Core.Bezier (
     fmapCubicBezier,
     triangleArea,
     -- * Conversion
-    bezToPath,
     bezToBez3,
     bez3ToBez,
     bez3ToBezInner,
@@ -45,11 +44,9 @@ module Gelatin.Core.Bezier (
 ) where
 
 import           Gelatin.Core.Transform
-import           Gelatin.Core.Path
 import           Linear
 import qualified Data.Vector.Unboxed as V
 import           Data.Vector.Unboxed (Vector, Unbox)
-
 
 type Bezier a = (Bool, a, a, a)
 
@@ -66,14 +63,16 @@ fmapQuadraticBezier f (a, b, c) = (f a, f b, f c)
 fmapCubicBezier :: (a -> b) -> CubicBezier a -> CubicBezier b
 fmapCubicBezier f (a, b, c, d) = (f a, f b, f c, f d)
 
-instance Transformable Transform a => Transformable Transform (Bezier a) where
-    transform = fmapBezier . transform
+transformBezier :: Num a => M44 a -> Bezier (V2 a) -> Bezier (V2 a)
+transformBezier = fmapBezier . transformV2
 
-instance Transformable Transform a => Transformable Transform (QuadraticBezier a) where
-    transform = fmapQuadraticBezier . transform
+transformQuadraticBezier :: Num a => M44 a -> QuadraticBezier (V2 a)
+                         -> QuadraticBezier (V2 a)
+transformQuadraticBezier = fmapQuadraticBezier . transformV2
 
-instance Transformable Transform a => Transformable Transform (CubicBezier a) where
-    transform = fmapCubicBezier . transform
+transformCubicBezier :: Num a => M44 a -> CubicBezier (V2 a)
+                     -> CubicBezier (V2 a)
+transformCubicBezier = fmapCubicBezier . transformV2
 
 -- | Create a bezier primitive. The area of the triangle formed by the
 -- bezier's three points will be used to determine the orientation.
@@ -84,8 +83,8 @@ triangleArea :: Num a => V2 a -> V2 a -> V2 a -> a
 triangleArea (V2 x2 y2) (V2 x0 y0) (V2 x1 y1) =
         (x1-x0)*(y2-y0)-(x2-x0)*(y1-y0)
 
-bezToPath :: (RealFloat a, Unbox a) => Bezier (V2 a) -> Path (V2 a)
-bezToPath = Path . subdivideAdaptive 100 0 . bezToBez3
+--bezToPath :: (RealFloat a, Unbox a) => Bezier (V2 a) -> Path (V2 a)
+--bezToPath = Path . subdivideAdaptive 100 0 . bezToBez3
 
 -- | Create a quadratic bezier. This is an alias of 'QuadraticBezier'.
 bez3 :: V2 a -> V2 a -> V2 a -> QuadraticBezier (V2 a)
@@ -218,11 +217,6 @@ cleanSeqDupes vs
   | V.length vs > 1 = vs1 `V.snoc` V.last vs
   | otherwise = vs
   where vs1 = V.map fst $ V.filter (uncurry (/=)) $ V.zip vs (V.drop 1 vs)
---cleanSeqDupes = snd . V.foldl' f (Nothing, V.empty)
---  where f (Nothing,vs) b = (Just b, vs `V.snoc` b)
---        f (Just a, vs) b = if a == b
---                             then (Just a, vs)
---                             else (Just b, vs `V.snoc` b)
 
 subdivide :: (RealFloat a, Unbox a)
           => a -> a -> Int -> V2 a -> V2 a -> V2 a -> Vector (V2 a)
@@ -322,7 +316,8 @@ curveEpsilon = 0.00001
 -- | Create a list of cubic beziers representing an arc along an ellipse with
 -- width `w`, height `h` and total angle `stop - start` radians, beginning
 -- `start` radians above the x-axis.
-arcBez4,arc' :: RealFloat a => a -> a -> a -> a -> [CubicBezier (V2 a)]
+arcBez4,arc' :: (Epsilon a, RealFloat a)
+             => a -> a -> a -> a -> [CubicBezier (V2 a)]
 arcBez4 w h start stop = if stop - start >= 2*pi
                      then close $ arc' w h start (start + 2*pi)
                      else arc' w h start stop
@@ -335,18 +330,18 @@ arc' w h start stop
     | (stop - start) > curveEpsilon = a : arcBez4 w h (start + arcToDraw) stop
     | otherwise = []
         where arcToDraw = min (stop - start) (pi/2)
-              s = realToFrac <$> V2 w h
-              a = transform (Transform 0 s 0) $ acuteArc start arcToDraw
+              mv = affine2Modelview $ Scale (realToFrac <$> V2 w h)
+              a = transformCubicBezier mv $ acuteArc start arcToDraw
 
-arcBez3 :: (RealFloat a, Unbox a)
+arcBez3 :: (Epsilon a, RealFloat a, Unbox a)
         => a -> a -> a -> a -> Vector (QuadraticBezier (V2 a))
 arcBez3 w h start stop = V.concat $ map demoteCubic $ arcBez4 w h start stop
 
 -- | Create a list of cubic beziers that represent an entire closed
 -- ellipse.
-ellipseBez4 :: RealFloat a => a -> a -> [CubicBezier (V2 a)]
+ellipseBez4 :: (Epsilon a, RealFloat a) => a -> a -> [CubicBezier (V2 a)]
 ellipseBez4 xr yr = arcBez4 xr yr 0 (2*pi)
 
-ellipseBez3 :: (RealFloat a, Unbox a)
+ellipseBez3 :: (Epsilon a, RealFloat a, Unbox a)
             => a -> a -> Vector (QuadraticBezier (V2 a))
 ellipseBez3 xr yr = V.concat $ map demoteCubic $ ellipseBez4 xr yr

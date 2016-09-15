@@ -5,7 +5,7 @@
 module Gelatin.Core.Triangle where
 
 import           Gelatin.Core.Bounds
-import           Gelatin.Core.Path
+import           Gelatin.Core.Utils
 import           Gelatin.Core.Bezier
 import           Linear
 import qualified Data.Vector.Unboxed as V
@@ -22,8 +22,8 @@ triPoints (a,b,c) = V.fromList [a, b, c]
 bezToTri :: Bezier a -> Triangle a
 bezToTri (_,a,b,c) = (a,b,c)
 
-triToPath :: Unbox a => Triangle a -> Path a
-triToPath (a,b,c) = Path $ V.fromList [a,b,c]
+triToPath :: Unbox a => Triangle a -> Vector a
+triToPath (a,b,c) = V.fromList [a,b,c]
 
 fmapTriangle :: (t -> t1) -> (t, t, t) -> (t1, t1, t1)
 fmapTriangle f (a,b,c) = (f a, f b, f c)
@@ -33,7 +33,7 @@ triBounds (a,b,c) = polyBounds $ V.fromList [a,b,c]
 --------------------------------------------------------------------------------
 -- Decomposing things into triangles
 --------------------------------------------------------------------------------
-sizeToTris :: Size -> Vector (Triangle (V2 Float))
-sizeToTris (Size (V2 w h)) = V.fromList [(a,b,c), (a,c,d)]
+sizeToTris :: V2 Float -> Vector (Triangle (V2 Float))
+sizeToTris (V2 w h) = V.fromList [(a,b,c), (a,c,d)]
     where [a,b,c,d] = [V2 (-hw) (-hh), V2 hw (-hh), V2 hw hh, V2 (-hw) hh]
           (hw,hh) = (w/2,h/2)

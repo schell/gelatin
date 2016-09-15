@@ -53,6 +53,7 @@ import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Storable as S
 import qualified Data.Vector.Unboxed as V
 import           Data.Vector.Unboxed (Vector,Unbox)
+import           Data.Foldable (foldl')
 import           Data.List (unzip5)
 import           Control.Monad
 import           System.Exit
@@ -63,8 +64,16 @@ import           Linear hiding (trace)
 --------------------------------------------------------------------------------
 -- Quick Helpers
 --------------------------------------------------------------------------------
-unwrapTransform :: PictureTransform -> (M44 Float, Float, V4 Float, Maybe (V4 Float))
-unwrapTransform t = (ptfrmMV t, ptfrmAlpha t, ptfrmMultiply t, ptfrmReplace t)
+unwrapTransforms :: [RenderTransform] -> (M44 Float, Float, V4 Float, Maybe (V4 Float))
+unwrapTransforms = foldl' f (identity, 1, white, Nothing)
+  where f (mv, alph, mlt, rep) (Spatial a) =
+          (mv !*! affine2Modelview a, alph, mlt, rep)
+        f (mv, alph, mlt, rep) (Alpha a) =
+          (mv, alph * a, mlt, rep)
+        f (mv, alph, mlt, rep) (Multiply a) =
+          (mv, alph, mlt * a, rep)
+        f (mv, alph, mlt, _) (ColorReplacement a) =
+          (mv, alph, mlt, Just a)
 --------------------------------------------------------------------------------
 -- GLRenderers
 --------------------------------------------------------------------------------
@@ -181,7 +190,7 @@ polylineRenderer win sh thickness feather caps isTex (vs_,cs_,us_,ns_,ps_,totalL
     glBindVertexArray 0
 
     let num = fromIntegral $ V.length vs_
-        r t = do let (mv, a, m, mr) = unwrapTransform t
+        r t = do let (mv, a, m, mr) = unwrapTransforms t
                  pj <- orthoContextProjection win
                  updateUniformsForLines (unShader sh) pj mv isTex a m mr
                                         thickness feather totalLen caps
@@ -239,7 +248,7 @@ colorRenderer window sh mode vs gs =
     glBindVertexArray 0
     let num = fromIntegral $ V.length vs
         renderFunction t = do
-            let (mv,a,m,mr) = unwrapTransform t
+            let (mv,a,m,mr) = unwrapTransforms t
             pj <- orthoContextProjection window
             updateUniformsForTris (unShader sh) pj mv False a m mr
             drawBuffer (shProgram $ unShader sh) vao mode num
@@ -265,7 +274,7 @@ textureRenderer win sh mode vs uvs =
 
   let num = fromIntegral $ V.length vs
       renderFunction t = do
-        let (mv,a,m,mr) = unwrapTransform t
+        let (mv,a,m,mr) = unwrapTransforms t
         pj <- orthoContextProjection win
         updateUniformsForTris (unShader sh) pj mv True a m mr
         drawBuffer (shProgram $ unShader sh) vao mode num
@@ -317,7 +326,7 @@ bezRenderer isTex window sh vs cvs = do
         num = fromIntegral $ V.length vs
         renderFunction t = do
             pj <- orthoContextProjection window
-            let (mv,a,m,mr) = unwrapTransform t
+            let (mv,a,m,mr) = unwrapTransforms t
             updateUniformsForBezs (unShader sh) pj mv isTex a m mr
             drawBuffer (shProgram $ unShader sh) vao GL_TRIANGLES num
     return (cleanupFunction,renderFunction)
@@ -352,7 +361,7 @@ maskRenderer win sh mode vs uvs =
                          withArray [vao] $ glDeleteVertexArrays 1
             num = fromIntegral $ V.length vs
             render t = do
-                let (mv,a,m,_) = unwrapTransform t
+                let (mv,a,m,_) = unwrapTransforms t
                 pj <- orthoContextProjection win
                 updateUniformsForMask (unShader sh) pj mv a m 0 1
                 drawBuffer (shProgram $ unShader sh) vao mode num
@@ -405,8 +414,8 @@ stencilMask r2 r1  = do
     r2
     glDisable GL_STENCIL_TEST
 
-transformRenderer :: PictureTransform -> GLRenderer -> GLRenderer
-transformRenderer t (c, r) = (c, r . (t <>))
+transformRenderer :: [RenderTransform] -> GLRenderer -> GLRenderer
+transformRenderer ts (c, r) = (c, r . (ts ++))
 --------------------------------------------------------------------------------
 -- Working with textures.
 --------------------------------------------------------------------------------

@@ -19,14 +19,12 @@ isQuit (Event _ payload) = isKeyQ payload || payload == QuitEvent
 
 main :: IO ()
 main = do
-  let str = map toEnum [32..126]
-  (rez,window) <- reacquire 0 $ startupSDL2Backend 800 600 str True
+  let fnt = "/Library/Fonts/Arial.ttf"
+  (rez,window) <- reacquire 0 $ startupSDL2Backend 800 600 "gelatin-freetype2" True
+  Just glrAtlas <- allocAtlas fnt (PixelSize 64 64) asciiChars
+  (glr,_,_) <- freetypeGLRenderer rez glrAtlas white "Straight to gl\n(for retina - 2x)"
 
-  Just (atlasPic,stringPic) <- withAtlas "/Library/Fonts/Arial.ttf"
-                                         --(CharSize 32 32 300 300)
-                                         (PixelSize 32 32)
-                                         str
-                                         $ \atlas -> do
+  Just (atlasPic,stringPic) <- withAtlas fnt (PixelSize 32 32) asciiChars $ \atlas -> do
     let V2 w h = fromIntegral <$> atlasTextureSize atlas
 
     (_,atlasPic) <- compileTexturePicture rez $ do
@@ -52,6 +50,7 @@ main = do
   forever $ do
     events <- pollEvents
     renderWithSDL2 window rez $ do
-      atlasPic mempty
-      stringPic mempty
+      atlasPic []
+      stringPic []
+      snd glr [Spatial $ Translate $ V2 100 100]
     when (any isQuit events) exitSuccess

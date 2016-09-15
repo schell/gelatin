@@ -68,18 +68,6 @@ outlinedTextPicture font = do
                   stringOutline font 100 128 "Outlined Strings"
   setRawGeometry outline
   setStroke [StrokeWidth 3, StrokeFeather 1]
---------------------------------------------------------------------------------
--- FreeType2 pictures must be run in a MonadIO transformer
---------------------------------------------------------------------------------
-freetype2Picture :: FilePath -> TexturePictureT IO ()
-freetype2Picture font = do
-  -- The characters to load for our text altlas (dupes are nubbed)
-  let chars = "FreetypePictureswithkerning2,! "
-  void $ withAtlas font (PixelSize 100 100) chars $ \atlas -> do
-    embed $ freetypePicture atlas orange "Freetype2 Pictures,"
-    embed $ do
-      move (V2 0 50)
-      freetypePicture atlas orange "with kerning!"
 
 isQuit :: Event -> Bool
 isQuit (Event _ payload) = isKeyQ payload || payload == QuitEvent
@@ -94,34 +82,32 @@ main = do
     font <- loadFontFile ttfName >>= \case
               Left err -> putStrLn err >> exitFailure
               Right f  -> return f
-    (rez, window)   <- reacquire 0 $ startupSDL2Backend 800 600 "gelatin-example" True
+    (rez, window)   <- reacquire 0 $ startupSDL2Backend 1000 600 "gelatin-example" True
     Just (_, tex)   <- reacquire 1 $ loadImage imgName
+
+    let (colorPic,texPic) = pictures tex
+    (_, colorPicRender)  <- compileColorPicture rez colorPic
+    (_, texPicRender)    <- compileTexturePicture rez texPic
+    (_, colorTextRender) <- compileColorPicture rez $ coloredTextPicture font
+    (_, texTextRender)   <- compileTexturePicture rez $ texturedTextPicture tex font
+    (_, outlineRender)   <- compileColorPicture rez $ outlinedTextPicture font
+
+    Just atlas <- allocAtlas ttfName (PixelSize 32 32) asciiChars
+    (ft2r,_,_)  <- freetypeGLRenderer rez atlas white
+                     "Hello freetype,\nThanks for everything.\n    - gelatin"
+
     forever $ do
       threadDelay 1
       events <- pollEvents
       when (any isQuit events) exitSuccess
-      -- We will alloc, compile, display and release our picture resources
-      -- every frame so we can profile performance
-      let (colorPic,texPic) = pictures tex
-      colorPicRender  <- compileColorPicture rez colorPic
-      texPicRender    <- compileTexturePicture rez texPic
-      colorTextRender <- compileColorPicture rez $ coloredTextPicture font
-      texTextRender   <- compileTexturePicture rez $ texturedTextPicture tex font
-      outlineRender   <- compileColorPicture rez $ outlinedTextPicture font
-      freetypeRender  <- compileTexturePictureT rez $ freetype2Picture ttfName
       renderWithSDL2 window rez $ do
         snd colorPicRender mempty
         snd texPicRender mempty
-        let mv400 = affineToModelview $ Translate $ V2 0 400
-            mv500 = affineToModelview $ Translate $ V2 0 500
-            mv600 = affineToModelview $ Translate $ V2 0 600
-            ftmv  = affineToModelview $ Translate $ V2 100 250
-        snd colorTextRender $ PictureTransform mv400 1 1 Nothing
-        snd texTextRender   $ PictureTransform mv500 1 1 Nothing
-        snd outlineRender   $ PictureTransform mv600 1 1 Nothing
-        snd freetypeRender $ PictureTransform ftmv 1 1 Nothing
-      fst colorPicRender
-      fst texPicRender
-      fst colorTextRender
-      fst texTextRender
-      fst outlineRender
+        let mv400 = Spatial $ Translate $ V2 0 400
+            mv500 = Spatial $ Translate $ V2 0 500
+            mv600 = Spatial $ Translate $ V2 0 600
+            ftmv  = Spatial $ Translate $ V2 500 50
+        snd colorTextRender [mv400]
+        snd texTextRender   [mv500]
+        snd outlineRender   [mv600]
+        snd ft2r [ftmv]

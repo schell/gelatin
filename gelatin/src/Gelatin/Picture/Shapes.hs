@@ -27,7 +27,7 @@ corner xr yr =
   let vs = cleanSeqDupes $ V.concatMap (subdivideAdaptive 100 0) $ cornerBez3 xr yr
   in Vertices $ modify (V.++ vs)
 
-arc :: (Unbox a, RealFloat a, Monad m)
+arc :: (Unbox a, Epsilon a, RealFloat a, Monad m)
     => a -> a -> a -> a -> VerticesT (V2 a) m ()
 arc w h start stop =
   let vs = cleanSeqDupes $ V.concatMap (subdivideAdaptive 100 0) $ arcBez3 w h start stop

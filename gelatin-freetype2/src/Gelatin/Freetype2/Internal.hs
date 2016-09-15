@@ -12,6 +12,7 @@ import           Data.IntMap (IntMap)
 import qualified Data.IntMap as IM
 import           Data.Map (Map)
 import qualified Data.Map as M
+import           Foreign.Marshal.Utils (with)
 import           Graphics.Rendering.FreeType.Internal.GlyphMetrics as GM
 import           Graphics.Rendering.FreeType.Internal.Bitmap as BM
 --------------------------------------------------------------------------------
@@ -27,7 +28,7 @@ loadWords rz atlas str = do
   where loadWord wm word
           | Just _ <- M.lookup word wm = return wm
           | otherwise = do
-            let pic = do freetypePicture atlas red word
+            let pic = do freetypePicture atlas word
                          pictureSize
             (sz,dat) <- runPictureT pic
             r  <- compileTexturePictureData rz dat
@@ -139,7 +140,7 @@ texturize xymap atlas@Atlas{..} char
     ftms  <- liftIO $ peek $ metrics slot
     -- Add the metrics to the atlas
     let vecwh = fromIntegral <$> V2 (BM.width bmp) (rows bmp)
-        canon = floor . (/64) . realToFrac . fromIntegral
+        canon = floor . (* 0.5) . (* 0.015625) . realToFrac . fromIntegral
         vecsz = canon <$> V2 (GM.width ftms) (GM.height ftms)
         vecxb = canon <$> V2 (horiBearingX ftms) (horiBearingY ftms)
         vecyb = canon <$> V2 (vertBearingX ftms) (vertBearingY ftms)
@@ -163,9 +164,9 @@ allocAtlas fontFilePath gs str = do
   e <- liftIO $ runFreeType $ do
     fce <- newFace fontFilePath
     case gs of
-      PixelSize w h -> setPixelSizes fce w h
-      CharSize w h dpix dpiy -> setCharSize fce (floor $ 26.6 * w)
-                                                (floor $ 26.6 * h)
+      PixelSize w h -> setPixelSizes fce (2*w) (2*h)
+      CharSize w h dpix dpiy -> setCharSize fce (floor $ 26.6 * 2 * w)
+                                                (floor $ 26.6 * 2 * h)
                                                 dpix dpiy
 
     AM{..} <- foldM (measure fce 512) emptyAM str
@@ -201,17 +202,10 @@ allocAtlas fontFilePath gs str = do
     Right (atlas,_) -> return $ Just atlas
 
 freeAtlas :: MonadIO m => Atlas -> m ()
-freeAtlas a = do
-  _ <- liftIO $ ft_Done_FreeType (atlasLibrary a)
-  _ <- liftIO $ unloadMissingWords a ""
-  return ()
-
-withAtlas :: MonadIO m => FilePath -> GlyphSize -> String -> (Atlas -> m a) -> m (Maybe a)
-withAtlas fontFilePath gs str f = allocAtlas fontFilePath gs str >>= \case
-  Nothing    -> return Nothing
-  Just atlas -> do a <- f atlas
-                   freeAtlas atlas
-                   return $ Just a
+freeAtlas a = liftIO $ do
+  _ <- ft_Done_FreeType (atlasLibrary a)
+  _ <- unloadMissingWords a ""
+  with (atlasTexture a) $ \ptr -> glDeleteTextures 1 ptr
 
 makeCharQuad :: MonadIO m => Atlas -> Bool -> (Int, Maybe FT_UInt) -> Char
              -> VerticesT (V2 Float, V2 Float) m (Int, Maybe FT_UInt)
@@ -236,7 +230,6 @@ makeCharQuad Atlas{..} useKerning (penx, mLast) char = do
           V2 texL texT = fromIntegral <$> fst glyphTexBB
           V2 texR texB = fromIntegral <$> snd glyphTexBB
 
-          -- TODO: Add kerning
           tl = (V2 (x)    y   , V2 (texL/aszW) (texT/aszH))
           tr = (V2 (x+w)  y   , V2 (texR/aszW) (texT/aszH))
           br = (V2 (x+w) (y+h), V2 (texR/aszW) (texB/aszH))
@@ -257,30 +250,26 @@ stringTris atlas useKerning =
 -- Picture
 --------------------------------------------------------------------------------
 -- | Constructs a @PictureT GLuint (V2 Float) (V2 Float, V2 Float) m ()@
--- in all red. Colorization can then be done using @setReplacementColor@
-freetypePictureNoColor :: MonadIO m => Atlas -> String -> TexturePictureT m ()
-freetypePictureNoColor atlas@Atlas{..} str = do
+-- in all red. Colorization can then be done using @setReplacementColor@, or by
+-- using a @ColorReplacement color@ RenderTransform when rendering.
+freetypePicture :: MonadIO m => Atlas -> String -> TexturePictureT m ()
+freetypePicture atlas@Atlas{..} str = do
   eKerning <- withFreeType (Just atlasLibrary) $ hasKerning atlasFontFace
   setTextures [atlasTexture]
   let useKerning = either (const False) id eKerning
   setGeometry $ triangles $ stringTris atlas useKerning str
--- | Constructs a @PictureT GLuint (V2 Float) (V2 Float, V2 Float) m ()@ using
--- the given colored string.
-freetypePicture :: MonadIO m
-                => Atlas -> V4 Float -> String -> TexturePictureT m ()
-freetypePicture atlas color str = do
-  freetypePictureNoColor atlas str
-  setReplacementColor color
 --------------------------------------------------------------------------------
 -- Performance Rendering
 --------------------------------------------------------------------------------
--- | Constructs a @GLRenderer@ from the given colored string. Skipping the step
--- given by @freetypePicture@ allows the atlas' WordMap to be used to construct
--- the string, which greatly improves performance, allowing longer strings to be
--- compiled and renderered in real time.
--- Note that since resources are stored in the atlas' WordMap the returned
--- renderer contains a clean up operation that does nothing. It is expected that
--- you manage the resources manually through the atlas.
+-- | Constructs a @GLRenderer@ from the given color and string. The Atlas'
+-- WordMap is used to construct the string geometry, greatly improving
+-- performance and allowing longer strings to be compiled and renderered in real
+-- time.
+-- Note that since resources are stored in the Atlas' WordMap and multiple
+-- renderers can reference the Atlas, the returned renderer contains a
+-- clean up operation that does nothing. It is expected that the programmer
+-- will manually manages the Atlas as a resource, calling freeAtlas when
+-- appropriate.
 freetypeGLRenderer :: MonadIO m
                    => Rez -> Atlas -> V4 Float -> String
                    -> m (GLRenderer, V2 Float, Atlas)
@@ -292,30 +281,35 @@ freetypeGLRenderer rz atlas0 color str = do
         let V2 x _ = glyphAdvance metrics
         return $ fromIntegral x
       glyphh = glyphHeight $ atlasGlyphSize atlas
-      renderWord :: PictureTransform -> Float -> String -> IO ()
+      spaceh = glyphh
+      isWhiteSpace c = c == ' ' || c == '\n' || c == '\t'
+      renderWord :: [RenderTransform] -> V2 Float -> String -> IO ()
       renderWord _ _ ""       = return ()
-      renderWord t x (' ':cs) = renderWord t (x + spacew) cs
-      renderWord t x cs       = do
-        let word = takeWhile (/= ' ') cs
+      renderWord rs (V2 x y) ('\n':cs) = renderWord rs (V2 0 (y + spaceh)) cs
+      renderWord rs (V2 x y) (' ':cs) = renderWord rs (V2 (x + spacew) y) cs
+      renderWord rs (V2 x y) cs       = do
+        let word = takeWhile (not . isWhiteSpace) cs
             rest = drop (length word) cs
         case M.lookup word (atlasWordMap atlas) of
-          Nothing          -> renderWord t x rest
+          Nothing          -> renderWord rs (V2 x y) rest
           Just (V2 w _, r) -> do
-            let tt = mempty
-                       {ptfrmMV = affineToModelview $ Translate $ V2 x 0
-                       ,ptfrmReplace = Just color
-                       }
-            snd r $ tt `mappend` t
-            renderWord t (x + w) rest
+            let ts = [Spatial $ Translate $ V2 x y, ColorReplacement color]
+            snd r $ ts ++ rs
+            renderWord rs (V2 (x + w) y) rest
       rr t = renderWord t 0 str
-      measureWord x ""       = x
-      measureWord x (' ':cs) = measureWord (x + spacew) cs
-      measureWord x cs       =
-        let word = takeWhile (/= ' ') cs
+      measureString :: (V2 Float, V2 Float) -> String -> (V2 Float, V2 Float)
+      measureString (V2 x y, V2 w h) ""        = (V2 x y, V2 w h)
+      measureString (V2 x y, V2 w h) (' ':cs)  =
+        let nx = x + spacew in measureString (V2 nx y, V2 (max w nx) y) cs
+      measureString (V2 x y, V2 w h) ('\n':cs) =
+        let ny = y + spaceh in measureString (V2 x ny, V2 w (max h ny)) cs
+      measureString (V2 x y, V2 w h) cs        =
+        let word = takeWhile (not . isWhiteSpace) cs
             rest = drop (length word) cs
             n    = case M.lookup word (atlasWordMap atlas) of
-                     Nothing          -> x
-                     Just (V2 w _, _) -> x + w
-        in measureWord n rest
-      ww = measureWord 0 str
-  return ((return (), rr), V2 ww glyphh, atlas)
+                     Nothing          -> (V2 x y, V2 w h)
+                     Just (V2 ww _, _) -> let nx = x + ww
+                                          in (V2 nx y, V2 (max w nx) y)
+        in measureString n rest
+      V2 szw szh = snd $ measureString (0,0) str
+  return ((return (), rr), V2 szw (max spaceh szh), atlas)

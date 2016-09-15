@@ -20,12 +20,12 @@ library
                      , Gelatin.Core.Bounds
                      , Gelatin.Core.Color
                      , Gelatin.Core.Font
-                     , Gelatin.Core.Path
                      , Gelatin.Core.Stroke
                      , Gelatin.Core.Transform
                      , Gelatin.Core.Triangle
-                     , Gelatin.Picture.Shapes
+                     , Gelatin.Core.Utils
                      , Gelatin.Picture.Internal
+                     , Gelatin.Picture.Shapes
                      , Gelatin.Core
                      , Gelatin.Picture
                      , Gelatin

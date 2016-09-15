@@ -39,6 +39,10 @@ packages:
 - .
 - ../gelatin
 - ../gelatin-gl
+- ../gelatin-sdl2
+- location:
+    git: https://github.com/schell/sdl2.git
+    commit: aff05d74b6a11969c880ab410193ff44ec0905ee
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:

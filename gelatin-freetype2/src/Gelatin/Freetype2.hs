@@ -8,8 +8,6 @@ module Gelatin.FreeType2
   , GlyphMetrics(..)
   , allocAtlas
   , freeAtlas
-  , withAtlas
-  , freetypePictureNoColor
   , freetypePicture
   , freetypeGLRenderer
   , asciiChars

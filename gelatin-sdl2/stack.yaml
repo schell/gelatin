@@ -37,10 +37,11 @@ resolver: lts-6.10
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - .
-- ../gelatin-core
-- ../gelatin-picture
+- ../gelatin
 - ../gelatin-gl
-- ../../sdl2
+- location:
+    git: https://github.com/schell/sdl2.git
+    commit: aff05d74b6a11969c880ab410193ff44ec0905ee
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.
@@ -48,8 +49,8 @@ packages:
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps: []
-
+extra-deps:
+- halive-0.1.0.7
 # Override default flag values for local packages and extra-deps
 flags: {}
 

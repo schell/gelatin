@@ -7,6 +7,7 @@ module Gelatin.Picture (
   , tri
   , bez
   , to
+  , addVertexList
   , segment
   , mapVertices
   -- * Making shapes
@@ -69,10 +70,6 @@ module Gelatin.Picture (
   -- * Underlying PictureData Exported for renderers
   , RenderingOption(..)
   , PictureData(..)
-  -- * Affine transformation helpers
-  , Affine(..)
-  , affineToModelview
-  , affinesToModelview
 ) where
 
 import Gelatin.Picture.Internal

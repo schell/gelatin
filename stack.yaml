@@ -5,7 +5,6 @@ resolver: nightly-2016-07-14
 
 # Local packages, usually specified by relative directory name
 packages:
-- 'gelatin-core'
 - 'gelatin-picture'
 - 'gelatin-gl'
 - 'gelatin-sdl2'
@@ -17,7 +16,6 @@ packages:
 extra-deps:
 - FontyFruity-0.5.3.2
 - halive-0.1.0.7
-
 # Override default flag values for local packages and extra-deps
 flags: {}
 
