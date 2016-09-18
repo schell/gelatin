@@ -8,6 +8,7 @@ module Gelatin.GL.Renderer (
     Context(..),
     -- * Loading and using textures
     allocAndActivateTex,
+    initializeTexImage2D,
     loadImage,
     maybeLoadTexture,
     loadTexture,
@@ -44,6 +45,8 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Codec.Picture.Types
 import           Codec.Picture (readImage)
+import           Control.Monad
+import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Utils
 import           Foreign.Storable
@@ -55,7 +58,6 @@ import qualified Data.Vector.Unboxed as V
 import           Data.Vector.Unboxed (Vector,Unbox)
 import           Data.Foldable (foldl')
 import           Data.List (unzip5)
-import           Control.Monad
 import           System.Exit
 import qualified Data.Foldable as F
 import           GHC.Stack
@@ -223,14 +225,15 @@ texPolylineRenderer win psh thickness feather caps verts uvs = do
 
 -- | Binds the given textures to GL_TEXTURE0, GL_TEXTURE1, ... in ascending
 -- order of the texture unit, runs the IO action and then unbinds the textures.
-bindTexsAround :: [GLuint] -> IO () -> IO ()
+bindTexsAround :: MonadIO m => [GLuint] -> m a -> m a
 bindTexsAround ts f = do
-  mapM_ (uncurry bindTex) (zip ts [GL_TEXTURE0 ..])
-  f
-  glBindTexture GL_TEXTURE_2D 0
+  liftIO $ mapM_ (uncurry bindTex) (zip ts [GL_TEXTURE0 ..])
+  a <- f
+  liftIO $ glBindTexture GL_TEXTURE_2D 0
+  return a
   where bindTex tex u = glActiveTexture u >> glBindTexture GL_TEXTURE_2D tex
 
-bindTexAround :: GLuint -> IO () -> IO ()
+bindTexAround :: MonadIO m => GLuint -> m a -> m a
 bindTexAround tx f = bindTexsAround [tx] f
 
 -- | Creates and returns a renderer that renders the given colored
