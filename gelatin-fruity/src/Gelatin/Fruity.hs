@@ -80,29 +80,37 @@ fontBezAndTris font dpi px str =
        , B.map RawTriangleFan $ B.fromList ts
        )
 
-coloredString :: Monoid (PictureData t (V2 Float) Float (V2 Float, V4 Float))
-              => Font -> Int -> Float -> String -> (V2 Float -> V4 Float)
-              -> Picture t (V2 Float) Float (V2 Float, V4 Float) ()
-coloredString font dpi px str fill = do
+coloredString :: Backend t e (V2 Float, V4 Float) (V2 Float) Float s
+              -> Font -> Int -> Float -> String -> (V2 Float -> V4 Float)
+              -> IO (Renderer (V2 Float) Float s)
+coloredString b font dpi px str fill = do
   let g        = mapRawGeometry h
       h v      = (v, fill v)
       (bs, ts) = second (B.map g) $ first g $ fontBezAndTris font dpi px str
-  embed $ do
+
+  (_, r1) <- compilePicture b $ do
     setRawGeometry ts
     setRenderingOptions [StencilMaskOption]
-  embed $ setRawGeometry $ B.singleton bs
 
-texturedString :: Monoid (PictureData t (V2 Float) Float (V2 Float, V2 Float))
-               => Font -> Int -> Float -> String -> t -> (V2 Float -> V2 Float)
-               -> Picture t (V2 Float) Float (V2 Float, V2 Float) ()
-texturedString font dpi px str t fill = do
+  (_, r2) <- compilePicture b $ setRawGeometry $ B.singleton bs
+
+  return $ r1 `mappend` r2
+
+texturedString :: Backend t e (V2 Float, V2 Float) (V2 Float) Float s
+               -> Font -> Int -> Float -> String -> t -> (V2 Float -> V2 Float)
+               -> IO (Renderer (V2 Float) Float s)
+texturedString b font dpi px str t fill = do
   let g   = mapRawGeometry h
       h v = (v, fill v)
       (bs, ts) = second (B.map g) $ first g $ fontBezAndTris font dpi px str
-  embed $ do
+
+  (_, r1) <- compilePicture b $ do
     setRawGeometry ts
     setRenderingOptions [StencilMaskOption]
     setTextures [t]
-  embed $ do
+
+  (_, r2) <- compilePicture b $ do
     setRawGeometry $ B.singleton bs
     setTextures [t]
+
+  return $ r1 `mappend` r2

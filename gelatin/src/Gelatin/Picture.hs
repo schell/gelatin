@@ -30,23 +30,9 @@ module Gelatin.Picture (
   , runPictureT
   , Picture
   , runPicture
-  , embed
-  , embedAt
-  , overlay
   , setRawGeometry
   , getRawGeometry
   , setGeometry
-  , move
-  , scale
-  , rotate
-  , setAlpha
-  , getAlpha
-  , alpha
-  , setMultiply
-  , getMultiply
-  , multiply
-  , setReplacementColor
-  , clearReplacementColor
   , setStroke
   , getStroke
   , setTextures
@@ -54,19 +40,19 @@ module Gelatin.Picture (
   , setRenderingOptions
   , getRenderingOptions
   -- * Measuring Pictures
-  , pictureBounds
-  , pictureSize
-  , pictureOrigin
-  , pictureCenter
-  -- * Measuring Pictures (Outside of their definition)
-  , runPictureBoundsT
-  , runPictureSizeT
-  , runPictureOriginT
-  , runPictureCenterT
-  , runPictureBounds
-  , runPictureSize
-  , runPictureOrigin
-  , runPictureCenter
+  , pictureBounds2
+  , pictureSize2
+  , pictureOrigin2
+  , pictureCenter2
+--  -- * Measuring Pictures (Outside of their definition)
+--  , runPictureBoundsT
+--  , runPictureSizeT
+--  , runPictureOriginT
+--  , runPictureCenterT
+--  , runPictureBounds
+--  , runPictureSize
+--  , runPictureOrigin
+--  , runPictureCenter
   -- * Underlying PictureData Exported for renderers
   , RenderingOption(..)
   , PictureData(..)

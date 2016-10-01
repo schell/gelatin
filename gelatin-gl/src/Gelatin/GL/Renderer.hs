@@ -4,7 +4,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 module Gelatin.GL.Renderer (
     -- * Renderer
-    GLRenderer,
+    Renderer2,
     Context(..),
     -- * Loading and using textures
     allocAndActivateTex,
@@ -51,7 +51,6 @@ import           Foreign.Marshal.Array
 import           Foreign.Marshal.Utils
 import           Foreign.Storable
 import           Foreign.Ptr
-import           Data.Monoid
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Storable as S
 import qualified Data.Vector.Unboxed as V
@@ -60,24 +59,23 @@ import           Data.Foldable (foldl')
 import           Data.List (unzip5)
 import           System.Exit
 import qualified Data.Foldable as F
-import           GHC.Stack
 import           Linear hiding (trace)
 
 --------------------------------------------------------------------------------
 -- Quick Helpers
 --------------------------------------------------------------------------------
-unwrapTransforms :: [RenderTransform] -> (M44 Float, Float, V4 Float, Maybe (V4 Float))
+unwrapTransforms :: [RenderTransform2] -> (M44 Float, Float, V4 Float, Maybe (V4 Float))
 unwrapTransforms = foldl' f (identity, 1, white, Nothing)
   where f (mv, alph, mlt, rep) (Spatial a) =
           (mv !*! affine2Modelview a, alph, mlt, rep)
-        f (mv, alph, mlt, rep) (Alpha a) =
+        f (mv, alph, mlt, rep) (Special (Alpha a)) =
           (mv, alph * a, mlt, rep)
-        f (mv, alph, mlt, rep) (Multiply a) =
+        f (mv, alph, mlt, rep) (Special (Multiply a)) =
           (mv, alph, mlt * a, rep)
-        f (mv, alph, mlt, _) (ColorReplacement a) =
+        f (mv, alph, mlt, _) (Special (ColorReplacement a)) =
           (mv, alph, mlt, Just a)
 --------------------------------------------------------------------------------
--- GLRenderers
+-- Renderer2s
 --------------------------------------------------------------------------------
 type PolylineData f =
   ( Vector (V2 Float)
@@ -166,12 +164,12 @@ expandPolyline verts colors thickness feather
     | otherwise = Nothing
 
 
-polylineRenderer :: (Foldable f, Unbox (f Float), Storable (f Float), Functor f)
+polylineRenderer :: (Unbox (f Float), Storable (f Float), Functor f)
                  => Context -> SumShader
                  -> Float -> Float
                  -> (LineCap,LineCap) -> Bool
                  -> PolylineData f
-                 -> IO GLRenderer
+                 -> IO Renderer2
 polylineRenderer win sh thickness feather caps isTex (vs_,cs_,us_,ns_,ps_,totalLen) = do
   let toFrac :: Float -> GLfloat
       toFrac = realToFrac
@@ -205,7 +203,7 @@ polylineRenderer win sh thickness feather caps isTex (vs_,cs_,us_,ns_,ps_,totalL
 -- projected in 2d space.
 colorPolylineRenderer :: Context -> SumShader -> Float -> Float
                       -> (LineCap,LineCap) -> Vector (V2 Float)
-                      -> Vector (V4 Float) -> IO GLRenderer
+                      -> Vector (V4 Float) -> IO Renderer2
 colorPolylineRenderer win psh thickness feather caps verts colors = do
   let empty = putStrLn "could not expand polyline" >> return mempty
       mpoly = expandPolyline verts colors thickness feather
@@ -216,7 +214,7 @@ colorPolylineRenderer win psh thickness feather caps verts colors = do
 -- polyline projected in 2d space.
 texPolylineRenderer :: Context -> SumShader -> Float
                     -> Float -> (LineCap,LineCap) -> Vector (V2 Float)
-                    -> Vector (V2 Float) -> IO GLRenderer
+                    -> Vector (V2 Float) -> IO Renderer2
 texPolylineRenderer win psh thickness feather caps verts uvs = do
   let empty = putStrLn "could not expand polyline" >> return mempty
       mpoly = expandPolyline verts uvs thickness feather
@@ -234,12 +232,12 @@ bindTexsAround ts f = do
   where bindTex tex u = glActiveTexture u >> glBindTexture GL_TEXTURE_2D tex
 
 bindTexAround :: MonadIO m => GLuint -> m a -> m a
-bindTexAround tx f = bindTexsAround [tx] f
+bindTexAround tx = bindTexsAround [tx]
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
 colorRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
-              -> Vector (V4 Float) -> IO GLRenderer
+              -> Vector (V4 Float) -> IO Renderer2
 colorRenderer window sh mode vs gs =
     withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
     let ps = V.map realToFrac $ V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
@@ -263,7 +261,7 @@ colorRenderer window sh mode vs gs =
 -- | Creates and returns a renderer that renders a textured
 -- geometry.
 textureRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
-                -> Vector (V2 Float) -> IO GLRenderer
+                -> Vector (V2 Float) -> IO Renderer2
 textureRenderer win sh mode vs uvs =
   withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
   let f xs = V.map realToFrac $ V.concatMap (V.fromList . F.toList) xs :: Vector GLfloat
@@ -303,7 +301,7 @@ bezAttributes vs cvs = (ps, cs, ws)
                         , 0.5, 0, w
                         , 1, 1, w
                         ]
-        numBezs = floor $ (realToFrac $ V.length vs) / (3 :: Double)
+        numBezs = floor $ realToFrac (V.length vs) / (3 :: Double)
         ws :: Vector GLfloat
         ws = V.concatMap getWinding $ V.generate numBezs id
 
@@ -311,7 +309,7 @@ bezRenderer :: (Foldable f, Unbox (f Float))
             => Bool -> Context -> SumShader
             -> Vector (V2 Float)
             -> Vector (f Float)
-            -> IO GLRenderer
+            -> IO Renderer2
 bezRenderer isTex window sh vs cvs = do
   let (ps, cs, ws) = bezAttributes vs cvs
   withVAO $ \vao -> withBuffers 3 $ \[pbuf, tbuf, cbuf] -> do
@@ -336,18 +334,18 @@ bezRenderer isTex window sh vs cvs = do
 
 -- | Creates and returns a renderer that renders the given colored beziers.
 colorBezRenderer :: Context -> SumShader
-                 -> Vector (V2 Float) -> Vector (V4 Float) -> IO GLRenderer
+                 -> Vector (V2 Float) -> Vector (V4 Float) -> IO Renderer2
 colorBezRenderer = bezRenderer False
 
 -- | Creates and returns a renderer that renders the given textured beziers.
 textureBezRenderer :: Context -> SumShader
-                   -> Vector (V2 Float) -> Vector (V2 Float) -> IO GLRenderer
+                   -> Vector (V2 Float) -> Vector (V2 Float) -> IO Renderer2
 textureBezRenderer = bezRenderer True
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.
 maskRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
-             -> Vector (V2 Float) -> IO GLRenderer
+             -> Vector (V2 Float) -> IO Renderer2
 maskRenderer win sh mode vs uvs =
     withVAO $ \vao -> withBuffers 2 $ \[pbuf, uvbuf] -> do
         let vs'  = V.map realToFrac $
@@ -372,7 +370,7 @@ maskRenderer win sh mode vs uvs =
 
 -- | Creates a rendering that masks an IO () drawing computation with the alpha
 -- value of another.
-alphaMask :: Context -> SumShader -> IO () -> IO () -> IO GLRenderer
+alphaMask :: Context -> SumShader -> IO () -> IO () -> IO Renderer2
 alphaMask win mrs r2 r1 = do
     mainTex <- toTextureUnit (Just GL_TEXTURE0) win r2
     maskTex <- toTextureUnit (Just GL_TEXTURE1) win r1
@@ -417,7 +415,7 @@ stencilMask r2 r1  = do
     r2
     glDisable GL_STENCIL_TEST
 
-transformRenderer :: [RenderTransform] -> GLRenderer -> GLRenderer
+transformRenderer :: [RenderTransform2] -> Renderer2 -> Renderer2
 transformRenderer ts (c, r) = (c, r . (ts ++))
 --------------------------------------------------------------------------------
 -- Working with textures.
@@ -627,4 +625,4 @@ drawBuffer program vao mode num = do
 clearErrors :: String -> IO ()
 clearErrors str = do
     err' <- glGetError
-    when (err' /= 0) $ errorWithStackTrace $ unwords [str, show err']
+    when (err' /= 0) $ error $ unwords [str, show err']

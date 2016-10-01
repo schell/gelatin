@@ -23,8 +23,8 @@
   - .*\.l?hs$
   - .*\.cabal$
   commands:
-  - stack --resolver lts-1 --install-ghc build --fast # for ghc 7.6
-  - stack --resolver lts-2 --install-ghc build --fast # for ghc 7.8
-  - stack --resolver lts-3 --install-ghc build --fast # for ghc 7.10.2
-  - stack --resolver lts-5 --install-ghc build --fast # for ghc 7.10.3
-  - stack --resolver nightly --install-ghc build --fast
+  #- cd gelatin-example; stack --resolver lts-1 --install-ghc build --fast # for ghc 7.6
+  #- cd gelatin-example; stack --resolver lts-2 --install-ghc build --fast # for ghc 7.8
+  - cd gelatin-example; stack --resolver lts-3 --install-ghc build --fast # for ghc 7.10.2
+  #- cd gelatin-example; stack --resolver lts-5 --install-ghc build --fast # for ghc 7.10.3
+  #- cd gelatin-example; stack --resolver nightly --install-ghc build --fast

@@ -19,7 +19,7 @@ library
 
   build-depends:       base >= 4.7 && < 5
                      , gelatin
-                     , FontyFruity >= 0.5.3.1
+                     , FontyFruity
                      , vector
                      , linear
 

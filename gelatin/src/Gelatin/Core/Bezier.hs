@@ -16,6 +16,9 @@ module Gelatin.Core.Bezier (
     fmapBezier,
     fmapQuadraticBezier,
     fmapCubicBezier,
+    transformBezier,
+    transformQuadraticBezier,
+    transformCubicBezier,
     triangleArea,
     -- * Conversion
     bezToBez3,

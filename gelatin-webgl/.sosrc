@@ -1,8 +1,6 @@
 - patterns:
   - .*\.hs$
-  - stack.yaml$
   - .*\.cabal$
   commands:
   - stack build --fast
   - stack exec hlint \0
-  - stack exec gelatin-sdl2-example

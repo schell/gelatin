@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Gelatin.Core.Stroke where
 
-import Data.Hashable
 import Data.Maybe (fromMaybe)
 import GHC.Generics
 
@@ -12,22 +11,17 @@ data LineCap = LineCapNone
              | LineCapTriOut
              | LineCapTriIn
              deriving (Show, Ord, Eq, Enum, Generic)
-instance Hashable LineCap
 
 data Stroke = Stroke { strokeWidth    :: Float
                      , strokeFeather  :: Float
                      , strokeLineCaps :: (LineCap,LineCap)
                      } deriving (Show, Eq, Generic)
 
-instance Hashable Stroke
-
 data StrokeAttr = StrokeNone
                 | StrokeWidth Float
                 | StrokeFeather Float
                 | StrokeCaps (LineCap,LineCap)
                 deriving (Show, Eq, Generic)
-
-instance Hashable StrokeAttr
 
 defaultStroke :: Stroke
 defaultStroke = Stroke 1 1 (LineCapRound,LineCapRound)

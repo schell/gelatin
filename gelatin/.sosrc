@@ -2,5 +2,7 @@
   - .*\.hs$
   - .*\.cabal$
   commands:
-  - stack build
+  - stack build --fast
   - stack exec hlint \0
+#  - stack build --fast --stack-yaml=stack80-ghcjs.yaml
+#  - stack exec hlint \0 --stack-yaml=stack80-ghcjs.yaml

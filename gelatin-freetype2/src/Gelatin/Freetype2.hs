@@ -9,7 +9,7 @@ module Gelatin.FreeType2
   , allocAtlas
   , freeAtlas
   , freetypePicture
-  , freetypeGLRenderer
+  , freetypeRenderer2
   , asciiChars
   ) where
 

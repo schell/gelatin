@@ -9,13 +9,14 @@ packages:
 - 'gelatin-gl'
 - 'gelatin-sdl2'
 - 'gelatin-example'
-- '../renderable'
-- '../sdl2'
+- location:
+    git: https://github.com/schell/sdl2.git
+    commit: 183b0d57bf031d18f77c5668d8759fa841f57c6e
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
 - FontyFruity-0.5.3.2
-- halive-0.1.0.7
+  #- halive-0.1.0.7
 # Override default flag values for local packages and extra-deps
 flags: {}
 

@@ -12,18 +12,28 @@ maintainer:          schell.scivally@synapsegroup.com
 category:            Graphics
 build-type:          Simple
 cabal-version:       >= 1.10
+data-files:          img/*.png
 
 library
   exposed-modules:     Gelatin.SDL2
-  build-depends:       base       >=4.6 && <5.0
-                     , linear     >=1.20
-                     , sdl2       >=2.1
-                     , gelatin-gl >=0.0
-                     , bytestring >=0.10
-                     , vector     >=0.11
-                     , directory  >=1.2
-                     , hashable   >=1.2
-                     , text       >=1.2
+  ghc-options:         -Wall
+  build-depends:       base >=4.6 && <5.0
+                     , sdl2
+                     , gelatin-gl
+                     -- , linear
+                     -- , bytestring
+                     -- , vector
+                     -- , directory
   hs-source-dirs:      src
   default-language:    Haskell2010
 
+executable gelatin-sdl2-example
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  other-modules:       Paths_gelatin_sdl2
+  ghc-options:         -Wall
+  default-language:    Haskell2010
+  build-depends:       base >= 4.6 && < 5.0
+                     , gelatin-sdl2
+                     , sdl2
+                     , filepath

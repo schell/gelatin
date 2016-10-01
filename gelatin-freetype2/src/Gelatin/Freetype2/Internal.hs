@@ -18,21 +18,21 @@ import           Graphics.Rendering.FreeType.Internal.Bitmap as BM
 --------------------------------------------------------------------------------
 -- WordMap
 --------------------------------------------------------------------------------
-type WordMap = Map String (V2 Float, GLRenderer)
+type WordMap = Map String (V2 Float, Renderer2)
 
 loadWords :: MonadIO m
-          => Rez -> Atlas -> String -> m Atlas
-loadWords rz atlas str = do
+          => Backend GLuint e V2V2 (V2 Float) Float Raster
+          -> Atlas -> String -> m Atlas
+loadWords b atlas str = do
   wm <- liftIO $ foldM loadWord (atlasWordMap atlas) $ words str
   return atlas{atlasWordMap=wm}
   where loadWord wm word
           | Just _ <- M.lookup word wm = return wm
           | otherwise = do
-            let pic = do freetypePicture atlas word
-                         pictureSize
-            (sz,dat) <- runPictureT pic
-            r  <- compileTexturePictureData rz dat
-            return $ M.insert word (sz,r) wm
+              let pic = do freetypePicture atlas word
+                           pictureSize2 fst
+              (sz,r) <- compilePictureT b pic
+              return $ M.insert word (sz,r) wm
 
 unloadMissingWords :: MonadIO m => Atlas -> String -> m Atlas
 unloadMissingWords atlas str = do
@@ -261,7 +261,7 @@ freetypePicture atlas@Atlas{..} str = do
 --------------------------------------------------------------------------------
 -- Performance Rendering
 --------------------------------------------------------------------------------
--- | Constructs a @GLRenderer@ from the given color and string. The Atlas'
+-- | Constructs a @Renderer2@ from the given color and string. The Atlas'
 -- WordMap is used to construct the string geometry, greatly improving
 -- performance and allowing longer strings to be compiled and renderered in real
 -- time.
@@ -270,11 +270,12 @@ freetypePicture atlas@Atlas{..} str = do
 -- clean up operation that does nothing. It is expected that the programmer
 -- will manually manages the Atlas as a resource, calling freeAtlas when
 -- appropriate.
-freetypeGLRenderer :: MonadIO m
-                   => Rez -> Atlas -> V4 Float -> String
-                   -> m (GLRenderer, V2 Float, Atlas)
-freetypeGLRenderer rz atlas0 color str = do
-  atlas <- loadWords rz atlas0 str
+freetypeRenderer2 :: MonadIO m
+                  => Backend GLuint e V2V2 (V2 Float) Float Raster
+                  -> Atlas -> V4 Float -> String
+                  -> m (Renderer2, V2 Float, Atlas)
+freetypeRenderer2 b atlas0 color str = do
+  atlas <- loadWords b atlas0 str
   let glyphw  = glyphWidth $ atlasGlyphSize atlas
       spacew  = fromMaybe glyphw $ do
         metrics <- IM.lookup (fromEnum ' ') $ atlasMetrics atlas
@@ -283,7 +284,7 @@ freetypeGLRenderer rz atlas0 color str = do
       glyphh = glyphHeight $ atlasGlyphSize atlas
       spaceh = glyphh
       isWhiteSpace c = c == ' ' || c == '\n' || c == '\t'
-      renderWord :: [RenderTransform] -> V2 Float -> String -> IO ()
+      renderWord :: [RenderTransform2] -> V2 Float -> String -> IO ()
       renderWord _ _ ""       = return ()
       renderWord rs (V2 x y) ('\n':cs) = renderWord rs (V2 0 (y + spaceh)) cs
       renderWord rs (V2 x y) (' ':cs) = renderWord rs (V2 (x + spacew) y) cs
@@ -293,7 +294,7 @@ freetypeGLRenderer rz atlas0 color str = do
         case M.lookup word (atlasWordMap atlas) of
           Nothing          -> renderWord rs (V2 x y) rest
           Just (V2 w _, r) -> do
-            let ts = [Spatial $ Translate $ V2 x y, ColorReplacement color]
+            let ts = [move x y, redChannelReplacementV4 color]
             snd r $ ts ++ rs
             renderWord rs (V2 (x + w) y) rest
       rr t = renderWord t 0 str

@@ -2,7 +2,6 @@ module Gelatin.Core.Font where
 
 import Gelatin.Core.Bezier
 import Gelatin.Core.Utils
-import Data.Hashable
 import Linear
 import qualified Data.Vector as B
 import Data.Vector.Unboxed (Vector)
@@ -29,6 +28,3 @@ stringCurvesToPaths fd dpi px str =
 
 instance Show FontData where
     show = fontShow
-
-instance Hashable FontData where
-    hashWithSalt s f = fontHash f s

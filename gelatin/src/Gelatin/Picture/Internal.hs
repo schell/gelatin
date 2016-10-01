@@ -63,7 +63,7 @@ segment a b = to a >> to b
 addVertexList :: (Monad m, Unbox a) => [a] -> VerticesT a m ()
 addVertexList ys = Vertices $ do
   xs <- get
-  put $ xs V.++ (V.fromList ys)
+  put $ xs V.++ V.fromList ys
 
 runVerticesT :: (Monad m, Unbox a) => VerticesT a m b -> m (Vector a)
 runVerticesT = flip execStateT V.empty . unVertices
@@ -169,29 +169,29 @@ data RenderingOption = StencilMaskOption
 --------------------------------------------------------------------------------
 -- Picture Data
 --------------------------------------------------------------------------------
-data PictureData texture spatial rotation vertex =
+data PictureData texture vertex =
   PictureData { _picDataGeometry  :: B.Vector (RawGeometry vertex)
               -- ^ This picture's vertex data.
-              , _picDataAlpha     :: Float
-              -- ^ This picture's alpha value.
-              , _picDataMultiply  :: V4 Float
-              -- ^ This picture's multiply color.
-              , _picDataReplaceColor :: Maybe (V4 Float)
-              -- ^ This picture's replacement color value.
-              -- | TODO: Explain what replacement color does (hint - it lets you
-              --         change the color of text drawn with an atlas texture
+              -- , _picDataAlpha     :: Float
+              -- -- ^ This picture's alpha value.
+              -- , _picDataMultiply  :: V4 Float
+              -- -- ^ This picture's multiply color.
+              -- , _picDataReplaceColor :: Maybe (V4 Float)
+              -- -- ^ This picture's replacement color value.
+              -- -- | TODO: Explain what replacement color does (hint - it lets you
+              -- --         change the color of text drawn with an atlas texture
               , _picDataStroke    :: [StrokeAttr]
               -- ^ The stroke attributes to use for drawing lines.
-              , _picDataAffine    :: [Affine spatial rotation]
-              -- ^ A list of affine transformations to apply to the picture and
-              -- its children
-              , _picDataToSpatial :: vertex -> spatial
-              -- ^ A function that converts a vertex into a spatial coord.
-              , _picDataBounds    :: Maybe (spatial, spatial)
-              -- ^ The pre-computed bounding spatial coordinates.
-              -- If this value is Nothing then it has not yet been computed.
-              , _picDataCalcBounds :: PictureData texture spatial rotation vertex
-                                   -> (PictureData texture spatial rotation vertex, (spatial,spatial))
+              -- , _picDataAffine    :: [Affine spatial rotation]
+              -- -- ^ A list of affine transformations to apply to the picture and
+              -- -- its children
+              -- , _picDataToSpatial :: vertex -> spatial
+              -- -- ^ A function that converts a vertex into a spatial coord.
+              -- , _picDataBounds    :: Maybe (spatial, spatial)
+              -- -- ^ The pre-computed bounding spatial coordinates.
+              -- -- If this value is Nothing then it has not yet been computed.
+              -- , _picDataCalcBounds :: PictureData texture spatial rotation vertex raster
+              --                      -> (PictureData texture spatial rotation vertex raster, (spatial,spatial))
               -- ^ A function that calculates the spatial boundary of the
               -- picture's data and all its children, placing the bounds in the
               -- _picDataBounds record and returning a tuple of the updated data
@@ -201,7 +201,7 @@ data PictureData texture spatial rotation vertex =
               , _picDataOptions   :: [RenderingOption]
               -- ^ Any special drawing options to apply when rendering this
               -- picture.
-              , _picDataChildren  :: B.Vector (PictureData texture spatial rotation vertex)
+              -- , _picDataChildren  :: B.Vector (PictureData texture spatial rotation vertex raster)
               -- ^ Embedded picture data that should be transformed by this
               -- picture's affine transformation, alpha, multiply and should be
               -- contained within this picture's spatial boundary.
@@ -210,253 +210,218 @@ makeLenses ''PictureData
 --------------------------------------------------------------------------------
 -- Helpers for Common Picture Types
 --------------------------------------------------------------------------------
-emptyPictureDataV2VX :: (Unbox a, Unbox b, RealFrac a, Floating a, Epsilon a)
-                     => PictureData t (V2 a) a (V2 a, b)
-emptyPictureDataV2VX =
-    PictureData { _picDataGeometry  = B.empty
-                , _picDataAffine    = []
-                , _picDataCalcBounds = calculateBoundsV2VX
-                , _picDataAlpha     = 1
-                , _picDataMultiply  = 1
-                , _picDataReplaceColor = Nothing
+emptyPictureData :: PictureData t v
+emptyPictureData =
+    PictureData { _picDataGeometry   = B.empty
+                -- , _picDataAffine     = []
+                -- , _picDataCalcBounds = calculateBoundsV2VX
+                -- , _picDataAlpha     = 1
+                -- , _picDataMultiply  = 1
+                -- , _picDataReplaceColor = Nothing
                 , _picDataStroke    = []
-                , _picDataToSpatial = fst
-                , _picDataBounds    = Nothing
+                -- , _picDataToSpatial = fst
+                -- , _picDataBounds    = Nothing
                 , _picDataTextures  = []
                 , _picDataOptions   = []
-                , _picDataChildren  = B.empty
+                -- , _picDataChildren  = B.empty
                 }
 
-embedPictureData :: Monoid (PictureData t s r v)
-                 => [PictureData t s r v] -> PictureData t s r v
-embedPictureData ps = mempty { _picDataChildren = B.fromList ps }
+--embedPictureData :: Monoid (PictureData t v r)
+--                 => [PictureData t v r] -> PictureData t s r v
+--embedPictureData ps = mempty { _picDataChildren = B.fromList ps }
 
 bothToFrac :: (Real a, Fractional b) => (V2 a, V2 a) -> (V2 b, V2 b)
 bothToFrac= second (fmap realToFrac) . first (fmap realToFrac)
 
-calcV2VX_applyTfrm :: Num a => V4 (V4 a) -> V2 a -> V2 a
-calcV2VX_applyTfrm mv = demoteV3 . m41ToV3 . (mv !*!) . v3ToM41 . promoteV2
-{-# INLINE calcV2VX_applyTfrm #-}
+--calcV2VX_applyTfrm :: Num a => V4 (V4 a) -> V2 a -> V2 a
+--calcV2VX_applyTfrm mv = demoteV3 . m41ToV3 . (mv !*!) . v3ToM41 . promoteV2
+--{-# INLINE calcV2VX_applyTfrm #-}
+--
+--calcV2VX_mv :: (Real a, Floating a, Epsilon a)
+--            => PictureData t (V2 a) a v -> M44 Float
+--calcV2VX_mv dat = (fmap realToFrac) <$> affine2sModelview (_picDataAffine dat)
+--
+--calcV2VX_extractSpatial :: (Unbox a, Unbox b, Real a, Floating a, Epsilon a)
+--                        => PictureData t (V2 a) a (V2 a,b) -> V.Vector (V2 Float)
+--calcV2VX_extractSpatial dat =
+--  let gs = _picDataGeometry dat
+--      mv = calcV2VX_mv dat
+--      extractAndTfrm = calcV2VX_applyTfrm mv . fmap realToFrac . fst
+--      f = V.map extractAndTfrm . vertexData . (gs B.!)
+--  in V.concatMap f $ V.enumFromTo 0 (B.length gs - 1)
+--
+--calcV2VX_kids :: (RealFrac a, Unbox a, Unbox b, Floating a, Epsilon a)
+--              => PictureData t (V2 a) a (V2 a, b)
+--              -> ( B.Vector (PictureData t (V2 a) a (V2 a, b))
+--                 , V.Vector (V2 Float, V2 Float)
+--                 )
+--calcV2VX_kids dat =
+--  let (ks, kbs) = B.unzip $ B.map calculateBoundsV2VX $ _picDataChildren dat
+--      kidBounds = V.map bothToFrac $ B.convert kbs
+--  in (ks, kidBounds)
 
-calcV2VX_mv :: (Real a, Floating a, Epsilon a)
-            => PictureData t (V2 a) a v -> M44 Float
-calcV2VX_mv dat = (fmap realToFrac) <$> affine2sModelview (_picDataAffine dat)
+--calculateBoundsV2VX :: (Unbox a, Unbox b, RealFrac a, Floating a, Epsilon a)
+--                    => PictureData t (V2 a) a (V2 a, b)
+--                    -> (PictureData t (V2 a) a (V2 a, b), (V2 a, V2 a))
+--calculateBoundsV2VX dat =
+--  let vs :: V.Vector (V2 Float)
+--      vs = calcV2VX_extractSpatial dat
+--      (ks, kidBounds) = calcV2VX_kids dat
+--      bounds    = boundsBounds (polyBounds vs `V.cons` kidBounds)
+--      boundsFin :: Fractional a => (V2 a, V2 a)
+--      boundsFin = bothToFrac bounds
+--  in (dat{ _picDataBounds = Just boundsFin, _picDataChildren = ks }, boundsFin)
 
-calcV2VX_extractSpatial :: (Unbox a, Unbox b, Real a, Floating a, Epsilon a)
-                        => PictureData t (V2 a) a (V2 a,b) -> V.Vector (V2 Float)
-calcV2VX_extractSpatial dat =
-  let gs = _picDataGeometry dat
-      mv = calcV2VX_mv dat
-      extractAndTfrm = calcV2VX_applyTfrm mv . fmap realToFrac . fst
-      f = V.map extractAndTfrm . vertexData . (gs B.!)
-  in V.concatMap f $ V.enumFromTo 0 (B.length gs - 1)
-
-calcV2VX_kids :: (RealFrac a, Unbox a, Unbox b, Floating a, Epsilon a)
-              => PictureData t (V2 a) a (V2 a, b)
-              -> ( B.Vector (PictureData t (V2 a) a (V2 a, b))
-                 , V.Vector (V2 Float, V2 Float)
-                 )
-calcV2VX_kids dat =
-  let (ks, kbs) = B.unzip $ B.map calculateBoundsV2VX $ _picDataChildren dat
-      kidBounds = V.map bothToFrac $ B.convert kbs
-  in (ks, kidBounds)
-
-calculateBoundsV2VX :: (Unbox a, Unbox b, RealFrac a, Floating a, Epsilon a)
-                    => PictureData t (V2 a) a (V2 a, b)
-                    -> (PictureData t (V2 a) a (V2 a, b), (V2 a, V2 a))
-calculateBoundsV2VX dat =
-  let vs :: V.Vector (V2 Float)
-      vs = calcV2VX_extractSpatial dat
-      (ks, kidBounds) = calcV2VX_kids dat
-      bounds    = boundsBounds (polyBounds vs `V.cons` kidBounds)
-      boundsFin :: Fractional a => (V2 a, V2 a)
-      boundsFin = bothToFrac bounds
-  in (dat{ _picDataBounds = Just boundsFin, _picDataChildren = ks }, boundsFin)
-
-instance (Unbox a, Unbox b, RealFrac a, Floating a, Epsilon a)
-  => Monoid (PictureData t (V2 a) a (V2 a, b)) where
-  mempty = emptyPictureDataV2VX
-  mappend a b = embedPictureData [a,b]
-  mconcat = embedPictureData
+--instance (Unbox a, Unbox b, RealFrac a, Floating a, Epsilon a)
+--  => Monoid (PictureData t (V2 a) a (V2 a, b) x) where
+--  mempty = emptyPictureDataV2VX
+--  mappend a b = embedPictureData [a,b]
+--  mconcat = embedPictureData
 --------------------------------------------------------------------------------
 -- Picture Construction
 --------------------------------------------------------------------------------
-type PictureT t s r v = StateT (PictureData t s r v)
+type PictureT tex vert = StateT (PictureData tex vert)
 
-runPictureT :: (Monad m, Monoid (PictureData t s r v))
-            => PictureT t s r v m a -> m (a, PictureData t s r v)
-runPictureT = flip runStateT mempty
+runPictureT :: PictureT t v m a -> m (a, PictureData t v)
+runPictureT = flip runStateT emptyPictureData
 --------------------------------------------------------------------------------
 -- Identity Parameterized Pictures
 --------------------------------------------------------------------------------
-type Picture t s r v = PictureT t s r v Identity
+type Picture t v = PictureT t v Identity
 
-runPicture :: Monoid (PictureData t s r v)
-           => Picture t s r v a -> (a, PictureData t s r v)
+runPicture :: Picture t v a -> (a, PictureData t v)
 runPicture = runIdentity . runPictureT
 --------------------------------------------------------------------------------
 -- Picture Combination & Operations
 --------------------------------------------------------------------------------
-invalidateBoundary :: Monad m =>  PictureT t s r v m ()
-invalidateBoundary = picDataBounds .= Nothing
+invalidateBoundary :: Monad m =>  PictureT t v m ()
+--invalidateBoundary = picDataBounds .= Nothing
+invalidateBoundary = return ()
 
-embed :: (Monad m, Monoid (PictureData t s r v))
-      => PictureT t s r v m b -> PictureT t s r v m b
-embed p = do
-  invalidateBoundary
-  (b,dat) <- lift (runPictureT p)
-  picDataChildren %= (`B.snoc` dat)
-  return b
+--embed :: (Monad m, Monoid (PictureData t v r))
+--      => PictureT t v m b -> PictureT t v m b
+--embed p = do
+--  invalidateBoundary
+--  (b,dat) <- lift (runPictureT p)
+--  picDataChildren %= (`B.snoc` dat)
+--  return b
+--
+--embedAt :: (Monad m, Monoid (PictureData t v r))
+--          => Int -> PictureT t v m b -> PictureT t v m b
+--embedAt k p = do
+--  invalidateBoundary
+--  (b,dat)  <- lift (runPictureT p)
+--  cs <- use picDataChildren
+--  let xs = B.take k cs
+--      ys = B.cons dat $ B.drop k cs
+--  picDataChildren .= (xs B.++ ys)
+--  return b
+--
+--overlay :: (Monad m, Monoid (PictureData t v r))
+--        => PictureT t v m () -> PictureT t v m ()
+--        -> PictureT t v m ()
+--overlay a b = do
+--  invalidateBoundary
+--  embed a >> embed b
 
-embedAt :: (Monad m, Monoid (PictureData t s r v))
-          => Int -> PictureT t s r v m b -> PictureT t s r v m b
-embedAt k p = do
-  invalidateBoundary
-  (b,dat)  <- lift (runPictureT p)
-  cs <- use picDataChildren
-  let xs = B.take k cs
-      ys = B.cons dat $ B.drop k cs
-  picDataChildren .= (xs B.++ ys)
-  return b
-
-overlay :: (Monad m, Monoid (PictureData t s r v))
-        => PictureT t s r v m () -> PictureT t s r v m ()
-        -> PictureT t s r v m ()
-overlay a b = do
-  invalidateBoundary
-  embed a >> embed b
-
-setRawGeometry :: Monad m => B.Vector (RawGeometry v) -> PictureT t s r v m ()
+setRawGeometry :: Monad m => B.Vector (RawGeometry v) -> PictureT t v m ()
 setRawGeometry vs = do
   picDataGeometry .= vs
   invalidateBoundary
 
-getRawGeometry :: Monad m => PictureT t s r v m (B.Vector (RawGeometry v))
+getRawGeometry :: Monad m => PictureT t v m (B.Vector (RawGeometry v))
 getRawGeometry = use picDataGeometry
 
-setGeometry :: Monad m => GeometryT v m () -> PictureT t s r v m ()
+setGeometry :: Monad m => GeometryT v m () -> PictureT t v m ()
 setGeometry gs = do
   v <- lift $ runGeometryT gs
   setRawGeometry v
 
-applyAffine :: Monad m => Affine s r -> PictureT t s r v m ()
-applyAffine f = do
-  invalidateBoundary
-  picDataAffine %= (f:)
-
-move :: (Monad m, Num s ) => s -> PictureT t s r v m ()
-move = applyAffine . Translate
-
-scale :: (Monad m, Num s, Fractional s) => s -> PictureT t s r v m ()
-scale = applyAffine . Scale
-
-rotate :: (Monad m, Num r ) => r -> PictureT t s r v m ()
-rotate = applyAffine . Rotate
-
-setAlpha :: Monad m => Float -> PictureT t s r v m ()
-setAlpha = (picDataAlpha .=)
-
-getAlpha :: Monad m => PictureT t s r v m Float
-getAlpha = use picDataAlpha
-
-alpha :: Monad m => Float -> PictureT t s r v m ()
-alpha = (picDataAlpha %=) . (*)
-
-setMultiply :: Monad m => V4 Float -> PictureT t s r v m ()
-setMultiply = (picDataMultiply .=)
-
-getMultiply ::Monad m => PictureT t s r v m (V4 Float)
-getMultiply = use picDataMultiply
-
-multiply :: Monad m => V4 Float -> PictureT t s r v m ()
-multiply = (picDataMultiply %=) . (*)
-
-setReplacementColor :: Monad m => V4 Float -> PictureT t s r v m ()
-setReplacementColor = (picDataReplaceColor .=) . Just
-
-clearReplacementColor :: Monad m => PictureT t s r v m ()
-clearReplacementColor = picDataReplaceColor .= Nothing
-
-setStroke :: Monad m => [StrokeAttr] -> PictureT t s r v m ()
+setStroke :: Monad m => [StrokeAttr] -> PictureT t v m ()
 setStroke = (picDataStroke .=)
 
-getStroke :: Monad m => PictureT t s r v m [StrokeAttr]
+getStroke :: Monad m => PictureT t v m [StrokeAttr]
 getStroke = use picDataStroke
 
-setTextures :: Monad m => [t] -> PictureT t s r v m ()
+setTextures :: Monad m => [t] -> PictureT t v m ()
 setTextures = (picDataTextures .=)
 
-getTextures :: Monad m => PictureT t s r v m [t]
+getTextures :: Monad m => PictureT t v m [t]
 getTextures = use picDataTextures
 
-setRenderingOptions :: Monad m => [RenderingOption] -> PictureT t s r v m ()
+setRenderingOptions :: Monad m => [RenderingOption] -> PictureT t v m ()
 setRenderingOptions = (picDataOptions .=)
 
-getRenderingOptions :: Monad m => PictureT t s r v m [RenderingOption]
+getRenderingOptions :: Monad m => PictureT t v m [RenderingOption]
 getRenderingOptions = use picDataOptions
+--------------------------------------------------------------------------------
+-- Measuring pictures
+--------------------------------------------------------------------------------
+extractSpatial :: (Monad m, Unbox v, Unbox s)
+               => (v -> s) -> PictureT t v m (V.Vector s)
+extractSpatial vert2space = do
+  gs <- use picDataGeometry
+  let --extract = fmap realToFrac . vert2space
+      f       = V.map vert2space . vertexData . (gs B.!)
+  return $ V.concatMap f $ V.enumFromTo 0 (B.length gs - 1)
 
-pictureBounds :: (Monad m, Num s, Unbox v, Monoid (PictureData t s r v))
-              => PictureT t s r v m (s, s)
-pictureBounds = use picDataBounds >>= \case
-  Nothing -> do
-    dat <- get
-    let (newDat, bounds) = _picDataCalcBounds dat dat
-    put newDat
-    return bounds
-  Just bb -> return bb
+pictureBounds2 :: (Monad m, Unbox v)
+               => (v -> V2 Float) -> PictureT t v m (V2 Float, V2 Float)
+pictureBounds2 = (polyBounds <$>) . extractSpatial
 
-pictureSize :: ((Monad m, Num s, Unbox v, Monoid (PictureData t s r v))  )
-            => PictureT t s r v m s
-pictureSize = do
-  (tl,br) <- pictureBounds
+pictureSize2 :: (Monad m, Unbox v)
+             => (v -> V2 Float) -> PictureT t v m (V2 Float)
+pictureSize2 vert2space = do
+  (tl,br) <- pictureBounds2 vert2space
   return $ br - tl
 
-pictureOrigin :: ((Monad m, Num s, Unbox v, Monoid (PictureData t s r v)) ) => PictureT t s r v m s
-pictureOrigin = fst <$> pictureBounds
+pictureOrigin2 :: (Monad m, Unbox v)
+               => (v -> V2 Float) -> PictureT t v m (V2 Float)
+pictureOrigin2 = (fst <$>) . pictureBounds2
 
-pictureCenter :: (Monad m, Num s, Fractional s, Unbox v, Monoid (PictureData t s r v))
-              => PictureT t s r v m s
-pictureCenter = do
-  (tl,br) <- pictureBounds
+pictureCenter2 :: (Monad m, Unbox v)
+               => (v -> V2 Float) -> PictureT t v m (V2 Float)
+pictureCenter2 vert2space = do
+  (tl,br) <- pictureBounds2 vert2space
   return $ tl + (br - tl)/2
 --------------------------------------------------------------------------------
 -- Conveniences for measuring pictures from outside the PictureT monad
 --------------------------------------------------------------------------------
-pictureDataBounds :: (Num s, Unbox v, Monoid (PictureData t s r v))
-                  => PictureData t s r v -> (s,s)
-pictureDataBounds = evalState pictureBounds
-
-runPictureBoundsT :: (Monad m, Num s, Unbox v, Monoid (PictureData t s r v))
-                  => PictureT t s r v m a -> m (s, s)
-runPictureBoundsT = (fst <$>) . runPictureT . (>> pictureBounds)
-
-
-runPictureSizeT :: (Monad m, Num s, Unbox v, Monoid (PictureData t s r v))
-                => PictureT t s r v m a -> m s
-runPictureSizeT = (fst <$>) . runPictureT . (>> pictureSize)
-
-runPictureOriginT :: (Monad m, Num s, Unbox v, Monoid (PictureData t s r v))
-                  => PictureT t s r v m a -> m s
-runPictureOriginT = (fst <$>) . runPictureT . (>> pictureOrigin)
-
-runPictureCenterT :: (Monad m, Num s, Fractional s, Unbox v, Monoid (PictureData t s r v))
-                  => PictureT t s r v m a -> m s
-runPictureCenterT = (fst <$>) . runPictureT . (>> pictureCenter)
+--pictureDataBounds :: (Num s, Unbox v, Monoid (PictureData t v r))
+--                  => PictureData t v r -> (s,s)
+--pictureDataBounds = evalState pictureBounds
+--
+--runPictureBoundsT :: (Monad m, Num s, Unbox v, Monoid (PictureData t v r))
+--                  => PictureT t v m a -> m (s, s)
+--runPictureBoundsT = (fst <$>) . runPictureT . (>> pictureBounds)
+--
+--
+--runPictureSizeT :: (Monad m, Num s, Unbox v, Monoid (PictureData t v r))
+--                => PictureT t v m a -> m s
+--runPictureSizeT = (fst <$>) . runPictureT . (>> pictureSize)
+--
+--runPictureOriginT :: (Monad m, Num s, Unbox v, Monoid (PictureData t v r))
+--                  => PictureT t v m a -> m s
+--runPictureOriginT = (fst <$>) . runPictureT . (>> pictureOrigin)
+--
+--runPictureCenterT :: (Monad m, Num s, Fractional s, Unbox v, Monoid (PictureData t v r))
+--                  => PictureT t v m a -> m s
+--runPictureCenterT = (fst <$>) . runPictureT . (>> pictureCenter)
 --------------------------------------------------------------------------------
 -- Conveniences for measuring pictures from outside the Picture monad
 --------------------------------------------------------------------------------
-runPictureBounds :: (Num s, Unbox v, Monoid (PictureData t s r v))
-                 => Picture t s r v a -> (s, s)
-runPictureBounds = runIdentity . runPictureBoundsT
-
-runPictureSize :: (Num s, Unbox v, Monoid (PictureData t s r v))
-               => Picture t s r v a -> s
-runPictureSize = runIdentity . runPictureSizeT
-
-runPictureOrigin :: (Num s, Unbox v, Monoid (PictureData t s r v))
-                 => Picture t s r v s -> s
-runPictureOrigin = runIdentity . runPictureOriginT
-
-runPictureCenter :: (Num s, Fractional s, Unbox v, Monoid (PictureData t s r v))
-                 => Picture t s r v a -> s
-runPictureCenter = runIdentity . runPictureCenterT
+--runPictureBounds :: (Num s, Unbox v, Monoid (PictureData t v r))
+--                 => Picture t v r a -> (s, s)
+--runPictureBounds = runIdentity . runPictureBoundsT
+--
+--runPictureSize :: (Num s, Unbox v, Monoid (PictureData t v r))
+--               => Picture t v r a -> s
+--runPictureSize = runIdentity . runPictureSizeT
+--
+--runPictureOrigin :: (Num s, Unbox v, Monoid (PictureData t v r))
+--                 => Picture t v r s -> s
+--runPictureOrigin = runIdentity . runPictureOriginT
+--
+--runPictureCenter :: (Num s, Fractional s, Unbox v, Monoid (PictureData t v r))
+--                 => Picture t v r a -> s
+--runPictureCenter = runIdentity . runPictureCenterT
