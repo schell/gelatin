@@ -1,7 +1,7 @@
 gelatin-example
 ===============
 
-Simple exmaple to get you started with
+Simple example to get you started with
 [gelatin](http://hackage.haskell.org/package/gelatin).
 
 This uses [sdl2](https://hackage.haskell.org/package/sdl2), and the
