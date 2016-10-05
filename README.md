@@ -26,6 +26,8 @@ features
 
 [ ] webgl via ghcjs backend
 
+[ ] drawing with 3d color or texture using gpu resources
+
 examples
 --------
 For examples please see [gelatin-example](https://github.com/schell/gelatin/tree/master/gelatin-example) and [odin](https://github.com/schell/odin)
