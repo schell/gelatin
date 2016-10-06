@@ -2,5 +2,5 @@
   - .*\.hs$
   - .*\.cabal$
   commands:
-  - stack build --fast
+  - stack install --fast
   - stack exec hlint \0

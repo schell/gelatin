@@ -11,6 +11,7 @@ allow-newer: true
 
 packages:
 - .
+- ../gelatin
 
 extra-deps:
 - ghcjs-dom-0.3.1.0

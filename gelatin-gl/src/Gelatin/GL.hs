@@ -18,4 +18,3 @@ import Gelatin as G
 import Data.Bits ((.|.))
 import Graphics.GL.Types as GL
 import Graphics.GL.Core33 as GL
-import Linear hiding (rotate, trace)
