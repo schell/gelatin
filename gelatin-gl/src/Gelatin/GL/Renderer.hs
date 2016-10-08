@@ -38,9 +38,10 @@ module Gelatin.GL.Renderer (
     clipTexture
 ) where
 
+import           Gelatin
+import           Gelatin.Shaders
 import           Gelatin.GL.Shader
 import           Gelatin.GL.Common
-import           Gelatin
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
 import           Codec.Picture.Types
@@ -597,7 +598,7 @@ withBuffers n f = do
     f bufs
 
 bufferAttrib :: (Storable a, Unbox a)
-             => AttribLoc -> GLint -> GLuint -> Vector a -> IO ()
+             => Simple2DAttrib -> GLint -> GLuint -> Vector a -> IO ()
 bufferAttrib attr n buf as = do
     let loc = locToGLuint attr
         asize = V.length as * sizeOf (V.head as)

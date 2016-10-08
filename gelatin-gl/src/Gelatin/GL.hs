@@ -3,12 +3,10 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 {-# LANGUAGE TupleSections #-}
-module Gelatin.GL (
-    -- * Re-exports
-    module G,
-    module GL,
-    module Linear,
-) where
+module Gelatin.GL
+  ( module G
+  , module GL
+  ) where
 
 import Gelatin.GL.Renderer as G
 import Gelatin.GL.Shader as G

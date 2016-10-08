@@ -1,0 +1,6 @@
+- patterns:
+  - .*\.hs$
+  - .*\.cabal$
+  commands:
+  - stack install --fast
+  - stack exec hlint \0

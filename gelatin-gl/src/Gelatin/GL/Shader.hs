@@ -2,16 +2,16 @@
 module Gelatin.GL.Shader (
     -- * Loading shaders
     loadSumShader,
-    loadShader,
-    -- * Shader types
-    ShaderProgram,
-    Shader(..),
-    ShaderDef(..),
+    loadGLShader,
+    -- * GLShader types
+    GLShaderProgram,
+    GLShader,
+    GLShaderDef,
     SumShader(..),
-    -- * Shader prims
+    -- * GLShader prims
     PrimType(..),
     -- * Uniforms
-    Uniform(..),
+    Simple2DUniform(..),
     -- * Updating uniforms for specific kinds of rendering
     updateUniformsForTris,
     updateUniformsForBezs,
@@ -24,7 +24,7 @@ module Gelatin.GL.Shader (
     updateUniforms,
     -- * Attributes
     -- $layout
-    AttribLoc(..),
+    Simple2DAttrib(..),
     locToGLuint,
     -- * Enabling attribs for specific kinds of rendering
     enableAttribsForTris,
@@ -33,7 +33,7 @@ module Gelatin.GL.Shader (
     enableAttribsForMask,
     -- * Enabling and disabling any attribs
     onlyEnableAttribs,
-    -- * Shader compilation
+    -- * GLShader compilation
     compileShader,
     compileProgram,
 ) where
@@ -43,6 +43,7 @@ import Prelude as P
 import Graphics.GL.Core33
 import Graphics.GL.Types
 import Gelatin
+import Gelatin.Shaders
 import Control.Monad
 import System.Exit
 import System.FilePath
@@ -53,28 +54,14 @@ import Foreign.Marshal.Utils
 import Foreign.Storable
 import Data.ByteString.Char8 as B
 import Data.Maybe
-import Linear
-import Paths_gelatin_gl
 
-type ShaderProgram = GLuint
+type GLShaderProgram = GLuint
 
-data Shader = Shader { shProgram :: ShaderProgram
-                     , shUniforms :: [(String, GLint)]
-                     } deriving (Show)
-
-data ShaderDef = ShaderDefFP { defShaderPaths :: [(String, GLuint)]
-                             -- ^ [("path/to/shader.vert", GL_VERTEX_SHADER)]
-                             , defUniforms :: [String]
-                             , defAttribs :: [AttribLoc]
-                             }
-               | ShaderDefBS { defShaderSrcs :: [(ByteString, GLuint)]
-                             , defUniforms :: [String]
-                             , defAttribs :: [AttribLoc]
-                             } deriving (Show, Eq, Ord)
-
-newtype SumShader = SumShader { unShader :: Shader }
+type GLShader = Shader GLuint GLint
+type GLShaderDef = ShaderDef GLuint Simple2DAttrib
+newtype SumShader = SumShader { unShader :: GLShader }
 --------------------------------------------------------------------------------
--- Loading built shaders.
+-- Loading shaders.
 --------------------------------------------------------------------------------
 -- | Compile all shader programs and return a "sum renderer".
 loadSumShader :: IO SumShader
@@ -82,14 +69,14 @@ loadSumShader = do
   vertName <- getDataFileName $ "shaders" </> "master.vert"
   fragName <- getDataFileName $ "shaders" </> "master.frag"
   SumShader <$> loader vertName fragName
-  where loader a b = loadShader $ ShaderDefFP [(a, GL_VERTEX_SHADER)
+  where loader a b = loadGLShader $ ShaderDefFP [(a, GL_VERTEX_SHADER)
                                               ,(b, GL_FRAGMENT_SHADER)
                                               ] uniforms attribs
-        uniforms = P.map glslUniformIdentifier allUniforms
+        uniforms = P.map simple2DUniformIdentifier allSimple2DUniforms
         attribs = allAttribs
 
-loadShader :: ShaderDef -> IO Shader
-loadShader (ShaderDefBS ss uniforms attribs) = do
+loadGLShader :: GLShaderDef -> IO GLShader
+loadGLShader (ShaderDefBS ss uniforms attribs) = do
     shaders <- mapM (uncurry compileShader) ss
     program <- compileProgram shaders attribs
     glUseProgram program
@@ -102,144 +89,30 @@ loadShader (ShaderDefBS ss uniforms attribs) = do
     let sh = Shader program (catMaybes ulocs)
     --updateUniform (UniformMultiplierColor 1) sh
     return sh
-loadShader (ShaderDefFP fps uniforms attribs) = do
+loadGLShader (ShaderDefFP fps uniforms attribs) = do
     srcs <- forM fps $ \(fp, shaderType) -> do
         src <- B.readFile fp
         return (src, shaderType)
-    loadShader $ ShaderDefBS srcs uniforms attribs
+    loadGLShader $ ShaderDefBS srcs uniforms attribs
 --------------------------------------------------------------------------------
--- Uniform Helper Types
+-- Loading shaders.
 --------------------------------------------------------------------------------
-data PrimType = PrimTri
-              | PrimBez
-              | PrimLine
-              | PrimMask
-              deriving (Show, Eq, Enum, Ord, Bounded)
---------------------------------------------------------------------------------
--- Updating uniforms
---------------------------------------------------------------------------------
-data Uniform = UniformPrimType PrimType
-             | UniformProjection (M44 Float)
-             | UniformModelView (M44 Float)
-             | UniformThickness Float
-             | UniformFeather Float
-             | UniformSumLength Float
-             | UniformLineCaps (LineCap,LineCap)
-             | UniformHasUV Bool
-             | UniformSampler GLuint
-             | UniformMainTex GLuint
-             | UniformMaskTex GLuint
-             | UniformAlpha Float
-             | UniformMult (V4 Float)
-             | UniformShouldReplaceColor Bool
-             | UniformReplaceColor (V4 Float)
-             deriving (Show, Ord, Eq)
-
-allUniforms :: [Uniform]
-allUniforms = [UniformPrimType PrimTri
-              ,UniformProjection 0
-              ,UniformModelView 0
-              ,UniformThickness 0
-              ,UniformFeather 0
-              ,UniformSumLength 0
-              ,UniformLineCaps (LineCapNone, LineCapNone)
-              ,UniformHasUV False
-              ,UniformSampler 0
-              ,UniformMainTex 0
-              ,UniformMaskTex 0
-              ,UniformAlpha 1
-              ,UniformMult 1
-              ,UniformShouldReplaceColor False
-              ,UniformReplaceColor 0
-              ]
-
-applyAlpha :: Float -> [Uniform] -> [Uniform]
-applyAlpha a us = UniformAlpha a : P.filter f us
-  where f (UniformAlpha _) = False
-        f _ = True
-
-applyMult :: V4 Float -> [Uniform] -> [Uniform]
-applyMult v us = UniformMult v : P.filter f us
-  where f (UniformMult _) = False
-        f _ = True
-
-glslUniformIdentifier :: Uniform -> String
-glslUniformIdentifier (UniformPrimType _)           = "primitive"
-glslUniformIdentifier (UniformProjection _)         = "projection"
-glslUniformIdentifier (UniformModelView _)          = "modelview"
-glslUniformIdentifier (UniformThickness _)          = "thickness"
-glslUniformIdentifier (UniformFeather _)            = "feather"
-glslUniformIdentifier (UniformSumLength _)          = "sumlength"
-glslUniformIdentifier (UniformLineCaps _)           = "cap"
-glslUniformIdentifier (UniformHasUV _)              = "hasUV"
-glslUniformIdentifier (UniformSampler _)            = "sampler"
-glslUniformIdentifier (UniformMainTex _)            = "mainTex"
-glslUniformIdentifier (UniformMaskTex _)            = "maskTex"
-glslUniformIdentifier (UniformAlpha _)              = "alpha"
-glslUniformIdentifier (UniformMult _)               = "mult"
-glslUniformIdentifier (UniformShouldReplaceColor _) = "shouldColorReplace"
-glslUniformIdentifier (UniformReplaceColor _)       = "replaceColor"
-
-uniformsForTris :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float -> Maybe (V4 Float)
-                -> [Uniform]
-uniformsForTris pj mv hasUV a m mr = P.map f allUniforms
-  where f (UniformPrimType _) = UniformPrimType PrimTri
-        f (UniformProjection _) = UniformProjection pj
-        f (UniformModelView _) = UniformModelView mv
-        f (UniformHasUV _) = UniformHasUV hasUV
-        f (UniformAlpha _) = UniformAlpha a
-        f (UniformMult _) = UniformMult m
-        f s@(UniformShouldReplaceColor _) = if isJust mr
-                                              then UniformShouldReplaceColor True
-                                              else s
-        f (UniformReplaceColor c) = UniformReplaceColor $ fromMaybe c mr
-        f x = x
-{-# INLINE uniformsForTris #-}
-
-uniformsForBezs :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float -> Maybe (V4 Float)
-                -> [Uniform]
-uniformsForBezs pj mv hasUV a m mr = P.map f $ uniformsForTris pj mv hasUV a m mr
-  where f (UniformPrimType _) = UniformPrimType PrimBez
-        f x = x
-{-# INLINE uniformsForBezs #-}
-
-uniformsForLines :: M44 Float -> M44 Float -> Bool -> Float -> V4 Float -> Maybe (V4 Float)
-                 -> Float -> Float -> Float -> (LineCap,LineCap) -> [Uniform]
-uniformsForLines pj mv hasUV a m mr thickness feather sumlength caps =
-  P.map f $ uniformsForTris pj mv hasUV a m mr
-    where f (UniformPrimType _) = UniformPrimType PrimLine
-          f (UniformThickness _) = UniformThickness thickness
-          f (UniformFeather _) = UniformFeather feather
-          f (UniformSumLength _) = UniformSumLength sumlength
-          f (UniformLineCaps _) = UniformLineCaps caps
-          f x = x
-{-# INLINE uniformsForLines #-}
-
-uniformsForMask :: M44 Float -> M44 Float -> Float -> V4 Float -> GLuint -> GLuint
-                -> [Uniform]
-uniformsForMask pj mv a m main mask = P.map f $ uniformsForTris pj mv True a m Nothing
-  where f (UniformPrimType _) = UniformPrimType PrimMask
-        f (UniformMainTex _) = UniformMainTex main
-        f (UniformMaskTex _) = UniformMaskTex mask
-        f x = x
-{-# INLINE uniformsForMask #-}
-
 -- | Updates uniforms for rendering triangles.
-updateUniformsForTris :: Shader -> M44 Float -> M44 Float -> Bool -> Float
+updateUniformsForTris :: GLShader -> M44 Float -> M44 Float -> Bool -> Float
                       -> V4 Float -> Maybe (V4 Float) -> IO ()
 updateUniformsForTris sh pj mv hasUV a m mr =
   updateUniforms (uniformsForTris pj mv hasUV a m mr) sh
 {-# INLINE updateUniformsForTris #-}
 
 -- | Updates uniforms for rendering loop-blinn beziers.
-updateUniformsForBezs :: Shader -> M44 Float -> M44 Float -> Bool -> Float
+updateUniformsForBezs :: GLShader -> M44 Float -> M44 Float -> Bool -> Float
                       -> V4 Float -> Maybe (V4 Float) -> IO ()
 updateUniformsForBezs sh pj mv hasUV a m mr =
   updateUniforms (uniformsForBezs pj mv hasUV a m mr) sh
 {-# INLINE updateUniformsForBezs #-}
 
 -- | Updates uniforms for rendering projected polylines.
-updateUniformsForLines :: Shader -> M44 Float -> M44 Float -> Bool -> Float
+updateUniformsForLines :: GLShader -> M44 Float -> M44 Float -> Bool -> Float
                        -> V4 Float -> Maybe (V4 Float) -> Float -> Float -> Float
                        -> (LineCap,LineCap) -> IO ()
 updateUniformsForLines sh pj mv hasUV a m mr thickness feather sumlength caps =
@@ -248,23 +121,23 @@ updateUniformsForLines sh pj mv hasUV a m mr thickness feather sumlength caps =
 {-# INLINE updateUniformsForLines #-}
 
 -- | Updates uniforms for rendering alpha masking.
-updateUniformsForMask :: Shader -> M44 Float -> M44 Float -> Float -> V4 Float
+updateUniformsForMask :: GLShader -> M44 Float -> M44 Float -> Float -> V4 Float
                       -> GLuint -> GLuint -> IO ()
 updateUniformsForMask sh pj mv a m main mask =
   updateUniforms (uniformsForMask pj mv a m main mask) sh
 {-# INLINE updateUniformsForMask #-}
 
-updateUniforms :: [Uniform] -> Shader -> IO ()
+updateUniforms :: [Simple2DUniform] -> GLShader -> IO ()
 updateUniforms us s = mapM_ (`updateUniform` s) us
 {-# INLINE updateUniforms #-}
 
-updateUniform :: Uniform -> Shader -> IO ()
-updateUniform u s = withUniform (glslUniformIdentifier u) s $ \p loc -> do
-    glUseProgram p
-    uniformUpdateFunc u loc
+updateUniform :: Simple2DUniform -> GLShader -> IO ()
+updateUniform u s = withUniform (simple2DUniformIdentifier u) s $ \p loc -> do
+  glUseProgram p
+  uniformUpdateFunc u loc
 {-# INLINE updateUniform #-}
 
-uniformUpdateFunc :: Uniform -> GLint -> IO ()
+uniformUpdateFunc :: Simple2DUniform -> GLint -> IO ()
 uniformUpdateFunc (UniformPrimType p) u =
   glUniform1i u $ fromIntegral $ fromEnum p
 uniformUpdateFunc (UniformProjection m44) u =
@@ -289,7 +162,7 @@ uniformUpdateFunc (UniformReplaceColor c) u =
   let (V4 r g b a) = realToFrac <$> c in glUniform4f u r g b a
 {-# INLINE uniformUpdateFunc #-}
 
-withUniform :: String -> Shader -> (GLuint -> GLint -> IO ()) -> IO ()
+withUniform :: String -> GLShader -> (GLuint -> GLint -> IO ()) -> IO ()
 withUniform name (Shader p ls) f =
     case lookup name ls of
         Nothing  -> do P.putStrLn $ "could not find uniform " ++ name
@@ -300,32 +173,11 @@ withUniform name (Shader p ls) f =
 -- $layout
 -- Attributes layout locations are unique and global.
 --------------------------------------------------------------------------------
-data AttribLoc = PositionLoc
-               | ColorLoc
-               | UVLoc
-               | BezLoc
-               | NextLoc
-               | PrevLoc
-               | BezUVLoc
-               deriving (Show, Eq, Ord, Enum, Bounded)
-
-allAttribs :: [AttribLoc]
-allAttribs = [minBound..maxBound]
-
-glslAttribIdentifier :: AttribLoc -> String
-glslAttribIdentifier PositionLoc = "position"
-glslAttribIdentifier ColorLoc = "color"
-glslAttribIdentifier UVLoc = "uv"
-glslAttribIdentifier BezLoc = "bez"
-glslAttribIdentifier NextLoc = "next"
-glslAttribIdentifier PrevLoc = "previous"
-glslAttribIdentifier BezUVLoc = "bezuv"
-
-locToGLuint :: AttribLoc -> GLuint
+locToGLuint :: Simple2DAttrib -> GLuint
 locToGLuint = fromIntegral . fromEnum
 
 -- | Enables the provided attributes and disables all others.
-onlyEnableAttribs :: [AttribLoc] -> IO ()
+onlyEnableAttribs :: [Simple2DAttrib] -> IO ()
 onlyEnableAttribs atts = do
    mapM_ (glDisableVertexAttribArray . locToGLuint) allAttribs
    mapM_ (glEnableVertexAttribArray . locToGLuint) atts
@@ -347,7 +199,7 @@ enableAttribsForLines False =
 enableAttribsForMask :: IO ()
 enableAttribsForMask = onlyEnableAttribs [PositionLoc,UVLoc]
 --------------------------------------------------------------------------------
--- Shader compilation
+-- GLShader compilation
 --------------------------------------------------------------------------------
 compileShader :: ByteString -> GLuint -> IO GLuint
 compileShader src sh = do
@@ -378,13 +230,13 @@ compileShader src sh = do
 
     return shader
 
-compileProgram :: [GLuint] -> [AttribLoc] -> IO GLuint
+compileProgram :: [GLuint] -> [Simple2DAttrib] -> IO GLuint
 compileProgram shaders attribs = do
     program <- glCreateProgram
 
     forM_ shaders (glAttachShader program)
     forM_ attribs $ \attrib ->
-        withCString (glslAttribIdentifier attrib) (glBindAttribLocation program (locToGLuint attrib))
+        withCString (simple2DAttribIdentifier attrib) (glBindAttribLocation program (locToGLuint attrib))
     glLinkProgram program
 
     success <- with (0 :: GLint) $ \ptr -> do

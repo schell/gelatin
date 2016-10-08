@@ -13,8 +13,6 @@ maintainer:          schell.scivally@synapsegroup.com
 category:            Graphics
 build-type:          Simple
 cabal-version:       >=1.10
-data-files:          shaders/*.frag,
-                     shaders/*.vert
 
 library
   ghc-options:         -Wall
@@ -22,11 +20,11 @@ library
                        Gelatin.GL.Renderer,
                        Gelatin.GL.Picture,
                        Gelatin.GL.Shader,
-                       Gelatin.GL.Common,
-                       Paths_gelatin_gl
+                       Gelatin.GL.Common
   build-depends:       base            >= 4.6     && < 5.0
                      , bytestring
                      , gelatin
+                     , gelatin-shaders
                      , linear
                      , gl
                      , JuicyPixels

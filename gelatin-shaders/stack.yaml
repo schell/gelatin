@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-7.1
+resolver: lts-7.2
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -38,16 +38,9 @@ resolver: lts-7.1
 packages:
 - .
 - ../gelatin
-- ../gelatin-shaders
-# The following packages have been ignored due to incompatibility with the
-# resolver compiler, dependency conflicts with other packages
-# or unsatisfied dependencies.
-#- .
-
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps:
-  #- halive-0.1.0.7
+extra-deps: []
 
 # Override default flag values for local packages and extra-deps
 flags: {}
@@ -60,7 +53,7 @@ extra-package-dbs: []
 #
 # Require a specific version of stack, using version ranges
 # require-stack-version: -any # Default
-# require-stack-version: ">=1.1"
+# require-stack-version: ">=1.2"
 #
 # Override the architecture used by stack, especially useful on Windows
 # arch: i386

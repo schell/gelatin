@@ -21,7 +21,12 @@ import GHCJS.DOM.JSFFI.Generated.WebGLRenderingContextBase
 import Gelatin
 
 type V2V4 = (V2 Float, V4 Float)
+type ColorPictureData = PictureData WebGLTexture (V2 Float, V4 Float)
+type ColorPictureT = PictureT WebGLTexture (V2 Float, V4 Float)
+
 type V2V2 = (V2 Float, V2 Float)
+type TexturePictureData = PictureData WebGLTexture (V2 Float, V2 Float)
+type TexturePictureT = PictureT WebGLTexture (V2 Float, V2 Float)
 
 data WebGLBackends = WebGLBackends
   { backendV2V4 :: Backend WebGLTexture () V2V4 (V2 Float) Float Raster
