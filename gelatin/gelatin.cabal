@@ -18,6 +18,7 @@ library
                      , Gelatin.Core.Bounds
                      , Gelatin.Core.Color
                      , Gelatin.Core.Font
+                     , Gelatin.Core.Polyline
                      , Gelatin.Core.Stroke
                      , Gelatin.Core.Transform
                      , Gelatin.Core.Triangle

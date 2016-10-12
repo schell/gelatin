@@ -8,7 +8,8 @@ module Gelatin.Compiler where
 import qualified Data.Vector as B
 import           Data.Vector.Unboxed (Vector)
 import           Data.Functor.Identity
-import           Linear (V4(..), V2(..))
+import           Data.Foldable (foldl')
+import           Linear (V4(..), V2(..), M44, identity, (!*!))
 import           Control.Monad.IO.Class
 
 import           Gelatin.Core
@@ -36,6 +37,20 @@ data Raster = Alpha Float
 
 type RenderTransform2 = RenderTransform (V2 Float) Float Raster
 type Renderer2        = Renderer        (V2 Float) Float Raster
+--------------------------------------------------------------------------------
+-- Transformation Helpers
+--------------------------------------------------------------------------------
+unwrapTransforms :: [RenderTransform2]
+                 -> (M44 Float, Float, V4 Float, Maybe (V4 Float))
+unwrapTransforms = foldl' f (identity, 1, white, Nothing)
+  where f (mv, alph, mlt, rep) (Spatial a) =
+          (mv !*! affine2Modelview a, alph, mlt, rep)
+        f (mv, alph, mlt, rep) (Special (Alpha a)) =
+          (mv, alph * a, mlt, rep)
+        f (mv, alph, mlt, rep) (Special (Multiply a)) =
+          (mv, alph, mlt * a, rep)
+        f (mv, alph, mlt, _) (Special (ColorReplacement a)) =
+          (mv, alph, mlt, Just a)
 --------------------------------------------------------------------------------
 -- Conveniences for creating transformations
 --------------------------------------------------------------------------------

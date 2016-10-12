@@ -2,6 +2,8 @@
 module Main where
 
 import Gelatin.WebGL
+import Gelatin.WebGL.Common
+import Gelatin.WebGL.Shaders
 
 import Data.Bits ((.|.))
 import Data.Function (fix)

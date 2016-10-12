@@ -95,7 +95,7 @@ loadGLShader (ShaderDefFP fps uniforms attribs) = do
         return (src, shaderType)
     loadGLShader $ ShaderDefBS srcs uniforms attribs
 --------------------------------------------------------------------------------
--- Loading shaders.
+-- Updating shader uniforms
 --------------------------------------------------------------------------------
 -- | Updates uniforms for rendering triangles.
 updateUniformsForTris :: GLShader -> M44 Float -> M44 Float -> Bool -> Float
