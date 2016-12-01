@@ -66,8 +66,8 @@ newtype SumShader = SumShader { unShader :: GLShader }
 -- | Compile all shader programs and return a "sum renderer".
 loadSumShader :: IO SumShader
 loadSumShader = do
-  vertName <- getDataFileName $ "shaders" </> "master.vert"
-  fragName <- getDataFileName $ "shaders" </> "master.frag"
+  vertName <- simple2dVertFilePath
+  fragName <- simple2dFragFilePath
   SumShader <$> loader vertName fragName
   where loader a b = loadGLShader $ ShaderDefFP [(a, GL_VERTEX_SHADER)
                                               ,(b, GL_FRAGMENT_SHADER)
