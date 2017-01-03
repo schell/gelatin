@@ -15,12 +15,11 @@ import           Control.Monad.Trans.Reader
 import qualified Data.ByteString.Char8                               as C8
 import           Data.Function                                       (fix)
 import           Data.Maybe                                          (catMaybes)
-import           Foreign.Storable
-import           GHCJS.DOM.JSFFI.Generated.Enums
 import           GHCJS.DOM.JSFFI.Generated.WebGLRenderingContextBase
 import           GHCJS.DOM.JSFFI.Generated.XMLHttpRequest            hiding
                                                                       (error)
 import           GHCJS.DOM.Types
+import           GHCJS.Marshal
 import           GHCJS.Types
 
 type WGLShaderDef = ShaderDef GLenum Simple2DAttrib
@@ -35,15 +34,33 @@ wglCompileShader source shaderType = do
   shader <- createShader gl shaderType >>= \case
     Nothing -> error "Could not create a shader"
     Just sh -> return sh
+  liftIO $ putStrLn "Created shader"
   shaderSource gl (Just shader) source
+  liftIO $ putStrLn "Added shader source"
   compileShader gl (Just shader)
-  success <- liftIO . peek . toPtr =<< getShaderParameter gl (Just shader)
-                                                          COMPILE_STATUS
-  if success
-    then return shader
-    else getShaderInfoLog gl (Just shader) >>= \case
-      Nothing  -> error "Encountered an unreadable error while compiling a shader."
-      Just err -> error $ "Could not compile shader: " ++ fromJSString err
+  liftIO $ putStrLn "Compiled shader source"
+  let toBool :: MonadIO m => JSVal -> m (Maybe Bool)
+      toBool val
+        | isNull val      = return Nothing
+        | isUndefined val = return Nothing
+        | otherwise       = liftIO $ do
+            putStrLn "Got compile status...reading it"
+            fromJSVal val
+
+  liftIO $ putStrLn "Checking shader compile status"
+  getShaderParameter gl (Just shader) COMPILE_STATUS >>= toBool >>= \case
+    Nothing -> do
+      liftIO $ putStrLn "Could not check compile status...assuming it's all good."
+      return shader
+    Just success
+      | success -> do
+        liftIO $ putStrLn "Shader compiled successfully"
+        return shader
+      | otherwise -> do
+          liftIO $ putStrLn "Checking shader info log"
+          getShaderInfoLog gl (Just shader) >>= \case
+            Nothing  -> error "Encountered an unreadable error while compiling a shader."
+            Just err -> error $ "Could not compile shader: " ++ fromJSString err
 
 wglCompileProgram :: (MonadIO m) => [WebGLShader] -> [Simple2DAttrib]
                   -> WebGLT m WebGLProgram
@@ -59,12 +76,13 @@ wglCompileProgram shaders attribs = do
                                          (simple2DAttribIdentifier attrib)
   linkProgram gl (Just program)
 
-  success <- do
-    ptr <- toPtr <$> getProgramParameter gl (Just program) LINK_STATUS
-    liftIO $ peek ptr
+  success <- fmap (\case
+      Nothing -> False
+      Just s  -> s) $
+        getProgramParameter gl (Just program) LINK_STATUS >>= liftIO . fromJSVal
 
   unless success $ getProgramInfoLog gl (Just program) >>= \case
-    Nothing -> error "Could not link program for some unreadable reason."
+    Nothing    -> error "Could not link program for some unreadable reason."
     Just jsstr -> error $ "Could not link program: " ++ fromJSString jsstr
 
   forM_ shaders (deleteShader gl . Just)
@@ -76,7 +94,9 @@ loadGLShader :: MonadIO m => WGLShaderDef -> WebGLT m WGLShader
 loadGLShader (ShaderDefBS ss uniforms attribs) = do
   gl      <- lift ask
   shaders <- mapM (uncurry wglCompileShader . first C8.unpack) ss
+  liftIO $ putStrLn "Compiled shaders"
   program <- wglCompileProgram shaders attribs
+  liftIO $ putStrLn "Created and linked programs"
   useProgram gl $ Just program
   ulocs <- forM uniforms $ \u -> getUniformLocation gl (Just program) u >>= \case
     Nothing  -> do

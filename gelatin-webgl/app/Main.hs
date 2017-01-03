@@ -49,11 +49,13 @@ loadTexture file = do
   bindTexture gl TEXTURE_2D $ Just tex
   img <- loadImage file
   sz  <- V2 <$> Image.getWidth img <*> Image.getHeight img
-  generateMipmap gl TEXTURE_2D
-  texParameteri  gl TEXTURE_2D TEXTURE_WRAP_S REPEAT
-  texParameteri  gl TEXTURE_2D TEXTURE_WRAP_T REPEAT
+  -- | TODO: If size has a power of 2 width and height, generate mipmaps
+  --generateMipmap gl TEXTURE_2D
+  --texParameteri  gl TEXTURE_2D TEXTURE_MIN_FILTER NEAREST_MIPMAP_NEAREST
+  texParameteri  gl TEXTURE_2D TEXTURE_WRAP_S CLAMP_TO_EDGE
+  texParameteri  gl TEXTURE_2D TEXTURE_WRAP_T CLAMP_TO_EDGE
   texParameteri  gl TEXTURE_2D TEXTURE_MAG_FILTER NEAREST
-  texParameteri  gl TEXTURE_2D TEXTURE_MIN_FILTER NEAREST_MIPMAP_NEAREST
+  texParameteri  gl TEXTURE_2D TEXTURE_MIN_FILTER NEAREST
   bindTexture    gl TEXTURE_2D Nothing
   return (tex, sz)
 
@@ -109,6 +111,7 @@ webglV2V2 :: MonadIO m
           -> WebGLRenderingContextBase
           -> EitherT String m WebGLV2V2
 webglV2V2 canvas ctx = do
+  void $ getExtension ctx "OES_standard_derivatives"
   let webCanvasSize = V2 <$> Canvas.getWidth canvas <*> Canvas.getHeight canvas
       gelClearWindow = do
         V2 w h <- webCanvasSize
@@ -164,8 +167,8 @@ app = do
     Nothing -> putStrLn "Could not alloc texture."
     Just (_, V2 w h) -> putStrLn $ "Texture is " ++ show (w, h) ++ "px"
 
-  let vert = "https://raw.githubusercontent.com/schell/gelatin/master/gelatin-shaders/shaders/simple2d.vert"
-      frag = "https://raw.githubusercontent.com/schell/gelatin/master/gelatin-shaders/shaders/simple2d.frag"
+  let frag = "https://gist.githubusercontent.com/schell/a0e129e01458c8570540a782142857d0/raw/263b1549a527fa9582fd51798f21b1b983cbba6f/simple2dwebgl.frag"
+      vert = "https://gist.githubusercontent.com/schell/8ef693f134c68892a0e6d4fd1705f032/raw/4823cc85e8a587e04c543f9aabd06dc4dc2f10d8/simple2dwebgl.vert"
 
   runWebGLT (loadSumShaderRemote vert frag) ctx >>= \case
     Left err -> liftIO $ print err
