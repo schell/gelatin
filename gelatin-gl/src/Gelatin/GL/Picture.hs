@@ -1,18 +1,18 @@
-{-# LANGUAGE RecordWildCards      #-}
-{-# LANGUAGE LambdaCase           #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE RecordWildCards      #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Gelatin.GL.Picture where
 
+import           Control.Lens        hiding (op)
+import           Control.Monad       ((>=>))
+import           Data.Bits           ((.|.))
 import qualified Data.Vector.Unboxed as V
-import           Data.Bits ((.|.))
-import           Linear as L
-import           Control.Lens hiding (op)
-import           Control.Monad ((>=>))
-import           Graphics.GL.Types
 import           Graphics.GL.Core33
+import           Graphics.GL.Types
+import           Linear              as L
 
 import           Gelatin
 import           Gelatin.GL.Common
@@ -74,7 +74,7 @@ glV2V2Compiler rz = BackendComp
   , backendCompCompiler = uvCompiler rz
   }
 
-glOps :: Rez -> IO () -> (IO [a]) -> BackendOps GLuint a
+glOps :: Rez -> IO () -> IO [a] -> BackendOps GLuint a
 glOps Rez{..} windowUpdate getEvents = BackendOps
   { backendOpGetFramebufferSize = uncurry V2 <$> ctxFramebufferSize rezContext
   , backendOpGetWindowSize = uncurry V2 <$> ctxWindowSize rezContext

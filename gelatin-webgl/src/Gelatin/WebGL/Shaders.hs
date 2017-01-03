@@ -1,19 +1,31 @@
 {-# LANGUAGE LambdaCase #-}
 module Gelatin.WebGL.Shaders where
 
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.Reader
-import Control.Monad (unless, forM_)
-import GHCJS.Types
-import GHCJS.DOM.Types
-import GHCJS.DOM.JSFFI.Generated.WebGLRenderingContextBase
-import Foreign.Storable
-import Gelatin.Shaders
-import Gelatin.WebGL.Common
+import           Gelatin.Shaders
+import           Gelatin.WebGL.Common
 
-type WGLShaderProgram = WebGLProgram
---type WGLShader = Shader
+import           Control.Arrow                                       (first)
+import           Control.Concurrent                                  (threadDelay)
+import           Control.Monad                                       (forM,
+                                                                      forM_,
+                                                                      unless)
+import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Class
+import           Control.Monad.Trans.Reader
+import qualified Data.ByteString.Char8                               as C8
+import           Data.Function                                       (fix)
+import           Data.Maybe                                          (catMaybes)
+import           Foreign.Storable
+import           GHCJS.DOM.JSFFI.Generated.Enums
+import           GHCJS.DOM.JSFFI.Generated.WebGLRenderingContextBase
+import           GHCJS.DOM.JSFFI.Generated.XMLHttpRequest            hiding
+                                                                      (error)
+import           GHCJS.DOM.Types
+import           GHCJS.Types
+
+type WGLShaderDef = ShaderDef GLenum Simple2DAttrib
+type WGLShader    = Shader WebGLProgram WebGLUniformLocation
+newtype WGLSumShader = WGLSumShader { unShader :: WGLShader }
 --------------------------------------------------------------------------------
 -- Compiling shaders and programs
 --------------------------------------------------------------------------------
@@ -25,8 +37,8 @@ wglCompileShader source shaderType = do
     Just sh -> return sh
   shaderSource gl (Just shader) source
   compileShader gl (Just shader)
-  jsval <- getShaderParameter gl (Just shader) COMPILE_STATUS
-  success <- liftIO $ peek $ toPtr jsval
+  success <- liftIO . peek . toPtr =<< getShaderParameter gl (Just shader)
+                                                          COMPILE_STATUS
   if success
     then return shader
     else getShaderInfoLog gl (Just shader) >>= \case
@@ -34,7 +46,7 @@ wglCompileShader source shaderType = do
       Just err -> error $ "Could not compile shader: " ++ fromJSString err
 
 wglCompileProgram :: (MonadIO m) => [WebGLShader] -> [Simple2DAttrib]
-                  -> WebGLT m WGLShaderProgram
+                  -> WebGLT m WebGLProgram
 wglCompileProgram shaders attribs = do
   gl <- lift ask
   program <- createProgram gl >>= \case
@@ -60,37 +72,42 @@ wglCompileProgram shaders attribs = do
 --------------------------------------------------------------------------------
 -- Loading shaders
 --------------------------------------------------------------------------------
--- | Compile all shader programs and return a "sum renderer".
---loadSumShader :: IO SumShader
---loadSumShader = do
---  vertName <- getDataFileName $ "shaders" </> "master.vert"
---  fragName <- getDataFileName $ "shaders" </> "master.frag"
---  SumShader <$> loader vertName fragName
---  where loader a b = loadGLShader $ ShaderDefFP [(a, VERTEX_SHADER)
---                                                ,(b, FRAGMENT_SHADER)
---                                                ] uniforms attribs
---        uniforms = P.map simple2DUniformIdentifier allSimple2DUniforms
---        attribs = allAttribs
---
---loadGLShader :: GLShaderDef -> IO GLShader
---loadGLShader (ShaderDefBS ss uniforms attribs) = do
---    shaders <- mapM (uncurry compileShader) ss
---    program <- compileProgram shaders attribs
---    glUseProgram program
---    ulocs <- forM uniforms $ \u -> do
---        loc <- withCString u $ glGetUniformLocation program
---        if loc == (-1)
---        then do P.putStrLn $ "Warning! Could not find the uniform " ++ show u
---                return Nothing
---        else return $ Just (u, loc)
---    let sh = Shader program (catMaybes ulocs)
---    --updateUniform (UniformMultiplierColor 1) sh
---    return sh
---loadGLShader (ShaderDefFP fps uniforms attribs) = do
---    srcs <- forM fps $ \(fp, shaderType) -> do
---        src <- B.readFile fp
---        return (src, shaderType)
---    loadGLShader $ ShaderDefBS srcs uniforms attribs
+loadGLShader :: MonadIO m => WGLShaderDef -> WebGLT m WGLShader
+loadGLShader (ShaderDefBS ss uniforms attribs) = do
+  gl      <- lift ask
+  shaders <- mapM (uncurry wglCompileShader . first C8.unpack) ss
+  program <- wglCompileProgram shaders attribs
+  useProgram gl $ Just program
+  ulocs <- forM uniforms $ \u -> getUniformLocation gl (Just program) u >>= \case
+    Nothing  -> do
+      liftIO $ putStrLn $ "Warning! Could not find the uniform " ++ show u
+      return Nothing
+    Just loc -> return $ Just (u, loc)
+  return $ Shader program (catMaybes ulocs)
+loadGLShader (ShaderDefFP fps uniforms attribs) = do
+    srcs <- forM fps $ \(fp, shaderType) -> do
+        src <- C8.pack <$> getShaderFileSource fp
+        return (src, shaderType)
+    loadGLShader $ ShaderDefBS srcs uniforms attribs
+  where getShaderFileSource fp = do
+          req <- newXMLHttpRequest
+          open req "GET" fp True "" ""
+          send req
+          fix $ \loop -> getStatus req >>= \case
+            0 -> liftIO (threadDelay 1) >> loop
+            _ -> return ()
+          getResponseText req >>= \case
+            Nothing  -> fail $ "Could not get shader source from" ++ show fp
+            Just src -> return src
 
 attribToGLuint :: Simple2DAttrib -> GLuint
 attribToGLuint = fromIntegral . fromEnum
+
+-- | Compile all shader programs and return a "sum renderer".
+loadSumShaderRemote :: MonadIO m => FilePath -> FilePath -> WebGLT m WGLSumShader
+loadSumShaderRemote vertPath fragPath = WGLSumShader <$> loader vertPath fragPath
+  where loader a b = loadGLShader $ ShaderDefFP [(a, VERTEX_SHADER)
+                                                ,(b, FRAGMENT_SHADER)
+                                                ] uniforms attribs
+        uniforms = map simple2DUniformIdentifier allSimple2DUniforms
+        attribs = allAttribs

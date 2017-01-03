@@ -30,6 +30,7 @@ library
                      , either
                      , async
                      , vector
+                     , bytestring
 
   default-language:    Haskell2010
 
@@ -50,6 +51,7 @@ executable gelatin-webgl-exe
                      , async
                      , vector
                      , stm
+                     , bytestring
 
   default-language:    Haskell2010
 
