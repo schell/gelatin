@@ -80,7 +80,6 @@ vec4 bez_fragment(bool isUV,
     } else {
       // we are right on the boundary, interpolate the color intensity.
       a = alpha;
-      return vec4(1,0,0,1);
     }
 
     vec4 color = vec4(0);
