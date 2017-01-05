@@ -1,19 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
-import Control.Concurrent     (threadDelay)
-import Control.Monad          (forM_, when, unless, forever, void)
-import Control.Arrow
-import qualified Data.Vector.Unboxed as V
-import qualified Data.Vector as B
-import Data.ByteString        (ByteString)
-import Data.ByteString.Lazy   (fromStrict)
-import System.Directory       (getCurrentDirectory)
-import System.FilePath        ((</>))
-import System.Exit            (exitSuccess, exitFailure)
-import SDL
-import Gelatin.SDL2
-import Gelatin.Fruity
-import Gelatin.FreeType2
-import Paths_gelatin_example
+import           Control.Arrow
+import           Control.Concurrent    (threadDelay)
+import           Control.Monad         (forever, when)
+import qualified Data.Vector           as B
+import           Gelatin.FreeType2
+import           Gelatin.Fruity
+import           Gelatin.SDL2
+import           Paths_gelatin_example
+import           SDL
+import           System.Exit           (exitFailure, exitSuccess)
+import           System.FilePath       ((</>))
 
 --------------------------------------------------------------------------------
 -- Regular pure pictures

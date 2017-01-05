@@ -13,3 +13,5 @@ cabal.config
 *.tags
 *.out
 *.tmp
+.DS_Store
+.projectile

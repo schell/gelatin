@@ -1,4 +1,5 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase       #-}
 module Gelatin.WebGL.Shaders where
 
 import           Gelatin.Shaders
@@ -10,8 +11,8 @@ import           Control.Monad                                       (forM,
                                                                       forM_,
                                                                       unless)
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Reader
+import           Control.Monad.Reader
+import           Data.ByteString.Char8                               (ByteString)
 import qualified Data.ByteString.Char8                               as C8
 import           Data.Function                                       (fix)
 import           Data.Maybe                                          (catMaybes)
@@ -22,15 +23,9 @@ import           GHCJS.DOM.Types
 import           GHCJS.Marshal
 import           GHCJS.Types
 
-type WGLShaderDef = ShaderDef GLenum Simple2DAttrib
-type WGLShader    = Shader WebGLProgram WebGLUniformLocation
-newtype WGLSumShader = WGLSumShader { unShader :: WGLShader }
---------------------------------------------------------------------------------
--- Compiling shaders and programs
---------------------------------------------------------------------------------
-wglCompileShader :: (MonadIO m, ToJSString s) => s -> GLenum -> WebGLT m WebGLShader
+wglCompileShader :: ToJSString s => s -> GLenum -> Gelatin WebGLShader
 wglCompileShader source shaderType = do
-  gl <- lift ask
+  gl     <- asks gelRenderingContext
   shader <- createShader gl shaderType >>= \case
     Nothing -> error "Could not create a shader"
     Just sh -> return sh
@@ -46,7 +41,6 @@ wglCompileShader source shaderType = do
         | otherwise       = liftIO $ do
             putStrLn "Got compile status...reading it"
             fromJSVal val
-
   liftIO $ putStrLn "Checking shader compile status"
   getShaderParameter gl (Just shader) COMPILE_STATUS >>= toBool >>= \case
     Nothing -> do
@@ -62,10 +56,9 @@ wglCompileShader source shaderType = do
             Nothing  -> error "Encountered an unreadable error while compiling a shader."
             Just err -> error $ "Could not compile shader: " ++ fromJSString err
 
-wglCompileProgram :: (MonadIO m) => [WebGLShader] -> [Simple2DAttrib]
-                  -> WebGLT m WebGLProgram
+wglCompileProgram :: [WebGLShader] -> [Simple2DAttrib] -> Gelatin WebGLProgram
 wglCompileProgram shaders attribs = do
-  gl <- lift ask
+  gl      <- asks gelRenderingContext
   program <- createProgram gl >>= \case
     Nothing -> error "Could not create a shader program."
     Just p -> return p
@@ -90,9 +83,10 @@ wglCompileProgram shaders attribs = do
 --------------------------------------------------------------------------------
 -- Loading shaders
 --------------------------------------------------------------------------------
-loadGLShader :: MonadIO m => WGLShaderDef -> WebGLT m WGLShader
+loadGLShader :: WGLShaderDef -> Gelatin WGLShader
 loadGLShader (ShaderDefBS ss uniforms attribs) = do
-  gl      <- lift ask
+  gl <- asks gelRenderingContext
+  void $ getExtension gl "OES_standard_derivatives"
   shaders <- mapM (uncurry wglCompileShader . first C8.unpack) ss
   liftIO $ putStrLn "Compiled shaders"
   program <- wglCompileProgram shaders attribs
@@ -123,11 +117,30 @@ loadGLShader (ShaderDefFP fps uniforms attribs) = do
 attribToGLuint :: Simple2DAttrib -> GLuint
 attribToGLuint = fromIntegral . fromEnum
 
--- | Compile all shader programs and return a "sum renderer".
-loadSumShaderRemote :: MonadIO m => FilePath -> FilePath -> WebGLT m WGLSumShader
-loadSumShaderRemote vertPath fragPath = WGLSumShader <$> loader vertPath fragPath
-  where loader a b = loadGLShader $ ShaderDefFP [(a, VERTEX_SHADER)
-                                                ,(b, FRAGMENT_SHADER)
-                                                ] uniforms attribs
-        uniforms = map simple2DUniformIdentifier allSimple2DUniforms
-        attribs = allAttribs
+-- | Compile a shader program from a remote source
+loadShaderRemote :: FilePath -> FilePath -> Gelatin WGLShader
+loadShaderRemote a b = do
+  gl <- asks gelRenderingContext
+
+  ext <- getExtension gl "OES_standard_derivatives"
+  when (isNull ext || isUndefined ext) $
+    liftIO $ putStrLn "Could not load a needed extension: OES_standard_derivatives"
+
+  let ufms = map simple2DUniformIdentifier allSimple2DUniforms
+      atts = allAttribs
+      shdef = ShaderDefFP [(a, VERTEX_SHADER),(b, FRAGMENT_SHADER)] ufms atts
+  loadGLShader shdef
+
+-- | Compile a shader program from a local, in memory source
+loadShaderMemory :: ByteString -> ByteString -> Gelatin WGLShader
+loadShaderMemory a b = do
+  gl <- asks gelRenderingContext
+
+  ext <- getExtension gl "OES_standard_derivatives"
+  when (isNull ext || isUndefined ext) $
+    liftIO $ putStrLn "Could not load a needed extension: OES_standard_derivatives"
+
+  let ufms = map simple2DUniformIdentifier allSimple2DUniforms
+      atts = allAttribs
+      shdef = ShaderDefBS [(a, VERTEX_SHADER),(b, FRAGMENT_SHADER)] ufms atts
+  loadGLShader shdef

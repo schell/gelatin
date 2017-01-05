@@ -74,19 +74,20 @@ vec4 bez_fragment(bool isUV,
     float a = 0.0;
 
     if (alpha > 1.0) {
-        a = 1.0;
+      a = 1.0;
     } else if (alpha < 0.0) {
-        discard;
+      discard;
     } else {
-        // we are right on the boundary, interpolate the color intensity.
-        a = alpha;
+      // we are right on the boundary, interpolate the color intensity.
+      a = alpha;
+      return vec4(1,0,0,1);
     }
 
     vec4 color = vec4(0);
     if (isUV) {
-        color = texture2D(s, uvs.st);
+      color = texture2D(s, uvs.st);
     } else {
-        color = clr;
+      color = clr;
     }
     return vec4(color.rgb, color.a * a);
 }

@@ -18,19 +18,20 @@ library
   exposed-modules:     Gelatin.WebGL
                      , Gelatin.WebGL.Common
                      , Gelatin.WebGL.Shaders
+                     , Gelatin.WebGL.Renderer
 
   build-depends:       base >= 4.7 && < 5
                      , gelatin
                      , gelatin-shaders
                      , ghcjs-base
                      , ghcjs-dom
-                     , ghcjs-dom
                      , ghcjs-dom-jsffi
-                     , transformers
+                     , mtl
                      , either
                      , async
                      , vector
                      , bytestring
+                     , stm
 
   default-language:    Haskell2010
 
@@ -43,7 +44,6 @@ executable gelatin-webgl-exe
                      , gelatin-webgl
                      , gelatin-shaders
                      , ghcjs-base
-                     , ghcjs-dom
                      , ghcjs-dom
                      , ghcjs-dom-jsffi
                      , transformers
