@@ -453,6 +453,7 @@ colorRenderer sh mode vs gs =
     bindVertexArrayOES ext Nothing
     let num = fromIntegral $ V.length vs
         renderFunction t = do
+          bindTexture gl TEXTURE_2D Nothing
           let (mv,a,m,mr) = unwrapTransforms t
           pj <- orthoContextProjection canvas
           updateUniformsForTris gl sh pj mv False a m mr
@@ -534,10 +535,11 @@ bezRenderer isTex sh vs cvs = do
           deleteVertexArrayOES ext $ Just vao
         num = fromIntegral $ V.length vs
         renderFunction t = do
-            pj <- orthoContextProjection canvas
-            let (mv,a,m,mr) = unwrapTransforms t
-            updateUniformsForBezs gl sh pj mv isTex a m mr
-            drawBuffer gl (shProgram sh) vao TRIANGLES num
+          unless isTex $ bindTexture gl TEXTURE_2D Nothing
+          pj <- orthoContextProjection canvas
+          let (mv,a,m,mr) = unwrapTransforms t
+          updateUniformsForBezs gl sh pj mv isTex a m mr
+          drawBuffer gl (shProgram sh) vao TRIANGLES num
     return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders the given colored beziers.

@@ -2,7 +2,7 @@ gelatin
 =======
 [![Build Status](https://travis-ci.org/schell/gelatin.svg?branch=master)](https://travis-ci.org/schell/gelatin)
 
-^ Don't worry, it builds fine with `stack`. 
+^ Don't worry, it builds fine with `stack`.
 
 This is a mega-repo for a real-time graphics renderer using Haskell.
 
@@ -22,9 +22,9 @@ features
 
 [x] sdl2 backend [gelatin-sdl2](https://github.com/schell/gelatin/tree/master/gelatin-sdl2)
 
-[ ] glfw backend [gelatin-glfw](https://github.com/schell/gelatin/tree/master/gelatin-glfw)
+[-] glfw backend (exists, but is broken an stalled) [gelatin-glfw](https://github.com/schell/gelatin/tree/master/gelatin-glfw)
 
-[ ] webgl via ghcjs backend
+[x] webgl via ghcjs backend
 
 [ ] drawing with 3d color or texture using gpu resources
 

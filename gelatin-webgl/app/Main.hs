@@ -21,19 +21,17 @@ vert = "https://raw.githubusercontent.com/schell/gelatin/master/gelatin-shaders/
 
 colorGeometry :: MonadIO m => GeometryT (V2 Float, V4 Float) m ()
 colorGeometry = do
-  triangles $ tri (0, red) (V2 100 0, red) (100, red)
-  return ()
-  --triangles tris
-  --beziers $ mapVertices (first (+ V2 100 0)) tris
-  --line $ mapVertices (first (+V2 200 0)) tris
-  --line $ mapVertices (first (+V2 300 0)) bcurve
-  --line $ mapVertices (first ((+V2 300 100) . (*V2 1 (-1)))) bcurve
-  --line $ mapVertices (first (+V2 350 50)) circle
-  --where tris = do tri (0, red) (V2 100 0, green) (100, blue)
-  --                tri (0, magenta) (V2 0 100, canary) (100, cyan)
-  --      bcurve = mapVertices (\v -> (v,white)) $
-  --                 curve (V2 0 100) (V2 50 (-50)) 100
-  --      circle = mapVertices (\v -> (v,white)) $ arc 50 50 0 (2*pi)
+  triangles tris
+  beziers $ mapVertices (first (+ V2 100 0)) tris
+  line $ mapVertices (first (+V2 200 0)) tris
+  line $ mapVertices (first (+V2 300 0)) bcurve
+  line $ mapVertices (first ((+V2 300 100) . (*V2 1 (-1)))) bcurve
+  line $ mapVertices (first (+V2 350 50)) circle
+  where tris = do tri (0, red) (V2 100 0, green) (100, blue)
+                  tri (0, magenta) (V2 0 100, canary) (100, cyan)
+        bcurve = mapVertices (\v -> (v,white)) $
+                   curve (V2 0 100) (V2 50 (-50)) 100
+        circle = mapVertices (\v -> (v,white)) $ arc 50 50 0 (2*pi)
 
 colorPicture :: MonadIO m => ColorPictureT m ()
 colorPicture = do
