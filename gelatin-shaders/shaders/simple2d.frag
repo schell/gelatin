@@ -1,4 +1,4 @@
-#version 330 core
+#version 300 core
 
 in vec4 fcolor;
 in vec2 fuv;

@@ -1,4 +1,4 @@
-#version 330 core
+#version 300 core
 
 in vec2 position;
 in vec4 color;
@@ -54,7 +54,7 @@ vec4 project_line(mat4 pj,
   return pj * mv * vec4(pos + delta, 0.0, 1.0);
 }
 
-// Projects a plain point into screen coords. 
+// Projects a plain point into screen coords.
 // Used for alpha masking and "regular" uv mapping and coloring.
 vec4 project_position(mat4 pj, mat4 mv, vec2 pos) {
     return pj * mv * vec4(pos.xy, 0.0, 1.0);
@@ -72,7 +72,7 @@ void main () {
       break;
 
     case PrimLine: {
-      out_position = project_line(projection, modelview, thickness, position, 
+      out_position = project_line(projection, modelview, thickness, position,
                                   bezuv, next, previous);
       break;
     }
