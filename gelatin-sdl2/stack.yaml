@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-7.1
+resolver: lts-7.14
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -39,6 +39,7 @@ packages:
 - .
 - ../gelatin
 - ../gelatin-gl
+- ../gelatin-shaders
 - location:
     git: https://github.com/schell/sdl2.git
     commit: 183b0d57bf031d18f77c5668d8759fa841f57c6e

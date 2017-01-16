@@ -19,6 +19,7 @@ executable gelatin-example
   other-modules:       Paths_gelatin_example
   ghc-options:         -rtsopts
   build-depends:       base
+                     , either
                      , gelatin
                      , gelatin-sdl2
                      , gelatin-fruity

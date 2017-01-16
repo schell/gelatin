@@ -1,40 +1,63 @@
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Gelatin.Core.Bounds where
 
-import Linear
-import Gelatin.Core.Transform
-import qualified Data.Vector.Unboxed as V
-import           Data.Vector.Unboxed (Vector, Unbox)
+import           Control.Arrow          (Arrow, first, second, (>>>))
+import           Data.Vector.Unboxed    (Unbox, Vector)
+import qualified Data.Vector.Unboxed    as V
+import           Gelatin.Core.Transform
+import           Linear
 
 type BBox = (V2 Float, V2 Float)
 
-polyBounds :: (Unbox a, Real a) => Vector (V2 a) -> BBox
-polyBounds vs
+type BCube = (V3 Float, V3 Float)
+
+--------------------------------------------------------------------------------
+-- 3d
+--------------------------------------------------------------------------------
+boundingCube :: (Unbox a, Real a) => Vector (V3 a) -> BCube
+boundingCube vs
   | V.null vs = (0,0)
   | otherwise = V.foldl' f (br,tl) vs
-  where f :: Real a => (V2 Float, V2 Float) -> (V2 a) -> (V2 Float, V2 Float)
-        f (V2 nx ny, V2 xx xy) (V2 x y) = ( V2 (min nx (realToFrac x)) (min ny (realToFrac y))
-                                          , V2 (max xx (realToFrac x)) (max xy (realToFrac y))
-                                          )
+  where mn a = min a . realToFrac
+        mx a = max a . realToFrac
+        f (a, b) c = (mn <$> a <*> c, mx <$> b <*> c)
         inf = 1/0
         ninf = (-1)/0
-        tl = V2 ninf ninf
-        br = V2 inf inf
+        tl = V3 ninf ninf ninf
+        br = V3 inf inf inf
 
-pointsBounds :: [V2 Float] -> BBox
-pointsBounds = polyBounds . V.fromList
+listToCube :: [V3 Float] -> BCube
+listToCube = boundingCube . V.fromList
 
-boundsBounds :: Vector BBox -> BBox
-boundsBounds bs = polyBounds $
-  V.foldl' f V.empty bs
-    where f :: Vector (V2 Float) -> (V2 Float, V2 Float) -> Vector (V2 Float)
-          f vs (v1,v2) = vs `V.snoc` v1 `V.snoc` v2
+foldIntoCube :: Vector BCube -> BCube
+foldIntoCube = boundingCube . uncurry (V.++) . V.unzip
 
-pointInBounds :: V2 Float -> BBox -> Bool
-pointInBounds (V2 px py) (V2 minx miny, V2 maxx maxy) =
+pointInCube :: V2 Float -> BBox -> Bool
+pointInCube (V2 px py) (V2 minx miny, V2 maxx maxy) =
   (px >= minx && px <= maxx) && (py >= miny && py <= maxy)
 
-applyTfrmToBounds :: M44 Float -> BBox -> BBox
-applyTfrmToBounds t (tl,br) = pointsBounds [transformV2 t tl, transformV2 t br]
+applyTfrmToCube :: M44 Float -> BBox -> BBox
+applyTfrmToCube t (tl,br) = listToBox [transformV2 t tl, transformV2 t br]
+--------------------------------------------------------------------------------
+-- 2d
+--------------------------------------------------------------------------------
+both :: Arrow a => a d c -> a (d, d) (c, c)
+both f = first f >>> second f
+
+boundingBox :: (Unbox a, Real a) => Vector (V2 a) -> BBox
+boundingBox = second demoteV3 . first demoteV3 . boundingCube . V.map promoteV2
+
+listToBox :: [V2 Float] -> BBox
+listToBox = boundingBox . V.fromList
+
+foldIntoBox :: Vector BBox -> BBox
+foldIntoBox = boundingBox . uncurry (V.++) . V.unzip
+
+pointInBox :: V2 Float -> BBox -> Bool
+pointInBox (V2 px py) (V2 minx miny, V2 maxx maxy) =
+  (px >= minx && px <= maxx) && (py >= miny && py <= maxy)
+
+applyTfrmToBox :: M44 Float -> BBox -> BBox
+applyTfrmToBox t (tl,br) = listToBox [transformV2 t tl, transformV2 t br]

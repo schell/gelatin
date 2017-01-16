@@ -20,7 +20,8 @@ library
                        Gelatin.GL.Renderer,
                        Gelatin.GL.Picture,
                        Gelatin.GL.Shader,
-                       Gelatin.GL.Common
+                       Gelatin.GL.Common,
+                       Gelatin.GL.TH
   build-depends:       base            >= 4.6     && < 5.0
                      , bytestring
                      , gelatin
@@ -33,8 +34,11 @@ library
                      , directory
                      , filepath
                      , transformers
+                     , mtl
+                     , either
                      , containers
                      , lens
+                     , template-haskell
 
   hs-source-dirs:      src
   default-language:    Haskell2010

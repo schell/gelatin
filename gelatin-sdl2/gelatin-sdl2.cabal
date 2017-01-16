@@ -20,10 +20,7 @@ library
   build-depends:       base >=4.6 && <5.0
                      , sdl2
                      , gelatin-gl
-                     -- , linear
-                     -- , bytestring
-                     -- , vector
-                     -- , directory
+                     , mtl
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -37,3 +34,4 @@ executable gelatin-sdl2-example
                      , gelatin-sdl2
                      , sdl2
                      , filepath
+                     , either

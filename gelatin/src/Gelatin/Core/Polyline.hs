@@ -1,9 +1,10 @@
 module Gelatin.Core.Polyline where
 
-import           Data.List (unzip5)
+import           Data.List           (unzip5)
+import           Data.Vector.Unboxed (Unbox, Vector)
 import qualified Data.Vector.Unboxed as V
-import           Data.Vector.Unboxed (Vector,Unbox)
-import           Linear hiding (trace)
+import           Linear              hiding (trace)
+
 
 type PolylineData f =
   ( Vector (V2 Float)

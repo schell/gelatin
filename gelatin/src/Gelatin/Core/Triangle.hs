@@ -1,15 +1,14 @@
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Gelatin.Core.Triangle where
 
-import           Gelatin.Core.Bounds
-import           Gelatin.Core.Utils
-import           Gelatin.Core.Bezier
-import           Linear
+import           Data.Vector.Unboxed (Unbox, Vector)
 import qualified Data.Vector.Unboxed as V
-import           Data.Vector.Unboxed (Vector, Unbox)
+import           Gelatin.Core.Bezier
+import           Gelatin.Core.Bounds
+import           Linear
 
 type Triangle a = (a,a,a)
 
@@ -29,7 +28,7 @@ fmapTriangle :: (t -> t1) -> (t, t, t) -> (t1, t1, t1)
 fmapTriangle f (a,b,c) = (f a, f b, f c)
 
 triBounds :: Triangle (V2 Float) -> BBox
-triBounds (a,b,c) = polyBounds $ V.fromList [a,b,c]
+triBounds (a,b,c) = boundingBox $ V.fromList [a,b,c]
 --------------------------------------------------------------------------------
 -- Decomposing things into triangles
 --------------------------------------------------------------------------------

@@ -1,15 +1,17 @@
 {-# LANGUAGE LambdaCase #-}
 import           Control.Arrow
-import           Control.Concurrent    (threadDelay)
-import           Control.Monad         (forever, when)
-import qualified Data.Vector           as B
+import           Control.Concurrent         (threadDelay)
+import           Control.Monad              (forever, when)
+import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.Trans.Either (runEitherT)
+import qualified Data.Vector                as B
 import           Gelatin.FreeType2
 import           Gelatin.Fruity
 import           Gelatin.SDL2
 import           Paths_gelatin_example
 import           SDL
-import           System.Exit           (exitFailure, exitSuccess)
-import           System.FilePath       ((</>))
+import           System.Exit                (exitFailure, exitSuccess)
+import           System.FilePath            ((</>))
 
 --------------------------------------------------------------------------------
 -- Regular pure pictures
@@ -68,37 +70,38 @@ main = do
             Left err -> putStrLn err >> exitFailure
             Right f  -> return f
 
-  SDL2Backends glv2v4 glv2v2 <-
-    startupSDL2Backends 1000 600 "gelatin-example" True
+  runEitherT (startupSDL2Backends 1000 600 "gelatin-example" True) >>= \case
+    Left err -> putStrLn err
+    Right (SDL2Backends glv2v4 glv2v2) -> do
+      Just (sz, tex)   <- loadImage imgName
 
-  Just (sz, tex)   <- loadImage imgName
+      (_, colorPicRender)  <- compilePicture glv2v4 colorPicture
+      (_, bezPicRender)    <- compilePicture glv2v4 bezierPicture
+      (_, texPicRender)    <- compilePicture glv2v2 $ texturePicture tex sz
+      -- Font outlines filled with white
+      colorTextRender <- coloredString glv2v4 font 100 128 "Colored Strings" $
+                          const white
+      -- Font outlines filled with texture
+      texTextRender <-
+        texturedString glv2v2 font 100 128 "Textured Strings" tex $
+          \(V2 x y) -> V2 (x/200) ((y+128)/200)
+      -- Font outline, outlined in white
+      (_, outlineRender)   <- compilePicture glv2v4 $ outlinedTextPicture font
+      -- Colored freetype2 text with kerning and newline support
+      Just atlas <- allocAtlas ttfName (PixelSize 32 32) asciiChars
+      (ft2r,_,_)  <- freetypeRenderer2 glv2v2 atlas white
+                      "Hello freetype,\nThanks for everything.\n    - gelatin"
 
-  (_, colorPicRender)  <- compilePicture glv2v4 colorPicture
-  (_, bezPicRender)    <- compilePicture glv2v4 bezierPicture
-  (_, texPicRender)    <- compilePicture glv2v2 $ texturePicture tex sz
-  -- Font outlines filled with white
-  colorTextRender <- coloredString glv2v4 font 100 128 "Colored Strings" $
-                       const white
-  -- Font outlines filled with texture
-  texTextRender   <- texturedString glv2v2 font 100 128 "Textured Strings" tex $
-                       \(V2 x y) -> V2 (x/200) ((y+128)/200)
-  -- Font outline, outlined in white
-  (_, outlineRender)   <- compilePicture glv2v4 $ outlinedTextPicture font
-  -- Colored freetype2 text with kerning and newline support
-  Just atlas <- allocAtlas ttfName (PixelSize 32 32) asciiChars
-  (ft2r,_,_)  <- freetypeRenderer2 glv2v2 atlas white
-                   "Hello freetype,\nThanks for everything.\n    - gelatin"
-
-  forever $ do
-    threadDelay 1
-    events <- getEvents glv2v4
-    when (any isQuit events) exitSuccess
-    clearWindow glv2v4
-    snd colorPicRender  []
-    snd texPicRender    [move 0 100]
-    snd bezPicRender    [move 400 100]
-    snd colorTextRender [move 0 400]
-    snd texTextRender   [move 0 500]
-    snd outlineRender   [move 0 600]
-    snd ft2r            [move 500 50]
-    updateWindow glv2v4
+      forever $ do
+        threadDelay 1
+        events <- getEvents glv2v4
+        when (any isQuit events) exitSuccess
+        clearWindow glv2v4
+        snd colorPicRender  []
+        snd texPicRender    [move 0 100]
+        snd bezPicRender    [move 400 100]
+        snd colorTextRender [move 0 400]
+        snd texTextRender   [move 0 500]
+        snd outlineRender   [move 0 600]
+        snd ft2r            [move 500 50]
+        updateWindow glv2v4

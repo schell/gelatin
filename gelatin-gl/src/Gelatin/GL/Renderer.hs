@@ -1,7 +1,7 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 module Gelatin.GL.Renderer (
     -- * Renderer
     Renderer2,
@@ -38,83 +38,191 @@ module Gelatin.GL.Renderer (
     clipTexture
 ) where
 
-import           Gelatin
-import           Gelatin.Shaders
-import           Gelatin.GL.Shader
-import           Gelatin.GL.Common
-import           Graphics.GL.Core33
-import           Graphics.GL.Types
+import           Codec.Picture          (readImage)
 import           Codec.Picture.Types
-import           Codec.Picture (readImage)
+import           Control.Exception      (assert)
 import           Control.Monad
 import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Control.Monad.Reader   (ReaderT (..))
+import qualified Data.Foldable          as F
+import           Data.Proxy             (Proxy (..))
+import qualified Data.Vector.Generic    as G
+import qualified Data.Vector.Storable   as S
+import           Data.Vector.Unboxed    (Unbox, Vector)
+import qualified Data.Vector.Unboxed    as V
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Utils
-import           Foreign.Storable
 import           Foreign.Ptr
-import qualified Data.Vector.Generic as G
-import qualified Data.Vector.Storable as S
-import qualified Data.Vector.Unboxed as V
-import           Data.Vector.Unboxed (Vector,Unbox)
+import           Foreign.Storable
+import           Gelatin
+import           Gelatin.GL.Common
+import           Gelatin.GL.Shader
+import           Gelatin.Shaders
+import           Graphics.GL.Core33
+import           Graphics.GL.Types
 import           System.Exit
-import qualified Data.Foldable as F
 
-polylineRenderer :: (Unbox (f Float), Storable (f Float), Functor f)
-                 => Context -> SumShader
-                 -> Float -> Float
-                 -> (LineCap,LineCap) -> Bool
-                 -> PolylineData f
-                 -> IO Renderer2
-polylineRenderer win sh thickness feather caps isTex (vs_,cs_,us_,ns_,ps_,totalLen) = do
-  let toFrac :: Float -> GLfloat
-      toFrac = realToFrac
-      vs = V.map (fmap toFrac) vs_
-      cs = V.map (fmap toFrac) cs_
-      us = V.map (fmap toFrac) us_
-      ns = V.map (fmap toFrac) ns_
-      ps = V.map (fmap toFrac) ps_
+--------------------------------------------------------------------------------
+-- Uniform updates for the Simple2DShader
+--------------------------------------------------------------------------------
+updatePrimitive :& updateProjection :& updateModelView :& updateThickness :&
+  updateFeather :& updateSumLength :& updateCap :& updateHasUV :& updateSampler :&
+  updateMainTex :& updateMaskTex :& updateAlpha :& updateMultiply :&
+  updateShouldReplaceColor :& updateReplacementColor :& ()
+  = genFunction (Proxy :: Proxy Simple2DUniforms)
+--------------------------------------------------------------------------------
+-- Attribute toggling
+--------------------------------------------------------------------------------
+(enablePosition, disablePosition) :& (enableColor, disableColor) :&
+  (enableUV, disableUV) :& (enableBez, disableBez) :&
+  (enableBezUV, disableBezUV) :& (enablePrev, disablePrev) :&
+  (enableNext, disableNext) :& ()
+  = genFunction (Proxy :: Proxy Simple2DAttribToggles)
 
-  withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, buvbuf, nbuf, pbuf] -> do
-    enableAttribsForLines isTex
-    bufferAttrib PositionLoc 2 vbuf vs
-    if isTex then bufferAttrib UVLoc 2 cbuf cs
-             else bufferAttrib ColorLoc 4 cbuf cs
-    bufferAttrib BezUVLoc 2 buvbuf us
-    bufferAttrib NextLoc 2 nbuf ns
-    bufferAttrib PrevLoc 2 pbuf ps
-    glBindVertexArray 0
+disableAll :: IO ()
+disableAll =
+  sequence_ [ disablePosition, disableColor, disableUV, disableBez, disableBezUV
+            , disablePrev, disableNext
+            ]
 
-    let num = fromIntegral $ V.length vs_
-        r t = do let (mv, a, m, mr) = unwrapTransforms t
-                 pj <- orthoContextProjection win
-                 updateUniformsForLines (unShader sh) pj mv isTex a m mr
-                                        thickness feather totalLen caps
-                 drawBuffer (shProgram $ unShader sh) vao GL_TRIANGLE_STRIP num
-        c = do withArray bufs $ glDeleteBuffers 5
-               withArray [vao] $ glDeleteVertexArrays 1
-    return (c,r)
+--enableAll :: IO ()
+--enableAll =
+--  sequence_ [ enablePosition, enableColor, enableUV, enableBez, enableBezUV
+--            , enablePrev, enableNext
+--            ]
 
+enableAttribsForLines :: Bool -> IO ()
+enableAttribsForLines hasUV = do
+  disableAll
+  enablePosition
+  enableBezUV
+  enablePrev
+  enableNext
+  if hasUV
+    then enableUV
+    else enableColor
+
+enableAttribsForTris :: Bool -> IO ()
+enableAttribsForTris hasUV =
+  disableAll >> enablePosition >> if hasUV then enableUV
+                                           else enableColor
+
+enableAttribsForBezs :: Bool -> IO ()
+enableAttribsForBezs hasUV =
+  disableAll >> enablePosition >> enableBez >> if hasUV then enableUV
+                                                        else enableColor
+
+enableAttribsForMask :: IO ()
+enableAttribsForMask = disableAll >> enablePosition >> enableUV
+--------------------------------------------------------------------------------
+-- Attribute buffering
+--------------------------------------------------------------------------------
+bufferPosition :& bufferColor :& bufferUV :& bufferBez :& bufferBezUV :&
+  bufferPrev :& bufferNext :& ()
+  = genFunction (Proxy :: Proxy Simple2DAttribBuffers)
+--------------------------------------------------------------------------------
+-- Rendering
+--------------------------------------------------------------------------------
 -- | Creates and returns a renderer that renders a colored, expanded 2d polyline
 -- projected in 2d space.
-colorPolylineRenderer :: Context -> SumShader -> Float -> Float
+colorPolylineRenderer :: Context -> Simple2DShader -> Float -> Float
                       -> (LineCap,LineCap) -> Vector (V2 Float)
                       -> Vector (V4 Float) -> IO Renderer2
-colorPolylineRenderer win psh thickness feather caps verts colors = do
+colorPolylineRenderer win sh thickness feather caps verts colors = do
   let empty = putStrLn "could not expand polyline" >> return mempty
       mpoly = expandPolyline verts colors thickness feather
-  flip (maybe empty) mpoly $
-    polylineRenderer win psh thickness feather caps False
+  flip (maybe empty) mpoly $ \(vs_,cs_,us_,ns_,ps_,totalLen) -> do
+    let toFrac :: Float -> GLfloat
+        toFrac = realToFrac
+        vs = V.map (fmap toFrac) vs_
+        cs = V.map (fmap toFrac) cs_
+        uvs = V.map (fmap toFrac) cs_
+        us = V.map (fmap toFrac) us_
+        ns = V.map (fmap toFrac) ns_
+        ps = V.map (fmap toFrac) ps_
+
+    withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, buvbuf, nbuf, pbuf] -> do
+      enableAttribsForLines False
+      bufferPosition 2 vbuf vs
+      bufferColor 4 cbuf cs
+      bufferBezUV 2 buvbuf us
+      bufferNext 2 nbuf ns
+      bufferPrev 2 pbuf ps
+      glBindVertexArray 0
+
+      let num = fromIntegral $ V.length vs_
+          r t = do
+            glUseProgram sh
+            let (mv, a, m, mr) = unwrapTransforms t
+            pj <- orthoContextProjection win
+            updatePrimitive sh PrimLine
+            updateModelView sh mv
+            updateHasUV sh False
+            updateThickness sh thickness
+            updateFeather sh feather
+            updateSumLength sh totalLen
+            updateCap sh caps
+            updateAlpha sh a
+            updateMultiply sh m
+            case mr of
+              Just c -> do updateShouldReplaceColor sh True
+                           updateReplacementColor sh c
+              _      -> updateShouldReplaceColor sh False
+            drawBuffer sh vao GL_TRIANGLE_STRIP num
+          c = do withArray bufs $ glDeleteBuffers 5
+                 withArray [vao] $ glDeleteVertexArrays 1
+      return (c,r)
 
 -- | Creates and returns a renderer that renders a textured, expanded 2d
 -- polyline projected in 2d space.
-texPolylineRenderer :: Context -> SumShader -> Float
+texPolylineRenderer :: Context -> Simple2DShader -> Float
                     -> Float -> (LineCap,LineCap) -> Vector (V2 Float)
                     -> Vector (V2 Float) -> IO Renderer2
-texPolylineRenderer win psh thickness feather caps verts uvs = do
+texPolylineRenderer win sh thickness feather caps verts uvs = do
   let empty = putStrLn "could not expand polyline" >> return mempty
       mpoly = expandPolyline verts uvs thickness feather
-  flip (maybe empty) mpoly $
-    polylineRenderer win psh thickness feather caps True
+  flip (maybe empty) mpoly $ \(vs_,cs_,us_,ns_,ps_,totalLen) -> do
+    let toFrac :: Float -> GLfloat
+        toFrac = realToFrac
+        vs = V.map (fmap toFrac) vs_
+        cs = V.map (fmap toFrac) cs_
+        uvs = V.map (fmap toFrac) cs_
+        us = V.map (fmap toFrac) us_
+        ns = V.map (fmap toFrac) ns_
+        ps = V.map (fmap toFrac) ps_
+
+    withVAO $ \vao -> withBuffers 5 $ \bufs@[vbuf, cbuf, buvbuf, nbuf, pbuf] -> do
+      enableAttribsForLines True
+      bufferPosition 2 vbuf vs
+      bufferUV 2 cbuf cs
+      bufferBezUV 2 buvbuf us
+      bufferNext 2 nbuf ns
+      bufferPrev 2 pbuf ps
+      glBindVertexArray 0
+
+      let num = fromIntegral $ V.length vs_
+          r t = do
+            glUseProgram sh
+            let (mv, a, m, mr) = unwrapTransforms t
+            pj <- orthoContextProjection win
+            updatePrimitive sh PrimLine
+            updateProjection sh pj
+            updateModelView sh mv
+            updateHasUV sh True
+            updateThickness sh thickness
+            updateFeather sh feather
+            updateSumLength sh totalLen
+            updateCap sh caps
+            updateAlpha sh a
+            updateMultiply sh m
+            case mr of
+              Just c -> do updateShouldReplaceColor sh True
+                           updateReplacementColor sh c
+              _      -> updateShouldReplaceColor sh False
+            drawBuffer sh vao GL_TRIANGLE_STRIP num
+          c = do withArray bufs $ glDeleteBuffers 5
+                 withArray [vao] $ glDeleteVertexArrays 1
+      return (c,r)
 
 -- | Binds the given textures to GL_TEXTURE0, GL_TEXTURE1, ... in ascending
 -- order of the texture unit, runs the IO action and then unbinds the textures.
@@ -131,89 +239,153 @@ bindTexAround tx = bindTexsAround [tx]
 
 -- | Creates and returns a renderer that renders the given colored
 -- geometry.
-colorRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
+colorRenderer :: Context -> Simple2DShader -> GLuint -> Vector (V2 Float)
               -> Vector (V4 Float) -> IO Renderer2
 colorRenderer window sh mode vs gs =
   withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
-    let ps = V.map realToFrac $ V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
-        cs = V.map realToFrac $ V.concatMap (V.fromList . F.toList) $ V.take (V.length vs) gs :: Vector GLfloat
+    --let ps = V.map realToFrac $ V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
+    --    cs = V.map realToFrac $ V.concatMap (V.fromList . F.toList) $ V.take (V.length vs) gs :: Vector GLfloat
 
     enableAttribsForTris False
-    bufferAttrib PositionLoc 2 pbuf ps
-    bufferAttrib ColorLoc 4 cbuf cs
-    glBindVertexArray 0
+    clearErrors "colorRenderer: enable attribs"
+    bufferPosition 2 pbuf vs
+    clearErrors "colorRenderer: buffer position"
+    bufferColor 4 cbuf $ V.take (V.length vs) gs
+    clearErrors "colorRenderer: buffer color"
     let num = fromIntegral $ V.length vs
         renderFunction t = do
-            let (mv,a,m,mr) = unwrapTransforms t
-            pj <- orthoContextProjection window
-            updateUniformsForTris (unShader sh) pj mv False a m mr
-            drawBuffer (shProgram $ unShader sh) vao mode num
+          glUseProgram sh
+          let (mv,a,m,mr) = unwrapTransforms t
+          pj <- orthoContextProjection window
+          updatePrimitive sh PrimTri
+          updateProjection sh pj
+          updateModelView sh mv
+          updateHasUV sh False
+          updateAlpha sh a
+          updateMultiply sh m
+          case mr of
+            Just c -> do updateShouldReplaceColor sh True
+                         updateReplacementColor sh c
+            _      -> updateShouldReplaceColor sh False
+          drawBuffer sh vao mode num
         cleanupFunction = do
-            withArray [pbuf, cbuf] $ glDeleteBuffers 2
-            withArray [vao] $ glDeleteVertexArrays 1
+          withArray [pbuf, cbuf] $ glDeleteBuffers 2
+          withArray [vao] $ glDeleteVertexArrays 1
     return (cleanupFunction,renderFunction)
 
 -- | Creates and returns a renderer that renders a textured
 -- geometry.
-textureRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
+textureRenderer :: Context -> Simple2DShader -> GLuint -> Vector (V2 Float)
                 -> Vector (V2 Float) -> IO Renderer2
 textureRenderer win sh mode vs uvs =
   withVAO $ \vao -> withBuffers 2 $ \[pbuf,cbuf] -> do
-  let f xs = V.map realToFrac $ V.concatMap (V.fromList . F.toList) xs :: Vector GLfloat
-      ps = f vs
-      cs = f $ V.take (V.length vs) uvs
+  --let f xs = V.map realToFrac $ V.concatMap (V.fromList . F.toList) xs :: Vector GLfloat
+  --    ps = f vs
+  --    cs = f $ V.take (V.length vs) uvs
 
   enableAttribsForTris True
-  bufferAttrib PositionLoc 2 pbuf ps
-  bufferAttrib UVLoc 2 cbuf cs
+  bufferPosition 2 pbuf vs
+  bufferUV 2 cbuf uvs
   glBindVertexArray 0
 
   let num = fromIntegral $ V.length vs
       renderFunction t = do
+        glUseProgram sh
         let (mv,a,m,mr) = unwrapTransforms t
         pj <- orthoContextProjection win
-        updateUniformsForTris (unShader sh) pj mv True a m mr
-        drawBuffer (shProgram $ unShader sh) vao mode num
+        updatePrimitive sh PrimTri
+        updateProjection sh pj
+        updateModelView sh mv
+        updateHasUV sh True
+        updateSampler sh 0
+        updateAlpha sh a
+        updateMultiply sh m
+        case mr of
+          Just c -> do updateShouldReplaceColor sh True
+                       updateReplacementColor sh c
+          _      -> updateShouldReplaceColor sh False
+        drawBuffer sh vao mode num
       cleanupFunction = do
         withArray [pbuf, cbuf] $ glDeleteBuffers 2
         withArray [vao] $ glDeleteVertexArrays 1
   return (cleanupFunction,renderFunction)
 
-bezAttributes :: (Foldable f, Unbox (f Float))
-              => Vector (V2 Float)
-              -> Vector (f Float)
-              -> (Vector GLfloat, Vector GLfloat, Vector GLfloat)
-bezAttributes vs cvs = (ps, cs, ws)
-  where ps = V.map realToFrac $
-             V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
-        cs = V.map realToFrac $
-               V.concatMap (V.fromList . F.toList) cvs :: Vector GLfloat
-        getWinding i =
+--bezAttributes :: (Foldable f, Unbox (f Float))
+--              => Vector (V2 Float)
+--              -> Vector (f Float)
+--              -> (Vector GLfloat, Vector GLfloat, Vector GLfloat)
+--bezAttributes vs cvs = (ps, cs, ws)
+--  where ps = V.map realToFrac $
+--             V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
+--        cs = V.map realToFrac $
+--               V.concatMap (V.fromList . F.toList) cvs :: Vector GLfloat
+--        getWinding i =
+--          let n = i * 3
+--              (a,b,c) = (vs V.! n, vs V.! (n + 1), vs V.! (n + 2))
+--              w = fromBool $ triangleArea a b c <= 0
+--          in V.fromList [ 0, 0, w
+--                        , 0.5, 0, w
+--                        , 1, 1, w
+--                        ]
+--        numBezs = floor $ realToFrac (V.length vs) / (3 :: Double)
+--        ws :: Vector GLfloat
+--        ws = V.concatMap getWinding $ V.generate numBezs id
+
+bezWinding :: Vector (V2 Float) -> Vector (V3 Float)
+bezWinding vs = V.concatMap getWinding $ V.generate numBezs id
+  where getWinding i =
           let n = i * 3
               (a,b,c) = (vs V.! n, vs V.! (n + 1), vs V.! (n + 2))
               w = fromBool $ triangleArea a b c <= 0
-          in V.fromList [ 0, 0, w
-                        , 0.5, 0, w
-                        , 1, 1, w
+          in V.fromList [ V3 0 0 w
+                        , V3 0.5 0 w
+                        , V3 1 1 w
                         ]
         numBezs = floor $ realToFrac (V.length vs) / (3 :: Double)
-        ws :: Vector GLfloat
-        ws = V.concatMap getWinding $ V.generate numBezs id
 
-bezRenderer :: (Foldable f, Unbox (f Float))
-            => Bool -> Context -> SumShader
-            -> Vector (V2 Float)
-            -> Vector (f Float)
-            -> IO Renderer2
-bezRenderer isTex window sh vs cvs = do
-  let (ps, cs, ws) = bezAttributes vs cvs
+-- | Creates and returns a renderer that renders the given colored beziers.
+colorBezRenderer :: Context -> Simple2DShader
+                 -> Vector (V2 Float) -> Vector (V4 Float) -> IO Renderer2
+colorBezRenderer win sh vs cs = do
+  let ws = bezWinding vs
   withVAO $ \vao -> withBuffers 3 $ \[pbuf, tbuf, cbuf] -> do
-    enableAttribsForBezs isTex
-    bufferAttrib PositionLoc 2 pbuf ps
-    bufferAttrib BezLoc 3 tbuf ws
-    if isTex
-      then bufferAttrib UVLoc 2 cbuf cs
-      else bufferAttrib ColorLoc 4 cbuf cs
+    enableAttribsForBezs False
+    bufferPosition 2 pbuf vs
+    bufferBez 3 tbuf ws
+    bufferColor 4 cbuf $ V.take (V.length vs) cs
+    glBindVertexArray 0
+
+    let cleanupFunction = do
+          withArray [pbuf, tbuf, cbuf] $ glDeleteBuffers 3
+          withArray [vao] $ glDeleteVertexArrays 1
+        num = fromIntegral $ V.length vs
+        renderFunction t = do
+          glUseProgram sh
+          pj <- orthoContextProjection win
+          let (mv,a,m,mr) = unwrapTransforms t
+          updatePrimitive sh PrimBez
+          updateProjection sh pj
+          updateModelView sh mv
+          updateHasUV sh False
+          updateAlpha sh a
+          updateMultiply sh m
+          case mr of
+            Just c -> do updateShouldReplaceColor sh True
+                         updateReplacementColor sh c
+            _      -> updateShouldReplaceColor sh False
+          drawBuffer sh vao GL_TRIANGLES num
+    return (cleanupFunction,renderFunction)
+
+-- | Creates and returns a renderer that renders the given textured beziers.
+textureBezRenderer :: Context -> Simple2DShader
+                   -> Vector (V2 Float) -> Vector (V2 Float) -> IO Renderer2
+textureBezRenderer win sh vs cs = do
+  let ws = bezWinding vs
+  withVAO $ \vao -> withBuffers 3 $ \[pbuf, tbuf, cbuf] -> do
+    enableAttribsForBezs True
+    bufferPosition 2 pbuf vs
+    bufferBez 3 tbuf ws
+    bufferUV 2 cbuf cs
     glBindVertexArray 0
 
     let cleanupFunction = do
@@ -221,36 +393,37 @@ bezRenderer isTex window sh vs cvs = do
             withArray [vao] $ glDeleteVertexArrays 1
         num = fromIntegral $ V.length vs
         renderFunction t = do
-            pj <- orthoContextProjection window
-            let (mv,a,m,mr) = unwrapTransforms t
-            updateUniformsForBezs (unShader sh) pj mv isTex a m mr
-            drawBuffer (shProgram $ unShader sh) vao GL_TRIANGLES num
+          glUseProgram sh
+          pj <- orthoContextProjection win
+          let (mv,a,m,mr) = unwrapTransforms t
+          updatePrimitive sh PrimBez
+          updateProjection sh pj
+          updateModelView sh mv
+          updateHasUV sh True
+          updateSampler sh 0
+          updateAlpha sh a
+          updateMultiply sh m
+          case mr of
+            Just c -> do updateShouldReplaceColor sh True
+                         updateReplacementColor sh c
+            _      -> updateShouldReplaceColor sh False
+          drawBuffer sh vao GL_TRIANGLES num
     return (cleanupFunction,renderFunction)
-
--- | Creates and returns a renderer that renders the given colored beziers.
-colorBezRenderer :: Context -> SumShader
-                 -> Vector (V2 Float) -> Vector (V4 Float) -> IO Renderer2
-colorBezRenderer = bezRenderer False
-
--- | Creates and returns a renderer that renders the given textured beziers.
-textureBezRenderer :: Context -> SumShader
-                   -> Vector (V2 Float) -> Vector (V2 Float) -> IO Renderer2
-textureBezRenderer = bezRenderer True
 
 -- | Creates and returns a renderer that masks a textured rectangular area with
 -- another texture.
-maskRenderer :: Context -> SumShader -> GLuint -> Vector (V2 Float)
+maskRenderer :: Context -> Simple2DShader -> GLuint -> Vector (V2 Float)
              -> Vector (V2 Float) -> IO Renderer2
 maskRenderer win sh mode vs uvs =
     withVAO $ \vao -> withBuffers 2 $ \[pbuf, uvbuf] -> do
-        let vs'  = V.map realToFrac $
-                     V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
-            uvs' = V.map realToFrac $
-                     V.concatMap (V.fromList . F.toList) uvs :: Vector GLfloat
+        --let vs'  = V.map realToFrac $
+        --             V.concatMap (V.fromList . F.toList) vs :: Vector GLfloat
+        --    uvs' = V.map realToFrac $
+        --             V.concatMap (V.fromList . F.toList) uvs :: Vector GLfloat
 
         enableAttribsForMask
-        bufferAttrib PositionLoc 2 pbuf vs'
-        bufferAttrib UVLoc 2 uvbuf uvs'
+        bufferPosition 2 pbuf vs
+        bufferUV 2 uvbuf uvs
         glBindVertexArray 0
 
         let cleanup = do withArray [pbuf, uvbuf] $ glDeleteBuffers 2
@@ -259,13 +432,19 @@ maskRenderer win sh mode vs uvs =
             render t = do
                 let (mv,a,m,_) = unwrapTransforms t
                 pj <- orthoContextProjection win
-                updateUniformsForMask (unShader sh) pj mv a m 0 1
-                drawBuffer (shProgram $ unShader sh) vao mode num
+                --updateUniformsForMask (unShader sh) pj mv a m 0 1
+                updateProjection sh pj
+                updateModelView sh mv
+                updateAlpha sh a
+                updateMultiply sh m
+                updateMainTex sh 0
+                updateMaskTex sh 1
+                drawBuffer sh vao mode num
         return (cleanup,render)
 
 -- | Creates a rendering that masks an IO () drawing computation with the alpha
 -- value of another.
-alphaMask :: Context -> SumShader -> IO () -> IO () -> IO Renderer2
+alphaMask :: Context -> Simple2DShader -> IO () -> IO () -> IO Renderer2
 alphaMask win mrs r2 r1 = do
     mainTex <- toTextureUnit (Just GL_TEXTURE0) win r2
     maskTex <- toTextureUnit (Just GL_TEXTURE1) win r1
@@ -482,6 +661,7 @@ withVAO f = do
     glBindVertexArray vao
     r <- f vao
     clearErrors "withVAO"
+    glBindVertexArray 0
     return r
 
 withBuffers :: Int -> ([GLuint] -> IO b) -> IO b
@@ -491,19 +671,19 @@ withBuffers n f = do
         peekArray (fromIntegral n) ptr
     f bufs
 
-bufferAttrib :: (Storable a, Unbox a)
-             => Simple2DAttrib -> GLint -> GLuint -> Vector a -> IO ()
-bufferAttrib attr n buf as = do
-    let loc = locToGLuint attr
-        asize = V.length as * sizeOf (V.head as)
-        f = S.convert :: (G.Vector Vector a, Storable a)
-                      => Vector a -> S.Vector a
-    glBindBuffer GL_ARRAY_BUFFER buf
-
-    S.unsafeWith (f as) $ \ptr ->
-        glBufferData GL_ARRAY_BUFFER (fromIntegral asize) (castPtr ptr) GL_STATIC_DRAW
-    glEnableVertexAttribArray loc
-    glVertexAttribPointer loc n GL_FLOAT GL_FALSE 0 nullPtr
+--bufferAttrib :: (Storable a, Unbox a)
+--             => Simple2DAttrib -> GLint -> GLuint -> Vector a -> IO ()
+--bufferAttrib attr n buf as = do
+--    let loc = locToGLuint attr
+--        asize = V.length as * sizeOf (V.head as)
+--        f = S.convert :: (G.Vector Vector a, Storable a)
+--                      => Vector a -> S.Vector a
+--    glBindBuffer GL_ARRAY_BUFFER buf
+--
+--    S.unsafeWith (f as) $ \ptr ->
+--        glBufferData GL_ARRAY_BUFFER (fromIntegral asize) (castPtr ptr) GL_STATIC_DRAW
+--    glEnableVertexAttribArray loc
+--    glVertexAttribPointer loc n GL_FLOAT GL_FALSE 0 nullPtr
 
 drawBuffer :: GLuint
            -> GLuint
@@ -520,4 +700,6 @@ drawBuffer program vao mode num = do
 clearErrors :: String -> IO ()
 clearErrors str = do
     err' <- glGetError
-    when (err' /= 0) $ error $ unwords [str, show err']
+    when (err' /= 0) $ do
+      putStrLn $ unwords [str, show err']
+      assert False $ return ()

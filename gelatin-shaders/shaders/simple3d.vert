@@ -1,12 +1,12 @@
-#version 330 core
+#version 300 core
 
-in vec2 position;
+in vec3 position;
 in vec4 color;
 in vec2 uv;
 in vec3 bez;
 in vec2 bezuv;
-in vec2 next;
-in vec2 previous;
+in vec3 next;
+in vec3 previous;
 
 out vec4 fcolor;
 out vec2 fuv;
@@ -32,17 +32,17 @@ const int PrimMask = 4;
 vec4 project_line(mat4 pj,
                   mat4 mv,
                   float thick,
-                  vec2 pos,
+                  vec3 pos,
                   vec2 bzuv,
                   vec2 nxt,
                   vec2 prev) {
-  vec2 a = prev;
-  vec2 b = pos;
-  vec2 c = nxt;
-  vec2 ab = normalize(b - a);
-  vec2 bc = normalize(c - b);
-  vec2 tangent = normalize(ab + bc);
-  vec2 extrusion = vec2(-tangent.y, tangent.x);
+  vec3 a = prev;
+  vec3 b = pos;
+  vec3 c = nxt;
+  vec3 ab = normalize(b - a);
+  vec3 bc = normalize(c - b);
+  vec3 tangent = normalize(ab + bc);
+  vec3 extrusion = vec2(-tangent.y, tangent.x);
   float direction = sign(bzuv.y);
   float len = thick;
 

@@ -39,24 +39,20 @@ module Gelatin.Picture (
   , getTextures
   , setRenderingOptions
   , getRenderingOptions
-  -- * Measuring Pictures
+  -- * Measuring Pictures (2d)
   , pictureBounds2
   , pictureSize2
   , pictureOrigin2
   , pictureCenter2
---  -- * Measuring Pictures (Outside of their definition)
---  , runPictureBoundsT
---  , runPictureSizeT
---  , runPictureOriginT
---  , runPictureCenterT
---  , runPictureBounds
---  , runPictureSize
---  , runPictureOrigin
---  , runPictureCenter
+  -- * Measuring Pictures (3d)
+  , pictureBounds3
+  , pictureSize3
+  , pictureOrigin3
+  , pictureCenter3
   -- * Underlying PictureData Exported for renderers
   , RenderingOption(..)
   , PictureData(..)
 ) where
 
-import Gelatin.Picture.Internal
-import Gelatin.Picture.Shapes as S
+import           Gelatin.Picture.Internal
+import           Gelatin.Picture.Shapes   as S

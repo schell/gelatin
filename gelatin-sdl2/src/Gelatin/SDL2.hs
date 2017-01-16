@@ -1,6 +1,7 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Gelatin.SDL2
   ( SDL2Backends(..)
   , startupSDL2Backends
@@ -8,16 +9,20 @@ module Gelatin.SDL2
   , module G
   ) where
 
-import           Gelatin.GL as G
-import           Data.String (fromString)
-import           SDL hiding (glBindTexture,glUnbindTexture,Rectangle,Renderer)
+import           Control.Monad.Except   (MonadError)
+import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Data.String            (fromString)
+import           Gelatin.GL             as G
+import           SDL                    hiding (Rectangle, Renderer,
+                                         glBindTexture, glUnbindTexture)
 
 data SDL2Backends = SDL2Backends
   { backendV2V4 :: Backend GLuint Event V2V4 (V2 Float) Float Raster
   , backendV2V2 :: Backend GLuint Event V2V2 (V2 Float) Float Raster
   }
 
-startupSDL2Backends :: Int -> Int -> String -> Bool -> IO SDL2Backends
+startupSDL2Backends :: (MonadIO m, MonadError String m)
+                    => Int -> Int -> String -> Bool -> m SDL2Backends
 startupSDL2Backends ww wh ws highDPI = do
     let openGL = defaultOpenGL{ glProfile = Core Debug 3 3
                               }
@@ -29,16 +34,19 @@ startupSDL2Backends ww wh ws highDPI = do
                               }
     startupSDL2BackendsWithConfig window ws
 
-startupSDL2BackendsWithConfig :: WindowConfig -> String -> IO SDL2Backends
+startupSDL2BackendsWithConfig :: (MonadIO m, MonadError String m)
+                              => WindowConfig -> String -> m SDL2Backends
 startupSDL2BackendsWithConfig cfg str = do
-  initializeAll
+  w <- liftIO $ do
+    initializeAll
+    w     <- createWindow (fromString str) cfg
+    _     <- glCreateContext w
+    return w
+  sh <- loadSimple2DShader
 
-  w     <- createWindow (fromString str) cfg
-  _     <- glCreateContext w
-  sh    <- loadSumShader
-
-  glEnable GL_BLEND
-  glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+  liftIO $ do
+    glEnable GL_BLEND
+    glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
   let wsize =  do V2 x y <- get $ windowSize w
                   return (fromIntegral x, fromIntegral y)

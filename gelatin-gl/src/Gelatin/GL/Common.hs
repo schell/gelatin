@@ -1,11 +1,9 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
 module Gelatin.GL.Common where
 
-import Gelatin
-import Gelatin.GL.Shader
-import Linear
+import           Gelatin
+import           Gelatin.GL.Shader
 
 orthoContextProjection :: Context -> IO (M44 Float)
 orthoContextProjection window = do
@@ -16,10 +14,10 @@ orthoContextProjection window = do
 -- GL helper types
 --------------------------------------------------------------------------------
 data Context = Context { ctxFramebufferSize :: IO (Int,Int)
-                       , ctxWindowSize :: IO (Int,Int)
+                       , ctxWindowSize      :: IO (Int,Int)
                        --, ctxScreenDpi :: IO Int
                        }
 
-data Rez = Rez { rezShader  :: SumShader
+data Rez = Rez { rezShader  :: Simple2DShader
                , rezContext :: Context
                }

@@ -1,12 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
-import Control.Concurrent     (threadDelay)
-import Control.Monad          (forM_, when, forever)
-import Control.Arrow
-import System.FilePath        ((</>))
-import System.Exit            (exitSuccess)
-import SDL
-import Gelatin.SDL2
-import Paths_gelatin_sdl2
+import           Control.Arrow
+import           Control.Concurrent         (threadDelay)
+import           Control.Monad              (forM_, forever, when)
+import           Control.Monad.Trans.Either (runEitherT)
+import           Gelatin.SDL2
+import           Paths_gelatin_sdl2
+import           SDL
+import           System.Exit                (exitFailure, exitSuccess)
+import           System.FilePath            ((</>))
 
 --------------------------------------------------------------------------------
 -- Regular pure pictures
@@ -48,35 +49,36 @@ isQuit (Event _ payload) = isKeyQ payload || payload == QuitEvent
     isKeyQ (KeyboardEvent (KeyboardEventData _ _ _ (Keysym _ KeycodeQ _))) = True
     isKeyQ _ = False
 
+-- Start up our backend(s) and go!
 main :: IO ()
-main = do
-  -- Start up our backend(s)
-  SDL2Backends glv2v4 glv2v2 <-
-    startupSDL2Backends 920 420 "gelatin-sdl2-example" True
-  -- Load up a texture. This can be done with either backend, as they both
-  -- share the same OpenGL context.
-  imgName <- getDataFileName $ "img" </> "lava.png"
-  Just (tex, sz) <- allocTexture glv2v2 imgName
-  -- Compiler our picture descriptions, sending their geometry to the GPU and
-  -- returning a renderable resource and a cleanup action. The result of the
-  -- picture computation is discarded.
-  (_, colorRender)     <- compilePicture glv2v4 colorPicture
-  (_, bezierRenderer)  <- compilePicture glv2v4 bezierPicture
-  (_, texRender)       <- compilePicture glv2v2 $ texturePicture tex sz
-  -- Forever run the main loop, which polls for SDL events, clear the window,
-  -- render our resources at different places with different transforms, and
-  -- update the window with the new frame.
-  forever $ do
-    threadDelay 1
-    events <- getEvents glv2v4
-    when (any isQuit events) exitSuccess
-    clearWindow glv2v4
-    let indices = [0..10]
-    forM_ indices $ \i -> do
-      let txy  = move (100 - 10 * i) (100 - 10 * i)
-          a    = alpha $ i/10
-          rs   = [txy, a]
-      snd colorRender rs
-      snd bezierRenderer $ move 400 0 : rs
-      snd texRender $ move 0 200 : rs
-    updateWindow glv2v4
+main =
+  runEitherT (startupSDL2Backends 920 420 "gelatin-sdl2-example" True) >>= \case
+    Left err -> putStrLn err >> exitFailure
+    Right (SDL2Backends glv2v4 glv2v2) -> do
+      -- Load up a texture. This can be done with either backend, as they both
+      -- share the same OpenGL context.
+      imgName <- getDataFileName $ "img" </> "lava.png"
+      Just (tex, sz) <- allocTexture glv2v2 imgName
+      -- Compiler our picture descriptions, sending their geometry to the GPU and
+      -- returning a renderable resource and a cleanup action. The result of the
+      -- picture computation is discarded.
+      (_, colorRender)     <- compilePicture glv2v4 colorPicture
+      (_, bezierRenderer)  <- compilePicture glv2v4 bezierPicture
+      (_, texRender)       <- compilePicture glv2v2 $ texturePicture tex sz
+      -- Forever run the main loop, which polls for SDL events, clear the window,
+      -- render our resources at different places with different transforms, and
+      -- update the window with the new frame.
+      forever $ do
+        threadDelay 1
+        events <- getEvents glv2v4
+        when (any isQuit events) exitSuccess
+        clearWindow glv2v4
+        let indices = [0..10]
+        forM_ indices $ \i -> do
+          let txy  = move (100 - 10 * i) (100 - 10 * i)
+              a    = alpha $ i/10
+              rs   = [txy, a]
+          snd colorRender rs
+          snd bezierRenderer $ move 400 0 : rs
+          snd texRender $ move 0 200 : rs
+        updateWindow glv2v4

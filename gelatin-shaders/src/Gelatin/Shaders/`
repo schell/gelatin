@@ -1,0 +1,137 @@
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+module Gelatin.Shaders.Common
+  ( VertexShader
+  , FragmentShader
+  , Uniform
+  , Attribute
+  , AttributeLocation(..)
+  , AttributeToggling(..)
+  , AttributeBuffering(..)
+  , ShaderSource(..)
+  , ProgramDef(..)
+  , GetProgram(..)
+  , getProgramDef
+  , emptyProgramDef
+  , addSource
+  ) where
+
+import           Data.ByteString.Char8     (ByteString)
+import           Data.Proxy                (Proxy (..))
+--------------------------------------------------------------------------------
+import           Gelatin.Shaders.TypeLevel
+--------------------------------------------------------------------------------
+-- $oldshader
+--------------------------------------------------------------------------------
+-- | A Shader is a compiled shader program along with a list of uniform
+-- locations.
+--data Shader program uniform = Shader { shProgram  :: program
+--                                     , shUniforms :: [(String, uniform)]
+--                                     }
+--
+---- | A ShaderDef is the definition of a shader, which is used to compile a
+---- Shader.
+--data ShaderDef shadertype attribloc =
+--      ShaderDefFP { defShaderPaths :: [(String, shadertype)]
+--                  , defUniforms    :: [String]
+--                  , defAttribs     :: [attribloc]
+--                  }
+--    | ShaderDefBS { defShaderSrcs :: [(ByteString, shadertype)]
+--                  , defUniforms   :: [String]
+--                  , defAttribs    :: [attribloc]
+--                  }
+--------------------------------------------------------------------------------
+-- $newshader A new kind of shader definition
+--------------------------------------------------------------------------------
+data VertexShader
+data FragmentShader
+
+data ShaderType = ShaderTypeVertex | ShaderTypeFragment
+
+class IsShaderType a where
+  getShaderType :: Proxy a -> ShaderType
+
+instance IsShaderType VertexShader where
+  getShaderType _ = ShaderTypeVertex
+
+instance IsShaderType FragmentShader where
+  getShaderType _ = ShaderTypeFragment
+
+-- | A glsl uniform type.
+data Uniform a
+
+instance GetSymbols a => GetSymbols (Uniform a) where
+  getSymbols _ = getSymbols (Proxy :: Proxy a)
+
+-- | A glsl attribute type.
+data Attribute a loc
+
+-- | Used to resolve typeclass instances for generating enable/disable attribute
+-- functions.
+newtype AttributeToggling a b loc = AttributeToggling (Attribute (a := b) loc)
+
+-- | Used to resolve typeclass instances for generating attribute buffering
+-- functions.
+newtype AttributeBuffering a b = AttributeBuffering (Attribute (a := b) loc)
+
+-- | Used to resolve typeclass instances for generating attribute locations.
+newtype AttributeLocation a b = AttributeLocation (Attribute (a := b) loc)
+
+instance GetSymbols a => GetSymbols (Attribute a) where
+  getSymbols _ = getSymbols (Proxy :: Proxy a)
+
+-- | A shader's source code.
+data ShaderSource t = ShaderSourcePath String
+                    | ShaderSourceBinary ByteString
+                    deriving (Show, Eq)
+
+stripShaderType :: ShaderSource t -> ShaderSource ()
+stripShaderType (ShaderSourcePath path)  = ShaderSourcePath path
+stripShaderType (ShaderSourceBinary src) = ShaderSourceBinary src
+--------------------------------------------------------------------------------
+-- $program Defining programs of shaders
+--------------------------------------------------------------------------------
+data ProgramDef s u a =
+  ProgramDef { programDefSources  :: [(ShaderType, ShaderSource ())]
+             , programDefUniforms :: [String]
+             , programDefAttribs  :: [String]
+             }
+
+instance Monoid (ProgramDef s u a) where
+  mempty = ProgramDef [] [] []
+  mappend (ProgramDef a b c) (ProgramDef d e f) =
+    ProgramDef (mappend a d) (mappend b e) (mappend c f)
+
+getProgramDef :: forall s u a t. (GetSymbols u, GetSymbols a, IsShaderType t)
+              => ShaderSource t -> ProgramDef s u a
+getProgramDef source =
+  let us = getSymbols (Proxy :: Proxy u)
+      as = getSymbols (Proxy :: Proxy a)
+      st = getShaderType (Proxy :: Proxy t)
+  in ProgramDef { programDefSources  = [(st, stripShaderType source)]
+                , programDefUniforms = us
+                , programDefAttribs  = as
+                }
+
+emptyProgramDef :: ProgramDef '[] u a
+emptyProgramDef = mempty
+
+addSource :: forall t ts u a. IsShaderType t
+          => ProgramDef ts u a -> ShaderSource t -> ProgramDef (t ': ts) u a
+addSource def src =
+  let st   = getShaderType (Proxy :: Proxy t)
+      srcs = programDefSources def
+  in ProgramDef { programDefSources  = (st, stripShaderType src) : srcs
+                , programDefUniforms = programDefUniforms def
+                , programDefAttribs  = programDefAttribs def
+                }
+
+class GetProgram t u a where
+  type MkProgram t u a :: *
+  compileProgram :: ProgramDef t u a -> MkProgram t u a

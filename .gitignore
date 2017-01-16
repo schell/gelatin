@@ -15,3 +15,4 @@ cabal.config
 *.tmp
 .DS_Store
 .projectile
+TAGS

@@ -17,8 +17,9 @@ data-files:          shaders/*.frag,
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Gelatin.Shaders.Simple2D
-                     , Gelatin.Shaders.Common
+  exposed-modules:     Gelatin.Shaders.Common
+                     , Gelatin.Shaders.Simple2D
+                     , Gelatin.Shaders.TypeLevel
                      , Gelatin.Shaders
   other-modules:       Paths_gelatin_shaders
   build-depends:       base >= 4.7 && < 5
