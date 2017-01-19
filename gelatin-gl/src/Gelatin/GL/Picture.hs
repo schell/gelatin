@@ -6,19 +6,20 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Gelatin.GL.Picture where
 
-import           Control.Lens        hiding (op)
-import           Control.Monad       ((>=>))
-import           Data.Bits           ((.|.))
-import qualified Data.Vector.Unboxed as V
+import           Control.Lens               hiding (op)
+import           Control.Monad              ((>=>))
+import           Data.Bits                  ((.|.))
+import qualified Data.Vector.Unboxed        as V
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
-import           Linear              as L
+import           Linear                     as L
 
 import           Gelatin
-import           Gelatin.GL.Common
-import           Gelatin.GL.Renderer
+import           Gelatin.GL.Renderer.Common
+import qualified Gelatin.GL.Renderer.R2     as R2
+import qualified Gelatin.GL.Renderer.R3     as R3
 --------------------------------------------------------------------------------
--- Concrete Picture Types
+-- 2D Picture Types
 --------------------------------------------------------------------------------
 type V2V4 = (V2 Float, V4 Float)
 type ColorPictureData = PictureData GLuint (V2 Float, V4 Float)
@@ -29,35 +30,73 @@ type V2V2 = (V2 Float, V2 Float)
 type TexturePictureData = PictureData GLuint (V2 Float, V2 Float)
 type TexturePictureT = PictureT GLuint (V2 Float, V2 Float)
 type TexturePicture = TexturePictureT Identity
+--------------------------------------------------------------------------------
+-- 3D Picture Types
+--------------------------------------------------------------------------------
+type V3V4 = (V3 Float, V4 Float)
+type ColorPictureData3 = PictureData GLuint (V3 Float, V4 Float)
+type ColorPictureT3 = PictureT GLuint (V3 Float, V4 Float)
+type ColorPicture3 = ColorPictureT Identity
 
-rgbaCompiler :: Rez
+type V3V2 = (V3 Float, V2 Float)
+type TexturePictureData3 = PictureData GLuint (V3 Float, V2 Float)
+type TexturePictureT3 = PictureT GLuint (V3 Float, V2 Float)
+type TexturePicture3 = TexturePictureT Identity
+
+rgbaCompiler2 :: Rez
              -> GeometryCompiler V2V4 (V2 Float) Float Raster
-rgbaCompiler Rez{..} = GeometryCompiler s l
+rgbaCompiler2 Rez{..} = GeometryCompiler s l
   where s VertexTriangles =
-          uncurry (colorRenderer rezContext rezShader GL_TRIANGLES) . V.unzip
+          uncurry (R2.colorRenderer rezContext rezShader GL_TRIANGLES) . V.unzip
         s VertexStrip =
-          uncurry (colorRenderer rezContext rezShader GL_TRIANGLE_STRIP) . V.unzip
+          uncurry (R2.colorRenderer rezContext rezShader GL_TRIANGLE_STRIP) . V.unzip
         s VertexFan =
-          uncurry (colorRenderer rezContext rezShader GL_TRIANGLE_FAN) . V.unzip
+          uncurry (R2.colorRenderer rezContext rezShader GL_TRIANGLE_FAN) . V.unzip
         s VertexBeziers =
-          uncurry (colorBezRenderer rezContext rezShader) . V.unzip
+          uncurry (R2.colorBezRenderer rezContext rezShader) . V.unzip
         l Stroke{..} =
-            uncurry (colorPolylineRenderer rezContext rezShader strokeWidth
+            uncurry (R2.colorPolylineRenderer rezContext rezShader strokeWidth
                       strokeFeather strokeLineCaps) . V.unzip
 
-uvCompiler :: Rez -> GeometryCompiler V2V2 (V2 Float) Float Raster
-uvCompiler Rez{..} = GeometryCompiler s l
+rgbaCompiler3 :: Rez
+              -> GeometryCompiler V3V4 (V3 Float) (Quaternion Float) Raster
+rgbaCompiler3 Rez{..} = GeometryCompiler s l
   where s VertexTriangles =
-          uncurry (textureRenderer rezContext rezShader GL_TRIANGLES) . V.unzip
+          uncurry (R3.colorRenderer rezContext rezShader GL_TRIANGLES) . V.unzip
         s VertexStrip =
-          uncurry (textureRenderer rezContext rezShader GL_TRIANGLE_STRIP) . V.unzip
+          uncurry (R3.colorRenderer rezContext rezShader GL_TRIANGLE_STRIP) . V.unzip
         s VertexFan =
-          uncurry (textureRenderer rezContext rezShader GL_TRIANGLE_FAN) . V.unzip
+          uncurry (R3.colorRenderer rezContext rezShader GL_TRIANGLE_FAN) . V.unzip
         s VertexBeziers =
-          uncurry (textureBezRenderer rezContext rezShader) . V.unzip
+          uncurry (R3.colorRenderer rezContext rezShader GL_TRIANGLES) . V.unzip
+        -- Lines are a non-op
+        l Stroke{..} = const $ return (return (), const $ return ())
+
+uvCompiler2 :: Rez -> GeometryCompiler V2V2 (V2 Float) Float Raster
+uvCompiler2 Rez{..} = GeometryCompiler s l
+  where s VertexTriangles =
+          uncurry (R2.textureRenderer rezContext rezShader GL_TRIANGLES) . V.unzip
+        s VertexStrip =
+          uncurry (R2.textureRenderer rezContext rezShader GL_TRIANGLE_STRIP) . V.unzip
+        s VertexFan =
+          uncurry (R2.textureRenderer rezContext rezShader GL_TRIANGLE_FAN) . V.unzip
+        s VertexBeziers =
+          uncurry (R2.textureBezRenderer rezContext rezShader) . V.unzip
         l Stroke{..} =
-            uncurry (texPolylineRenderer rezContext rezShader strokeWidth
+            uncurry (R2.texPolylineRenderer rezContext rezShader strokeWidth
                       strokeFeather strokeLineCaps) . V.unzip
+
+uvCompiler3 :: Rez -> GeometryCompiler V3V2 (V3 Float) (Quaternion Float) Raster
+uvCompiler3 Rez{..} = GeometryCompiler s l
+  where s VertexTriangles =
+          uncurry (R3.textureRenderer rezContext rezShader GL_TRIANGLES) . V.unzip
+        s VertexStrip =
+          uncurry (R3.textureRenderer rezContext rezShader GL_TRIANGLE_STRIP) . V.unzip
+        s VertexFan =
+          uncurry (R3.textureRenderer rezContext rezShader GL_TRIANGLE_FAN) . V.unzip
+        s VertexBeziers =
+          uncurry (R3.textureRenderer rezContext rezShader GL_TRIANGLES) . V.unzip
+        l Stroke{..} = const $ return (return (), const $ return ())
 
 applyOption :: (c, rs -> IO ()) -> RenderingOption -> (c, rs -> IO ())
 applyOption (c, r) StencilMaskOption = (c, \rs -> stencilMask (r rs) (r rs))
@@ -65,17 +104,29 @@ applyOption (c, r) StencilMaskOption = (c, \rs -> stencilMask (r rs) (r rs))
 glV2V4Compiler :: Rez -> BackendCompiler V2V4 (V2 Float) Float Raster
 glV2V4Compiler rz = BackendComp
   { backendCompApplyOption = applyOption
-  , backendCompCompiler = rgbaCompiler rz
+  , backendCompCompiler = rgbaCompiler2 rz
   }
 
 glV2V2Compiler :: Rez -> BackendCompiler V2V2 (V2 Float) Float Raster
 glV2V2Compiler rz = BackendComp
   { backendCompApplyOption = applyOption
-  , backendCompCompiler = uvCompiler rz
+  , backendCompCompiler = uvCompiler2 rz
+  }
+
+glV3V4Compiler :: Rez -> BackendCompiler V3V4 (V3 Float) (Quaternion Float) Raster
+glV3V4Compiler rz = BackendComp
+  { backendCompApplyOption = applyOption
+  , backendCompCompiler = rgbaCompiler3 rz
+  }
+
+glV3V2Compiler :: Rez -> BackendCompiler V3V2 (V3 Float) (Quaternion Float) Raster
+glV3V2Compiler rz = BackendComp
+  { backendCompApplyOption = applyOption
+  , backendCompCompiler = uvCompiler3 rz
   }
 
 glOps :: Rez -> IO () -> IO [a] -> BackendOps GLuint a
-glOps Rez{..} windowUpdate getEvents = BackendOps
+glOps Rez{..} windowUpdate getEvs = BackendOps
   { backendOpGetFramebufferSize = uncurry V2 <$> ctxFramebufferSize rezContext
   , backendOpGetWindowSize = uncurry V2 <$> ctxWindowSize rezContext
   , backendOpClearWindow = do
@@ -88,5 +139,5 @@ glOps Rez{..} windowUpdate getEvents = BackendOps
      Nothing -> return Nothing
      Just (sz, tex) -> return $ Just (tex, sz)
   , backendOpBindTextures = bindTexsAround
-  , backendOpGetEvents = getEvents
+  , backendOpGetEvents = getEvs
   }

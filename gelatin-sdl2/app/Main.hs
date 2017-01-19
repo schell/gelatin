@@ -43,6 +43,23 @@ texturePicture tex (V2 w h) = do
   setGeometry $ mapGeometry toUV colorGeometry
     where toUV (V2 x y, _) = (V2 x y, V2 (x/fromIntegral w) (y/fromIntegral h))
 
+--textureCube :: GLuint -> TexturePicture3 ()
+--textureCube tex = do
+--  setTextures [tex]
+--  setGeometry $ triangles $ do
+--    let lx = -0.5
+--        rx =  0.5
+--        by = -0.5
+--        fy =  0.5
+--        tz =  0.5
+--        bz =  0.5
+--    -- top
+--    tri (V3 lx by tz, V2 0 0) (V3 lx fy tz, V2 0 1) (V3 rx fy tz, V2 1 1)
+--    tri (V3 lx by tz, V2 0 0) (V3 rx by tz, V2 1 0) (V3 rx fy tz, V2 1 1)
+--    -- bottom
+--    tri (V3 lx by bz, V2 0 0) (V3 lx fy bz, V2 0 1) (V3 rx fy bz, V2 1 1)
+--    tri (V3 lx by bz, V2 0 0) (V3 rx by bz, V2 1 0) (V3 rx fy bz, V2 1 1)
+
 isQuit :: Event -> Bool
 isQuit (Event _ payload) = isKeyQ payload || payload == QuitEvent
   where
@@ -54,7 +71,7 @@ main :: IO ()
 main =
   runEitherT (startupSDL2Backends 920 420 "gelatin-sdl2-example" True) >>= \case
     Left err -> putStrLn err >> exitFailure
-    Right (SDL2Backends glv2v4 glv2v2) -> do
+    Right (SDL2Backends glv2v4 glv2v2 glv3v4 glv3v2) -> do
       -- Load up a texture. This can be done with either backend, as they both
       -- share the same OpenGL context.
       imgName <- getDataFileName $ "img" </> "lava.png"
@@ -75,10 +92,10 @@ main =
         clearWindow glv2v4
         let indices = [0..10]
         forM_ indices $ \i -> do
-          let txy  = move (100 - 10 * i) (100 - 10 * i)
+          let txy  = move2 (100 - 10 * i) (100 - 10 * i)
               a    = alpha $ i/10
               rs   = [txy, a]
           snd colorRender rs
-          snd bezierRenderer $ move 400 0 : rs
-          snd texRender $ move 0 200 : rs
+          snd bezierRenderer $ move2 400 0 : rs
+          snd texRender $ move2 0 200 : rs
         updateWindow glv2v4

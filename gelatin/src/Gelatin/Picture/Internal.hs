@@ -6,6 +6,15 @@
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TupleSections        #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+-- |
+--   Module:     Gelatin.Picture.Internal
+--   Copyright:  (c) 2017 Schell Scivally
+--   License:    BSD3
+--   Maintainer: Schell Scivally <efsubenovex@gmail.com>
+--
+--   TODO: Remove the line stuff once we have a line-layer on top of triangle
+--   fan.
+
 module Gelatin.Picture.Internal where
 
 import           Control.Arrow

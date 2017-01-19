@@ -19,6 +19,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Gelatin.Shaders.Common
                      , Gelatin.Shaders.Simple2D
+                     , Gelatin.Shaders.Simple3D
                      , Gelatin.Shaders.TypeLevel
                      , Gelatin.Shaders
   other-modules:       Paths_gelatin_shaders

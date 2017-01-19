@@ -17,7 +17,7 @@ uniform float feather;
 uniform float sumlength;
 uniform vec2 cap;
 uniform float alpha;
-uniform vec4 mult;
+uniform vec4 multiply;
 
 uniform vec4 replaceColor;
 uniform bool shouldColorReplace;

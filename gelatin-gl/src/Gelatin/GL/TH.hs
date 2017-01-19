@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
@@ -42,8 +41,8 @@ genUniform typ func =
                              , "with value"
                              , show val
                              , ", encountered error (" ++ show e ++ ")"
-                             , show (GL_INVALID_OPERATION, "invalid operation")
-                             , show (GL_INVALID_VALUE, "invalid value")
+                             , show (GL_INVALID_OPERATION :: Integer, "invalid operation" :: String)
+                             , show (GL_INVALID_VALUE :: Integer, "invalid value" :: String)
                              ]
           assert False $ return ()
 

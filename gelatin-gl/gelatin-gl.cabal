@@ -17,10 +17,11 @@ cabal-version:       >=1.10
 library
   ghc-options:         -Wall
   exposed-modules:     Gelatin.GL,
-                       Gelatin.GL.Renderer,
                        Gelatin.GL.Picture,
                        Gelatin.GL.Shader,
-                       Gelatin.GL.Common,
+                       Gelatin.GL.Renderer.Common,
+                       Gelatin.GL.Renderer.R2,
+                       Gelatin.GL.Renderer.R3,
                        Gelatin.GL.TH
   build-depends:       base            >= 4.6     && < 5.0
                      , bytestring

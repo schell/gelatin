@@ -50,7 +50,7 @@ type USampler            = Uniform "sampler"            Int
 type UMainTex            = Uniform "mainTex"            Int
 type UMaskTex            = Uniform "maskTex"            Int
 type UAlpha              = Uniform "alpha"              Float
-type UMult               = Uniform "mult"               (V4 Float)
+type UMultiply           = Uniform "multiply"           (V4 Float)
 type UShouldReplaceColor = Uniform "shouldColorReplace" Bool
 type UReplaceColor       = Uniform "replaceColor"       (V4 Float)
 
@@ -66,7 +66,7 @@ type Simple2DUniforms = '[ UPrimType
                          , UMainTex
                          , UMaskTex
                          , UAlpha
-                         , UMult
+                         , UMultiply
                          , UShouldReplaceColor
                          , UReplaceColor
                          ]

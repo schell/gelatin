@@ -13,12 +13,16 @@ import           Control.Monad.Except   (MonadError)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.String            (fromString)
 import           Gelatin.GL             as G
+import           Gelatin.GL.Renderer.R2 as R2
+import           Gelatin.GL.Renderer.R3 as R3
 import           SDL                    hiding (Rectangle, Renderer,
                                          glBindTexture, glUnbindTexture)
 
 data SDL2Backends = SDL2Backends
   { backendV2V4 :: Backend GLuint Event V2V4 (V2 Float) Float Raster
   , backendV2V2 :: Backend GLuint Event V2V2 (V2 Float) Float Raster
+  , backendV3V4 :: Backend GLuint Event V3V4 (V3 Float) (Quaternion Float) Raster
+  , backendV3V2 :: Backend GLuint Event V3V2 (V3 Float) (Quaternion Float) Raster
   }
 
 startupSDL2Backends :: (MonadIO m, MonadError String m)
@@ -42,7 +46,19 @@ startupSDL2BackendsWithConfig cfg str = do
     w     <- createWindow (fromString str) cfg
     _     <- glCreateContext w
     return w
-  sh <- loadSimple2DShader
+
+  -- Load the R2 and R3 shaders and set some default uniform values
+  sh2 <- loadSimple2DShader
+  sh3 <- loadSimple3DShader
+  liftIO $ do
+    glUseProgram sh2
+    R2.updateAlpha sh2 1
+    R2.updateMultiply sh2 1
+
+    glUseProgram sh3
+    R3.updateAlpha sh3 1
+    R3.updateMultiply sh3 1
+
 
   liftIO $ do
     glEnable GL_BLEND
@@ -56,11 +72,14 @@ startupSDL2BackendsWithConfig cfg str = do
       ctx = Context { ctxFramebufferSize = fsize
                     , ctxWindowSize = wsize
                     }
-      rz   = Rez sh ctx
-      ops  = glOps rz (updateWindowSDL2 w) pollEvents
-      v2v4 = Backend ops $ glV2V4Compiler rz
-      v2v2 = Backend ops $ glV2V2Compiler rz
-  return $ SDL2Backends v2v4 v2v2
+      rz2  = Rez sh2 ctx
+      rz3  = Rez sh3 ctx
+      ops  = glOps rz2 (updateWindowSDL2 w) pollEvents
+      v2v4 = Backend ops $ glV2V4Compiler rz2
+      v2v2 = Backend ops $ glV2V2Compiler rz2
+      v3v4 = Backend ops $ glV3V4Compiler rz3
+      v3v2 = Backend ops $ glV3V2Compiler rz3
+  return $ SDL2Backends v2v4 v2v2 v3v4 v3v2
 
 updateWindowSDL2 :: Window -> IO ()
 updateWindowSDL2 = glSwapWindow

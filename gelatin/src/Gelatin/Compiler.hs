@@ -1,16 +1,17 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Gelatin.Compiler where
 
-import qualified Data.Vector as B
-import           Data.Vector.Unboxed (Vector)
-import           Data.Functor.Identity
-import           Data.Foldable (foldl')
-import           Linear (V4(..), V2(..), M44, identity, (!*!))
 import           Control.Monad.IO.Class
+import           Data.Foldable            (foldl')
+import           Data.Functor.Identity
+import qualified Data.Vector              as B
+import           Data.Vector.Unboxed      (Vector)
+import           Linear                   (M44, Quaternion (..), V2 (..),
+                                           V3 (..), V4 (..), identity, (!*!))
 
 import           Gelatin.Core
 import           Gelatin.Picture.Internal
@@ -23,7 +24,7 @@ data RenderTransform v r s = Spatial (Affine v r)
 extractSpatial :: [RenderTransform v r s] -> [Affine v r]
 extractSpatial = concatMap f
   where f (Spatial x) = [x]
-        f _ = []
+        f _           = []
 
 type Renderer v r s = (IO (), [RenderTransform v r s] -> IO ())
 --------------------------------------------------------------------------------
@@ -37,52 +38,69 @@ data Raster = Alpha Float
 
 type RenderTransform2 = RenderTransform (V2 Float) Float Raster
 type Renderer2        = Renderer        (V2 Float) Float Raster
+type RenderTransform3 = RenderTransform (V3 Float) (Quaternion Float) Raster
+type Renderer3        = Renderer        (V3 Float) (Quaternion Float) Raster
 --------------------------------------------------------------------------------
 -- Transformation Helpers
 --------------------------------------------------------------------------------
-unwrapTransforms :: [RenderTransform2]
+unwrapTransforms :: (Affine v r -> M44 Float) -> [RenderTransform v r Raster]
                  -> (M44 Float, Float, V4 Float, Maybe (V4 Float))
-unwrapTransforms = foldl' f (identity, 1, white, Nothing)
+unwrapTransforms toModelView = foldl' f (identity, 1, white, Nothing)
   where f (mv, alph, mlt, rep) (Spatial a) =
-          (mv !*! affine2Modelview a, alph, mlt, rep)
+          (mv !*! toModelView a, alph, mlt, rep)
         f (mv, alph, mlt, rep) (Special (Alpha a)) =
           (mv, alph * a, mlt, rep)
         f (mv, alph, mlt, rep) (Special (Multiply a)) =
           (mv, alph, mlt * a, rep)
         f (mv, alph, mlt, _) (Special (ColorReplacement a)) =
           (mv, alph, mlt, Just a)
+
+unwrapTransforms2
+  :: [RenderTransform2] -> (M44 Float, Float, V4 Float, Maybe (V4 Float))
+unwrapTransforms2 = unwrapTransforms affine2Modelview
+
+unwrapTransforms3
+  :: [RenderTransform3] -> (M44 Float, Float, V4 Float, Maybe (V4 Float))
+unwrapTransforms3 = unwrapTransforms affine3Modelview
 --------------------------------------------------------------------------------
 -- Conveniences for creating transformations
 --------------------------------------------------------------------------------
-move :: Float -> Float -> RenderTransform2
-move x y = Spatial $ Translate $ V2 x y
+move :: v -> RenderTransform v r s
+move = Spatial . Translate
 
-moveV2 :: V2 Float -> RenderTransform2
-moveV2 (V2 x y) = move x y
+move2 :: Float -> Float -> RenderTransform2
+move2 = (move .) . V2
 
-scale :: Float -> Float -> RenderTransform2
-scale x y = Spatial $ Scale $ V2 x y
+move3 :: Float -> Float -> Float -> RenderTransform3
+move3 = ((move .) .) . V3
 
-scaleV2 :: V2 Float -> RenderTransform2
-scaleV2 (V2 x y) = scale x y
+scale :: v -> RenderTransform v r s
+scale = Spatial . Scale
 
-rotate :: Float -> RenderTransform2
+scale2 :: Float -> Float -> RenderTransform2
+scale2 = (scale .) . V2
+
+scale3 :: Float -> Float -> Float -> RenderTransform3
+scale3 = ((scale .) .) . V3
+
+rotate :: r -> RenderTransform v r s
 rotate = Spatial . Rotate
 
-alpha :: Float -> RenderTransform2
+alpha :: Float -> RenderTransform v r Raster
 alpha = Special . Alpha
 
-multiply :: Float -> Float -> Float -> Float -> RenderTransform2
-multiply r g b a = Special $ Multiply $ V4 r g b a
+multiply :: V4 Float -> RenderTransform v r Raster
+multiply = Special . Multiply
 
-multiplyV4 :: V4 Float -> RenderTransform2
-multiplyV4 (V4 r g b a) = multiply r g b a
+multiply4 :: Float -> Float -> Float -> Float -> RenderTransform v r Raster
+multiply4 = (((multiply .) .) .) . V4
 
-redChannelReplacement :: Float -> Float -> Float -> Float -> RenderTransform2
-redChannelReplacement r g b a = Special $ ColorReplacement $ V4 r g b a
+redChannelReplacement :: V4 Float -> RenderTransform v r Raster
+redChannelReplacement = Special . ColorReplacement
 
-redChannelReplacementV4 :: V4 Float -> RenderTransform2
-redChannelReplacementV4 (V4 r g b a) = redChannelReplacement r g b a
+redChannelReplacement4
+  :: Float -> Float -> Float -> Float -> RenderTransform v r Raster
+redChannelReplacement4 = (((redChannelReplacement .) .) .) . V4
 --------------------------------------------------------------------------------
 -- Making compiling easier through types
 --------------------------------------------------------------------------------
@@ -167,14 +185,6 @@ compilePicture b pic = do
   glr <- compilePictureData b dat
   return (a, glr)
 
---extractTransformData :: PictureData t (V2 Float) Float v -> [RenderTransform]
---extractTransformData PictureData{..} =
---  let afs = map Spatial _picDataAffine
---      ts  = Alpha _picDataAlpha : Multiply _picDataMultiply : afs
---  in case _picDataReplaceColor of
---       Nothing -> ts
---       Just c  -> ColorReplacement c : ts
---
 compileGeometry :: GeometryCompiler vx v r s -> [StrokeAttr] -> RawGeometry vx
                 -> IO (Renderer v r s)
 compileGeometry GeometryCompiler{..} _ (RawTriangles v) =
@@ -199,39 +209,3 @@ compilePictureData b PictureData{..} = do
       clean = mapM_ fst glrs
       glr   = foldl (applyCompilerOption b) (clean, render) _picDataOptions
   return glr
-
---compileColorPictureData :: Rez -> ColorPictureData -> IO Renderer
---compileColorPictureData = compilePictureData rgbaCompiler
---
---compileTexturePictureData :: Rez -> TexturePictureData -> IO Renderer
---compileTexturePictureData = compilePictureData uvCompiler
-----------------------------------------------------------------------------------
----- Top level compilation functions
-----------------------------------------------------------------------------------
---compileColorPictureT :: MonadIO m => Rez -> ColorPictureT m a -> m (a, Renderer)
---compileColorPictureT rz pic = do
---  (a, dat) <- runPictureT pic
---  glr <- liftIO $ compileColorPictureData rz dat
---  return (a,glr)
---
---compileTexturePictureT :: MonadIO m => Rez -> TexturePictureT m a -> m (a, Renderer)
---compileTexturePictureT rz pic = do
---  (a, dat) <- runPictureT pic
---  glr <- liftIO $ compileTexturePictureData rz dat
---  return (a,glr)
---
---compileColorPicture :: MonadIO m => Rez -> ColorPicture a -> m (a, Renderer)
---compileColorPicture rz pic = do
---  let (a, dat) = runPicture pic
---  glr <- liftIO $ compileColorPictureData rz dat
---  return (a,glr)
---
---compileTexturePicture :: MonadIO m => Rez -> TexturePicture a -> m (a, Renderer)
---compileTexturePicture rz pic = do
---  let (a, dat) = runPicture pic
---  glr <- liftIO $ compileTexturePictureData rz dat
---  return (a,glr)
---------------------------------------------------------------------------------
--- Specifying a proper backend.
---------------------------------------------------------------------------------
-

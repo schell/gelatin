@@ -13,8 +13,8 @@ module Gelatin.Shaders.Common
   , FragmentShader
   , Uniform
   , Attribute
-  , AttributeToggling(..)
-  , AttributeBuffering(..)
+  , AttributeToggling
+  , AttributeBuffering
   , IsShaderType(..)
   , ShaderSteps(..)
   ) where
