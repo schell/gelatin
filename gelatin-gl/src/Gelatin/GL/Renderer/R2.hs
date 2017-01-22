@@ -102,13 +102,13 @@ enablePrev :: IO ()
 disablePrev :: IO ()
 enableNext :: IO ()
 disableNext :: IO ()
-(enablePosition, disablePosition)
+(enablePosition,   disablePosition)
   :& (enableColor, disableColor)
-  :& (enableUV, disableUV)
-  :& (enableBez, disableBez)
+  :& (enableUV,    disableUV)
+  :& (enableBez,   disableBez)
   :& (enableBezUV, disableBezUV)
-  :& (enablePrev, disablePrev)
-  :& (enableNext, disableNext)
+  :& (enablePrev,  disablePrev)
+  :& (enableNext,  disableNext)
   :& () = genFunction (Proxy :: Proxy Simple2DAttribToggles)
 
 disableAll :: IO ()
@@ -161,6 +161,33 @@ bufferPosition
 --------------------------------------------------------------------------------
 -- Rendering
 --------------------------------------------------------------------------------
+sharedUpdates :: Context -> GLuint -> [RenderTransform2] -> Bool -> IO ()
+sharedUpdates win sh t hasUV = do
+  glUseProgram sh
+  let (mv, a, m, mr) = unwrapTransforms2 t
+  updateProjection sh =<< orthoContextProjection win
+  updateModelView sh mv
+  updateAlpha sh a
+  updateMultiply sh m
+  updateSampler sh 0
+  updateHasUV sh hasUV
+  case mr of
+    Just c -> do updateShouldReplaceColor sh True
+                 updateReplacementColor sh c
+    _      -> updateShouldReplaceColor sh False
+
+polylineUpdates
+  :: GLuint -> Float -> Float -> Float -> (LineCap, LineCap) -> IO ()
+polylineUpdates sh thickness feather totalLen caps = do
+  updatePrimitive sh PrimLine
+  updateThickness sh thickness
+  updateFeather sh feather
+  updateSumLength sh totalLen
+  updateCap sh caps
+
+toFrac :: Float -> GLfloat
+toFrac = realToFrac
+
 -- | Creates and returns a renderer that renders a colored, expanded 2d polyline
 -- projected in 2d space.
 colorPolylineRenderer :: Context -> Simple2DShader -> Float -> Float
@@ -170,11 +197,8 @@ colorPolylineRenderer win sh thickness feather caps verts colors = do
   let empty = putStrLn "could not expand polyline" >> return mempty
       mpoly = expandPolyline verts colors thickness feather
   flip (maybe empty) mpoly $ \(vs_,cs_,us_,ns_,ps_,totalLen) -> do
-    let toFrac :: Float -> GLfloat
-        toFrac = realToFrac
-        vs = V.map (fmap toFrac) vs_
+    let vs = V.map (fmap toFrac) vs_
         cs = V.map (fmap toFrac) cs_
-        uvs = V.map (fmap toFrac) cs_
         us = V.map (fmap toFrac) us_
         ns = V.map (fmap toFrac) ns_
         ps = V.map (fmap toFrac) ps_
@@ -190,22 +214,8 @@ colorPolylineRenderer win sh thickness feather caps verts colors = do
 
       let num = fromIntegral $ V.length vs_
           r t = do
-            glUseProgram sh
-            let (mv, a, m, mr) = unwrapTransforms2 t
-            pj <- orthoContextProjection win
-            updatePrimitive sh PrimLine
-            updateModelView sh mv
-            updateHasUV sh False
-            updateThickness sh thickness
-            updateFeather sh feather
-            updateSumLength sh totalLen
-            updateCap sh caps
-            updateAlpha sh a
-            updateMultiply sh m
-            case mr of
-              Just c -> do updateShouldReplaceColor sh True
-                           updateReplacementColor sh c
-              _      -> updateShouldReplaceColor sh False
+            sharedUpdates win sh t False
+            polylineUpdates sh thickness feather totalLen caps
             drawBuffer sh vao GL_TRIANGLE_STRIP num
           c = do withArray bufs $ glDeleteBuffers 5
                  withArray [vao] $ glDeleteVertexArrays 1
@@ -220,11 +230,8 @@ texPolylineRenderer win sh thickness feather caps verts uvs = do
   let empty = putStrLn "could not expand polyline" >> return mempty
       mpoly = expandPolyline verts uvs thickness feather
   flip (maybe empty) mpoly $ \(vs_,cs_,us_,ns_,ps_,totalLen) -> do
-    let toFrac :: Float -> GLfloat
-        toFrac = realToFrac
-        vs = V.map (fmap toFrac) vs_
+    let vs = V.map (fmap toFrac) vs_
         cs = V.map (fmap toFrac) cs_
-        uvs = V.map (fmap toFrac) cs_
         us = V.map (fmap toFrac) us_
         ns = V.map (fmap toFrac) ns_
         ps = V.map (fmap toFrac) ps_
@@ -240,26 +247,12 @@ texPolylineRenderer win sh thickness feather caps verts uvs = do
 
       let num = fromIntegral $ V.length vs_
           r t = do
-            glUseProgram sh
-            let (mv, a, m, mr) = unwrapTransforms2 t
-            pj <- orthoContextProjection win
-            updatePrimitive sh PrimLine
-            updateProjection sh pj
-            updateModelView sh mv
-            updateHasUV sh True
-            updateThickness sh thickness
-            updateFeather sh feather
-            updateSumLength sh totalLen
-            updateCap sh caps
-            updateAlpha sh a
-            updateMultiply sh m
-            case mr of
-              Just c -> do updateShouldReplaceColor sh True
-                           updateReplacementColor sh c
-              _      -> updateShouldReplaceColor sh False
+            sharedUpdates win sh t True
+            polylineUpdates sh thickness feather totalLen caps
             drawBuffer sh vao GL_TRIANGLE_STRIP num
-          c = do withArray bufs $ glDeleteBuffers 5
-                 withArray [vao] $ glDeleteVertexArrays 1
+          c = do
+            withArray bufs $ glDeleteBuffers 5
+            withArray [vao] $ glDeleteVertexArrays 1
       return (c,r)
 
 -- | Creates and returns a renderer that renders the given colored
@@ -276,19 +269,8 @@ colorRenderer window sh mode vs gs =
     clearErrors "colorRenderer: buffer color"
     let num = fromIntegral $ V.length vs
         renderFunction t = do
-          glUseProgram sh
-          let (mv,a,m,mr) = unwrapTransforms2 t
-          pj <- orthoContextProjection window
+          sharedUpdates window sh t False
           updatePrimitive sh PrimTri
-          updateProjection sh pj
-          updateModelView sh mv
-          updateHasUV sh False
-          updateAlpha sh a
-          updateMultiply sh m
-          case mr of
-            Just c -> do updateShouldReplaceColor sh True
-                         updateReplacementColor sh c
-            _      -> updateShouldReplaceColor sh False
           drawBuffer sh vao mode num
         cleanupFunction = do
           withArray [pbuf, cbuf] $ glDeleteBuffers 2
@@ -308,20 +290,8 @@ textureRenderer win sh mode vs uvs =
 
     let num = fromIntegral $ V.length vs
         renderFunction t = do
-          glUseProgram sh
-          let (mv,a,m,mr) = unwrapTransforms2 t
-          pj <- orthoContextProjection win
+          sharedUpdates win sh t True
           updatePrimitive sh PrimTri
-          updateProjection sh pj
-          updateModelView sh mv
-          updateHasUV sh True
-          updateSampler sh 0
-          updateAlpha sh a
-          updateMultiply sh m
-          case mr of
-            Just c -> do updateShouldReplaceColor sh True
-                         updateReplacementColor sh c
-            _      -> updateShouldReplaceColor sh False
           drawBuffer sh vao mode num
         cleanupFunction = do
           withArray [pbuf, cbuf] $ glDeleteBuffers 2
@@ -357,19 +327,8 @@ colorBezRenderer win sh vs cs = do
           withArray [vao] $ glDeleteVertexArrays 1
         num = fromIntegral $ V.length vs
         renderFunction t = do
-          glUseProgram sh
-          pj <- orthoContextProjection win
-          let (mv,a,m,mr) = unwrapTransforms2 t
+          sharedUpdates win sh t False
           updatePrimitive sh PrimBez
-          updateProjection sh pj
-          updateModelView sh mv
-          updateHasUV sh False
-          updateAlpha sh a
-          updateMultiply sh m
-          case mr of
-            Just c -> do updateShouldReplaceColor sh True
-                         updateReplacementColor sh c
-            _      -> updateShouldReplaceColor sh False
           drawBuffer sh vao GL_TRIANGLES num
     return (cleanupFunction,renderFunction)
 
@@ -390,20 +349,8 @@ textureBezRenderer win sh vs cs = do
             withArray [vao] $ glDeleteVertexArrays 1
         num = fromIntegral $ V.length vs
         renderFunction t = do
-          glUseProgram sh
-          pj <- orthoContextProjection win
-          let (mv,a,m,mr) = unwrapTransforms2 t
+          sharedUpdates win sh t True
           updatePrimitive sh PrimBez
-          updateProjection sh pj
-          updateModelView sh mv
-          updateHasUV sh True
-          updateSampler sh 0
-          updateAlpha sh a
-          updateMultiply sh m
-          case mr of
-            Just c -> do updateShouldReplaceColor sh True
-                         updateReplacementColor sh c
-            _      -> updateShouldReplaceColor sh False
           drawBuffer sh vao GL_TRIANGLES num
     return (cleanupFunction,renderFunction)
 

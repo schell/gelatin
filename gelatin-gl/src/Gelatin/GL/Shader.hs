@@ -251,7 +251,7 @@ loadProgram shaderPaths pattribs =
 -- | Compile all 2D shader programs and return a 2D renderer.
 loadSimple2DShader :: (MonadIO m, MonadError String m) => m Simple2DShader
 loadSimple2DShader = do
-  names <- liftIO $ sequence [simple3dVertFilePath, simple3dFragFilePath]
+  names <- liftIO $ sequence [simple2dVertFilePath, simple2dFragFilePath]
   let paths :: ShaderSteps '[VertexShader, FragmentShader] FilePath
       paths = ShaderSteps names
   loadProgram paths (Proxy :: Proxy Simple2DAttribs)

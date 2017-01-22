@@ -93,7 +93,7 @@ vec4 bez_fragment(bool isUV,
 // Renders a polyline cap fragment.
 float capd(float type, float u, float v, float t ) {
     // None
-    if ( type == CapNone) discard;
+    if (type == CapNone) discard;
     // Round
     else if (type == CapRound) return sqrt(u*u+v*v);
     // Triangle out
@@ -192,5 +192,5 @@ void main() {
       break;
   }
 
-  fragColor = color_op_fragment(out_color, alpha, mult);
+  fragColor = color_op_fragment(out_color, alpha, multiply);
 }
