@@ -74,11 +74,16 @@ startupSDL2BackendsWithConfig cfg str = do
                     }
       rz2  = Rez sh2 ctx
       rz3  = Rez sh3 ctx
-      ops  = glOps rz2 (updateWindowSDL2 w) pollEvents
-      v2v4 = Backend ops $ glV2V4Compiler rz2
-      v2v2 = Backend ops $ glV2V2Compiler rz2
-      v3v4 = Backend ops $ glV3V4Compiler rz3
-      v3v2 = Backend ops $ glV3V2Compiler rz3
+      ops2 = glOps rz2 (updateWindowSDL2 w) pollEvents $ \m44 -> do
+        glUseProgram sh2
+        R2.updateProjection sh2 m44
+      ops3 = glOps rz3 (updateWindowSDL2 w) pollEvents $ \m44 -> do
+        glUseProgram sh3
+        R3.updateProjection sh3 m44
+      v2v4 = Backend ops2 (glV2V4Compiler rz2)
+      v2v2 = Backend ops2 (glV2V2Compiler rz2)
+      v3v4 = Backend ops3 (glV3V4Compiler rz3)
+      v3v2 = Backend ops3 (glV3V2Compiler rz3)
   return $ SDL2Backends v2v4 v2v2 v3v4 v3v2
 
 updateWindowSDL2 :: Window -> IO ()

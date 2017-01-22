@@ -36,12 +36,12 @@ type TexturePicture = TexturePictureT Identity
 type V3V4 = (V3 Float, V4 Float)
 type ColorPictureData3 = PictureData GLuint (V3 Float, V4 Float)
 type ColorPictureT3 = PictureT GLuint (V3 Float, V4 Float)
-type ColorPicture3 = ColorPictureT Identity
+type ColorPicture3 = ColorPictureT3 Identity
 
 type V3V2 = (V3 Float, V2 Float)
 type TexturePictureData3 = PictureData GLuint (V3 Float, V2 Float)
 type TexturePictureT3 = PictureT GLuint (V3 Float, V2 Float)
-type TexturePicture3 = TexturePictureT Identity
+type TexturePicture3 = TexturePictureT3 Identity
 
 rgbaCompiler2 :: Rez
              -> GeometryCompiler V2V4 (V2 Float) Float Raster
@@ -125,8 +125,8 @@ glV3V2Compiler rz = BackendComp
   , backendCompCompiler = uvCompiler3 rz
   }
 
-glOps :: Rez -> IO () -> IO [a] -> BackendOps GLuint a
-glOps Rez{..} windowUpdate getEvs = BackendOps
+glOps :: Rez -> IO () -> IO [a] -> (M44 Float -> IO ()) -> BackendOps GLuint a
+glOps Rez{..} windowUpdate getEvs projectionUpdate = BackendOps
   { backendOpGetFramebufferSize = uncurry V2 <$> ctxFramebufferSize rezContext
   , backendOpGetWindowSize = uncurry V2 <$> ctxWindowSize rezContext
   , backendOpClearWindow = do
@@ -134,6 +134,7 @@ glOps Rez{..} windowUpdate getEvs = BackendOps
       glViewport 0 0 (fromIntegral fbw) (fromIntegral fbh)
       glClear $ GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT
   , backendOpUpdateWindow = windowUpdate
+  , backendOpUpdateProjection = projectionUpdate
   , backendOpSetClearColor = \(V4 r g b a) -> glClearColor r g b a
   , backendOpAllocTexture = loadImage >=> \case
      Nothing -> return Nothing

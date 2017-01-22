@@ -43,22 +43,49 @@ texturePicture tex (V2 w h) = do
   setGeometry $ mapGeometry toUV colorGeometry
     where toUV (V2 x y, _) = (V2 x y, V2 (x/fromIntegral w) (y/fromIntegral h))
 
---textureCube :: GLuint -> TexturePicture3 ()
---textureCube tex = do
---  setTextures [tex]
---  setGeometry $ triangles $ do
---    let lx = -0.5
---        rx =  0.5
---        by = -0.5
---        fy =  0.5
---        tz =  0.5
---        bz =  0.5
---    -- top
---    tri (V3 lx by tz, V2 0 0) (V3 lx fy tz, V2 0 1) (V3 rx fy tz, V2 1 1)
---    tri (V3 lx by tz, V2 0 0) (V3 rx by tz, V2 1 0) (V3 rx fy tz, V2 1 1)
---    -- bottom
---    tri (V3 lx by bz, V2 0 0) (V3 lx fy bz, V2 0 1) (V3 rx fy bz, V2 1 1)
---    tri (V3 lx by bz, V2 0 0) (V3 rx by bz, V2 1 0) (V3 rx fy bz, V2 1 1)
+textureCube :: GLuint -> TexturePicture3 ()
+textureCube tex = do
+  setTextures [tex]
+  setGeometry $ triangles $ do
+    let lx = -0.5
+        rx =  0.5
+        by = -0.5
+        fy =  0.5
+        tz =  0.5
+        bz =  0.5
+        --  a----b      z
+        --  |\   |\     ^
+        --  | i----j    |
+        --  c-|--d |    \-->x
+        --   \|   \|     \
+        --    k----l      y
+        a = V3 lx by tz
+        b = V3 rx by tz
+        c = V3 lx by bz
+        d = V3 rx by bz
+        i = V3 lx fy tz
+        j = V3 rx fy tz
+        k = V3 lx fy bz
+        l = V3 rx fy bz
+    -- back
+    tri (b, V2 0 0) (a, V2 1 0) (d, V2 0 1)
+    tri (a, V2 1 0) (d, V2 0 1) (c, V2 1 1)
+    -- bottom
+    tri (k, V2 0 0) (l, V2 1 0) (d, V2 1 1)
+    tri (k, V2 0 0) (d, V2 1 1) (c, V2 0 1)
+    -- front
+    tri (i, V2 0 0) (j, V2 1 0) (k, V2 0 1)
+    tri (j, V2 1 0) (k, V2 0 1) (l, V2 1 1)
+    -- top
+    tri (a, V2 0 0) (b, V2 1 0) (i, V2 0 1)
+    tri (b, V2 1 0) (i, V2 0 1) (j, V2 1 1)
+    -- left
+    tri (a, V2 0 0) (i, V2 1 0) (c, V2 0 1)
+    tri (i, V2 1 0) (c, V2 0 1) (k, V2 1 1)
+    -- right
+    tri (b, V2 0 0) (j, V2 1 0) (l, V2 1 1)
+    tri (b, V2 0 0) (d, V2 0 1) (l, V2 1 1)
+
 
 isQuit :: Event -> Bool
 isQuit (Event _ payload) = isKeyQ payload || payload == QuitEvent
@@ -82,6 +109,9 @@ main =
       (_, colorRender)     <- compilePicture glv2v4 colorPicture
       (_, bezierRenderer)  <- compilePicture glv2v4 bezierPicture
       (_, texRender)       <- compilePicture glv2v2 $ texturePicture tex sz
+      (_, cubeRender)      <- compilePicture glv3v2 $ textureCube tex
+
+      --glEnable GL_DEPTH_TEST
       -- Forever run the main loop, which polls for SDL events, clear the window,
       -- render our resources at different places with different transforms, and
       -- update the window with the new frame.
@@ -90,6 +120,7 @@ main =
         events <- getEvents glv2v4
         when (any isQuit events) exitSuccess
         clearWindow glv2v4
+        -- draw our 2d scene
         let indices = [0..10]
         forM_ indices $ \i -> do
           let txy  = move2 (100 - 10 * i) (100 - 10 * i)
@@ -98,4 +129,11 @@ main =
           snd colorRender rs
           snd bezierRenderer $ move2 400 0 : rs
           snd texRender $ move2 0 200 : rs
+        -- draw our 3d scene
+        V2 w h <- (fromIntegral <$>) <$> getFrameBufferSize glv3v2
+        let pj = perspective (45 * pi / 180) (w / h) 0.1 10
+                   !*! lookAt (V3 0 4 2) (V3 0 0 (-4)) (V3 0 1 0)
+        updateWindowProjection glv3v2 pj
+        clearErrors "win proj"
+        snd cubeRender [move3 0 0 (-4), rotate $ axisAngle (V3 0 0 1) (pi/4)]
         updateWindow glv2v4

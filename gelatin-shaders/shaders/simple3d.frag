@@ -8,7 +8,7 @@ out vec4 fragColor;
 
 uniform bool hasUV;
 uniform float alpha;
-uniform vec4 multiply;
+uniform vec4 mult;
 uniform sampler2D sampler;
 uniform vec4 replaceColor;
 uniform bool shouldColorReplace;
@@ -40,5 +40,5 @@ vec4 color_op_fragment(vec4 c, float a, vec4 m) {
 void main() {
   vec4 out_color = vec4(0);
   out_color = coord_fragment(hasUV, sampler, fcolor, fuv);
-  fragColor = color_op_fragment(out_color, alpha, multiply);
+  fragColor = color_op_fragment(out_color, alpha, mult);
 }

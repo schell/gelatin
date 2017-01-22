@@ -219,7 +219,11 @@ compileOGLProgram attribs shaders = do
 loadSourcePaths :: MonadIO m
                 => ShaderSteps (ts :: [*]) FilePath
                 -> m (ShaderSteps ts ByteString)
-loadSourcePaths = (ShaderSteps <$>) . mapM (liftIO . B.readFile) . unShaderSteps
+loadSourcePaths = (ShaderSteps <$>) . mapM (liftIO . readTheFile) . unShaderSteps
+  where readTheFile f = do
+          bs <- B.readFile f
+          B.putStrLn bs
+          return bs
 
 compileSources
   :: forall m ts. (MonadIO m, MonadError String m, IsShaderType ts [GLenum])

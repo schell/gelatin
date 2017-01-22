@@ -65,13 +65,10 @@ bufferUV       :: GLint -> GLuint -> Vector (V2 Float) -> IO ()
 bufferPosition :& bufferColor :& bufferUV :& _ :& ()
   = genFunction (Proxy :: Proxy Simple3DAttribBuffers)
 
-renderFunctionWith
-  :: Context -> Simple3DShader -> Bool -> [RenderTransform3] -> IO ()
-renderFunctionWith window sh hasUV t = do
+renderFunctionWith :: Simple3DShader -> Bool -> [RenderTransform3] -> IO ()
+renderFunctionWith sh hasUV t = do
   glUseProgram sh
   let (mv, a, m, mr) = unwrapTransforms3 t
-  pj <- orthoContextProjection window
-  updateProjection sh pj
   updateModelView sh mv
   updateHasUV sh hasUV
   updateSampler sh 0
@@ -84,7 +81,7 @@ renderFunctionWith window sh hasUV t = do
 colorRenderer
   :: Context -> Simple3DShader -> GLuint -> Vector (V3 Float) -> Vector (V4 Float)
   -> IO Renderer3
-colorRenderer window sh mode vs cs =
+colorRenderer _ sh mode vs cs =
   withVAO $ \vao -> withBuffers 2 $ \[pbuf, cbuf] -> do
     sequence_ [enablePosition, enableColor, disableUV, disableNormal]
     clearErrors "r3.colorRenderer enable attribs"
@@ -93,7 +90,7 @@ colorRenderer window sh mode vs cs =
     clearErrors "r3.colorRenderer buffer attribs"
     let num = fromIntegral $ V.length vs
         renderFunction t = do
-          renderFunctionWith window sh False t
+          renderFunctionWith sh False t
           drawBuffer sh vao mode num
         cleanup = do
           withArray [pbuf, cbuf] $ glDeleteBuffers 2
@@ -103,7 +100,7 @@ colorRenderer window sh mode vs cs =
 textureRenderer
   :: Context -> Simple3DShader -> GLuint -> Vector (V3 Float) -> Vector (V2 Float)
   -> IO Renderer3
-textureRenderer window sh mode vs cs =
+textureRenderer _ sh mode vs cs =
   withVAO $ \vao -> withBuffers 2 $ \[pbuf, cbuf] -> do
     sequence_ [enablePosition, disableColor, enableUV, disableNormal]
     clearErrors "r3.textureRenderer enable attribs"
@@ -112,7 +109,7 @@ textureRenderer window sh mode vs cs =
     clearErrors "r3.textureRenderer buffer attribs"
     let num = fromIntegral $ V.length vs
         renderFunction t = do
-          renderFunctionWith window sh True t
+          renderFunctionWith sh True t
           drawBuffer sh vao mode num
         cleanup = do
           withArray [pbuf, cbuf] $ glDeleteBuffers 2

@@ -124,6 +124,7 @@ data BackendOps tex event = BackendOps
   , backendOpGetWindowSize      :: IO (V2 Int)
   , backendOpClearWindow        :: IO ()
   , backendOpUpdateWindow       :: IO ()
+  , backendOpUpdateProjection   :: M44 Float -> IO ()
   , backendOpSetClearColor      :: V4 Float -> IO ()
   , backendOpAllocTexture       :: FilePath -> IO (Maybe (tex, V2 Int))
   , backendOpBindTextures       :: [tex] -> IO () -> IO ()
@@ -161,6 +162,12 @@ clearWindow = backendOpClearWindow . backendOps
 
 updateWindow :: Backend tex event vert spatial rot rast -> IO ()
 updateWindow = backendOpUpdateWindow . backendOps
+
+updateWindowProjection :: Backend tex event vert spacial rot rast -> M44 Float -> IO ()
+updateWindowProjection be = backendOpUpdateProjection (backendOps be)
+
+getFrameBufferSize :: Backend tex event vert spacial rot rast -> IO (V2 Int)
+getFrameBufferSize = backendOpGetFramebufferSize . backendOps
 
 getEvents :: Backend tex event vert spatial rot rast -> IO [event]
 getEvents = backendOpGetEvents . backendOps

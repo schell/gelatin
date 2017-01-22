@@ -19,6 +19,7 @@ module Gelatin.GL.Renderer.R2
   , transformRenderer
     -- * Uniform updates
   , updatePrimitive
+  , updateProjection
   , updateModelView
   , updateThickness
   , updateFeather
