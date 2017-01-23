@@ -76,18 +76,3 @@ data AttributeBuffering a
 -- `ShaderSteps '[VertexShader, FragmentShader] GLuint` most likely means a list
 -- of vertex and fragment shaders that need to be linked.
 data ShaderSteps t v = ShaderSteps { unShaderSteps :: [v] }
-
--- | This is some future work in progress.
-class MonadShader a where
-  data M a :: * -> *
-
-  data Program a
-  readProgram :: (M a) (Program a)
-
-  data Uniforms a
-  updateUniforms :: Uniforms a -> (M a) ()
-
-  data Attributes a
-  enableAttributes  :: Attributes a -> (M a) ()
-  disableAttributes :: Attributes a -> (M a) ()
-  bufferAttributes  :: Attributes a -> (M a) ()
