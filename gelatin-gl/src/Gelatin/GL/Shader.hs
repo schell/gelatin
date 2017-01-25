@@ -10,53 +10,69 @@
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# OPTIONS_GHC -fno-warn-orphans      #-}
 {-# OPTIONS_GHC -fprint-explicit-kinds #-}
-module Gelatin.GL.Shader (
-  -- * Compiling and loading shaders
-    Simple2DShader
-  , Simple3DShader
-  , compileOGLShader
-  , compileOGLProgram
-  , loadSourcePaths
-  , compileSources
-  , compileProgram
-  , loadProgram
-  , loadSimple2DShader
-  , loadSimple3DShader
-  ) where
+module Gelatin.GL.Shader where
 
-import           Control.Exception        (assert)
+import           Control.Exception          (assert)
 import           Control.Monad
-import           Control.Monad.Except     (MonadError, throwError)
-import           Control.Monad.IO.Class   (MonadIO, liftIO)
-import           Data.ByteString.Char8    as B
-import qualified Data.Foldable            as F
-import           Data.Proxy               (Proxy (..))
-import qualified Data.Vector.Storable     as S
-import           Data.Vector.Unboxed      (Unbox, Vector)
-import qualified Data.Vector.Unboxed      as V
+import           Control.Monad.Except       (MonadError, throwError)
+import           Control.Monad.IO.Class     (MonadIO, liftIO)
+import           Data.ByteString.Char8      as B
+import qualified Data.Foldable              as F
+import           Data.Proxy                 (Proxy (..))
+import qualified Data.Vector.Storable       as S
+import           Data.Vector.Unboxed        (Unbox, Vector)
+import qualified Data.Vector.Unboxed        as V
 import           Foreign.C.String
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Utils
 import           Foreign.Ptr
 import           Foreign.Storable
-import           GHC.TypeLits             (KnownNat, KnownSymbol, natVal,
-                                           symbolVal)
+import           GHC.TypeLits               (KnownNat, KnownSymbol, natVal,
+                                             symbolVal)
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
-import           Prelude                  hiding (init)
-import           Prelude                  as P
+import           Prelude                    hiding (init)
+import           Prelude                    as P
+import           System.FilePath
 --------------------------------------------------------------------------------
 import           Gelatin
 import           Gelatin.Shaders
-import           Gelatin.Shaders.Simple2D (PrimType (..), Simple2DAttribs)
-import           Gelatin.Shaders.Simple3D (Simple3DAttribs)
 --------------------------------------------------------------------------------
+import           Gelatin.GL.Shader.Simple2D (PrimType (..), Simple2DAttribs)
+import           Gelatin.GL.Shader.Simple3D (Simple3DAttribs)
 import           Gelatin.GL.TH
+import           Paths_gelatin_gl           as S
 --------------------------------------------------------------------------------
-
 
 type Simple2DShader = GLuint
 type Simple3DShader = GLuint
+
+inShaderDir :: FilePath -> IO FilePath
+inShaderDir = getDataFileName . ("shaders" </>)
+
+simple2dVertFilePath :: IO FilePath
+simple2dVertFilePath = inShaderDir "simple2d.vert"
+
+simple2dFragFilePath :: IO FilePath
+simple2dFragFilePath = inShaderDir "simple2d.frag"
+
+simple3dVertFilePath :: IO FilePath
+simple3dVertFilePath = inShaderDir "simple3d.vert"
+
+simple3dFragFilePath :: IO FilePath
+simple3dFragFilePath = inShaderDir "simple3d.frag"
+
+simple2dVertWebGLFilePath :: IO FilePath
+simple2dVertWebGLFilePath = inShaderDir "simple2dwebgl.vert"
+
+simple2dFragWebGLFilePath :: IO FilePath
+simple2dFragWebGLFilePath = inShaderDir "simple2dwebgl.frag"
+
+simple3dVertWebGLFilePath :: IO FilePath
+simple3dVertWebGLFilePath = inShaderDir "simple3dwebgl.vert"
+
+simple3dFragWebGLFilePath :: IO FilePath
+simple3dFragWebGLFilePath = inShaderDir "simple3dwebgl.frag"
 --------------------------------------------------------------------------------
 -- IsShaderType instances
 --------------------------------------------------------------------------------
@@ -106,42 +122,6 @@ $(genUniform [t|(LineCap,LineCap)|] [| \loc (a, b) ->
 $(genUniform [t|V2 Int|] [| \loc v ->
    let V2 x y = fmap fromIntegral v
    in glUniform2i loc x y |])
---------------------------------------------------------------------------------
--- Attribute buffering and toggling instances
---------------------------------------------------------------------------------
-convertVec
-  :: (Unbox (f Float), Foldable f) => Vector (f Float) -> S.Vector GLfloat
-convertVec =
-  S.convert . V.map realToFrac . V.concatMap (V.fromList . F.toList)
-
-instance
-  ( KnownNat loc, KnownSymbol name
-  , Foldable f
-  , Unbox (f Float), Storable (f Float)
-  ) => HasGenFunc (AttributeBuffering (Attribute name (f Float) loc)) where
-
-  type GenFunc (AttributeBuffering (Attribute name (f Float) loc)) =
-    GLint -> GLuint -> Vector (f Float) -> IO ()
-  genFunction _ n buf as = do
-    let loc = fromIntegral $ natVal (Proxy :: Proxy loc)
-        asize = V.length as * sizeOf (V.head as)
-    glBindBuffer GL_ARRAY_BUFFER buf
-    S.unsafeWith (convertVec as) $ \ptr ->
-      glBufferData GL_ARRAY_BUFFER (fromIntegral asize) (castPtr ptr) GL_STATIC_DRAW
-    glEnableVertexAttribArray loc
-    glVertexAttribPointer loc n GL_FLOAT GL_FALSE 0 nullPtr
-    err <- glGetError
-    when (err /= 0) $ do
-      print err
-      assert False $ return ()
-
-instance (KnownNat loc, KnownSymbol name)
-  => HasGenFunc (AttributeToggling (Attribute name val loc)) where
-  type GenFunc (AttributeToggling (Attribute name val loc)) = (IO (), IO ())
-  genFunction _ =
-    let ident = symbolVal (Proxy :: Proxy name)
-        aloc  = seq ident $ fromIntegral $ natVal (Proxy :: Proxy loc)
-    in (glEnableVertexAttribArray aloc, glDisableVertexAttribArray aloc)
 --------------------------------------------------------------------------------
 -- $opengl OpenGL shader only stuff
 --------------------------------------------------------------------------------

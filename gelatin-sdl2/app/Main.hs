@@ -5,7 +5,7 @@ import           Control.Monad              (forM_, forever, when)
 import           Control.Monad.Trans.Either (runEitherT)
 import           Gelatin.SDL2
 import           Paths_gelatin_sdl2
-import           SDL
+import           SDL                        hiding (rotate)
 import           System.Exit                (exitFailure, exitSuccess)
 import           System.FilePath            ((</>))
 

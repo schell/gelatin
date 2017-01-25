@@ -1,20 +1,20 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE RecordWildCards #-}
 module Gelatin.FreeType2.Internal where
-import           Gelatin.GL
-import           Gelatin.FreeType2.Utils
-import           Gelatin.Picture.Internal
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.State.Strict
-import           Data.Maybe (fromMaybe)
-import           Data.IntMap (IntMap)
-import qualified Data.IntMap as IM
-import           Data.Map (Map)
-import qualified Data.Map as M
-import           Foreign.Marshal.Utils (with)
+import           Data.IntMap                                       (IntMap)
+import qualified Data.IntMap                                       as IM
+import           Data.Map                                          (Map)
+import qualified Data.Map                                          as M
+import           Data.Maybe                                        (fromMaybe)
+import           Foreign.Marshal.Utils                             (with)
+import           Gelatin.FreeType2.Utils
+import           Gelatin.GL
+import           Gelatin.Picture.Internal
+import           Graphics.Rendering.FreeType.Internal.Bitmap       as BM
 import           Graphics.Rendering.FreeType.Internal.GlyphMetrics as GM
-import           Graphics.Rendering.FreeType.Internal.Bitmap as BM
 --------------------------------------------------------------------------------
 -- WordMap
 --------------------------------------------------------------------------------
@@ -52,11 +52,11 @@ data GlyphSize = CharSize Float Float Int Int
 
 glyphWidth :: GlyphSize -> Float
 glyphWidth (CharSize x y _ _) = if x == 0 then y else x
-glyphWidth (PixelSize x y) = fromIntegral $ if x == 0 then y else x
+glyphWidth (PixelSize x y)    = fromIntegral $ if x == 0 then y else x
 
 glyphHeight :: GlyphSize -> Float
 glyphHeight (CharSize x y _ _) = if y == 0 then x else y
-glyphHeight (PixelSize x y) = fromIntegral $ if y == 0 then x else y
+glyphHeight (PixelSize x y)    = fromIntegral $ if y == 0 then x else y
 
 -- https://www.freetype.org/freetype2/docs/tutorial/step2.html
 data GlyphMetrics = GlyphMetrics { glyphTexBB       :: (V2 Int, V2 Int)
@@ -82,10 +82,10 @@ data Atlas = Atlas { atlasTexture     :: GLuint
 emptyAtlas :: FT_Library -> FT_Face -> GLuint -> Atlas
 emptyAtlas lib face t = Atlas t 0 lib face mempty (PixelSize 0 0) mempty ""
 
-data AtlasMeasure = AM { amWH :: V2 Int
-                       , amXY :: V2 Int
+data AtlasMeasure = AM { amWH      :: V2 Int
+                       , amXY      :: V2 Int
                        , rowHeight :: Int
-                       , amMap :: IntMap (V2 Int)
+                       , amMap     :: IntMap (V2 Int)
                        } deriving (Show, Eq)
 
 emptyAM :: AtlasMeasure
@@ -198,7 +198,7 @@ allocAtlas fontFilePath gs str = do
            , atlasFilePath = fontFilePath
            }
   case e of
-    Left err -> liftIO (print err) >> return Nothing
+    Left err        -> liftIO (print err) >> return Nothing
     Right (atlas,_) -> return $ Just atlas
 
 freeAtlas :: MonadIO m => Atlas -> m ()
@@ -294,7 +294,7 @@ freetypeRenderer2 b atlas0 color str = do
         case M.lookup word (atlasWordMap atlas) of
           Nothing          -> renderWord rs (V2 x y) rest
           Just (V2 w _, r) -> do
-            let ts = [move x y, redChannelReplacementV4 color]
+            let ts = [move2 x y, redChannelReplacement color]
             snd r $ ts ++ rs
             renderWord rs (V2 (x + w) y) rest
       rr t = renderWord t 0 str

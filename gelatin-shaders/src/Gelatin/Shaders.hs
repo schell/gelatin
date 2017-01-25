@@ -5,6 +5,7 @@ module Gelatin.Shaders
 
 import           Gelatin.Shaders.Common    as S
 import           Gelatin.Shaders.TypeLevel as S
+
 import           Paths_gelatin_shaders     as S
 import           System.FilePath
 
