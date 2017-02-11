@@ -1,3 +1,6 @@
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Gelatin.GL.Renderer.R3
   (
     -- * R3 Renderers
@@ -12,21 +15,74 @@ module Gelatin.GL.Renderer.R3
   , updateMultiply
   , updateShouldReplaceColor
   , updateReplacementColor
+    -- * Load the R3 shader
+  , loadSimple3DShader
   ) where
 
+import           Control.Monad.Except       (MonadError)
+import           Control.Monad.IO.Class     (MonadIO, liftIO)
 import           Data.Proxy                 (Proxy (..))
 import           Data.Vector.Unboxed        (Vector)
 import qualified Data.Vector.Unboxed        as V
 import           Foreign.Marshal.Array
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
+import           System.FilePath            ((</>))
 --------------------------------------------------------------------------------
 import           Gelatin
-import           Gelatin.Shaders
-import           Gelatin.Shaders.Simple3D
+import           Gelatin.Shaders.GL
 --------------------------------------------------------------------------------
 import           Gelatin.GL.Renderer.Common
-import           Gelatin.GL.Shader
+import           Paths_gelatin_gl
+
+type APosition = Attribute "position" (V3 Float) 0
+type AColor    = Attribute "color"    (V4 Float) 1
+type AUV       = Attribute "uv"       (V2 Float) 2
+type ANormal   = Attribute "normal"   (V3 Float) 3
+
+type Simple3DAttribs = '[APosition, AColor, AUV, ANormal]
+type Simple3DAttribToggles = TypeMap AttributeToggling Simple3DAttribs
+type Simple3DAttribBuffers = TypeMap AttributeBuffering Simple3DAttribs
+
+type UProjection         = Uniform "projection"         (M44 Float)
+type UModelView          = Uniform "modelview"          (M44 Float)
+type USampler            = Uniform "sampler"            Int
+type UHasUV              = Uniform "hasUV"              Bool
+type UAlpha              = Uniform "alpha"              Float
+type UMult               = Uniform "mult"               (V4 Float)
+type UShouldReplaceColor = Uniform "shouldColorReplace" Bool
+type UReplaceColor       = Uniform "replaceColor"       (V4 Float)
+
+type Simple3DUniforms = '[ UProjection
+                         , UModelView
+                         , USampler
+                         , UHasUV
+                         , UAlpha
+                         , UMult
+                         , UShouldReplaceColor
+                         , UReplaceColor
+                         ]
+
+type Simple3DShaders = '[VertexShader, FragmentShader]
+
+type Simple3DShader = GLuint
+
+inShaderDir :: FilePath -> IO FilePath
+inShaderDir = getDataFileName . ("shaders" </>)
+
+simple3dVertFilePath :: IO FilePath
+simple3dVertFilePath = inShaderDir "simple3d.vert"
+
+simple3dFragFilePath :: IO FilePath
+simple3dFragFilePath = inShaderDir "simple3d.frag"
+
+-- | Compile all 3D shader programs and return a 3D renderer.
+loadSimple3DShader :: (MonadIO m, MonadError String m) => m Simple3DShader
+loadSimple3DShader = do
+  names <- liftIO $ sequence [simple3dVertFilePath, simple3dFragFilePath]
+  let paths :: ShaderSteps '[VertexShader, FragmentShader] FilePath
+      paths = ShaderSteps names
+  loadProgram paths (Proxy :: Proxy Simple3DAttribs)
 --------------------------------------------------------------------------------
 -- Uniform update functions
 --------------------------------------------------------------------------------
@@ -58,9 +114,9 @@ disableNormal   :: IO ()
   :& (_, disableNormal)
   :& () = genFunction (Proxy :: Proxy Simple3DAttribToggles)
 
-bufferPosition :: GLint -> GLuint -> Vector (V3 Float) -> IO ()
-bufferColor    :: GLint -> GLuint -> Vector (V4 Float) -> IO ()
-bufferUV       :: GLint -> GLuint -> Vector (V2 Float) -> IO ()
+bufferPosition :: GLint -> GLuint -> Vector (V3 Float) -> IO GLuint
+bufferColor    :: GLint -> GLuint -> Vector (V4 Float) -> IO GLuint
+bufferUV       :: GLint -> GLuint -> Vector (V2 Float) -> IO GLuint
 --bufferNormal   :: (GLint -> GLuint -> Vector (V3 Float) -> IO ())
 bufferPosition :& bufferColor :& bufferUV :& _ :& ()
   = genFunction (Proxy :: Proxy Simple3DAttribBuffers)

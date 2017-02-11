@@ -19,19 +19,17 @@ data-files:          shaders/*.frag,
 
 library
   ghc-options:         -Wall
-  exposed-modules:     Gelatin.GL,
-                       Gelatin.GL.Picture,
-                       Gelatin.GL.Shader,
-                       Gelatin.GL.Shader.Simple2D,
-                       Gelatin.GL.Shader.Simple3D,
-                       Gelatin.GL.Renderer.Common,
-                       Gelatin.GL.Renderer.R2,
-                       Gelatin.GL.Renderer.R3,
-                       Gelatin.GL.TH
+  other-modules:       Paths_gelatin_gl
+  exposed-modules:     Gelatin.GL
+                     , Gelatin.GL.Picture
+                     , Gelatin.GL.Renderer.Common
+                     , Gelatin.GL.Renderer.R2
+                     , Gelatin.GL.Renderer.R3
+
   build-depends:       base            >= 4.6     && < 5.0
                      , bytestring
                      , gelatin
-                     , gelatin-shaders
+                     , gelatin-shaders-gl
                      , linear
                      , gl
                      , JuicyPixels
@@ -44,7 +42,6 @@ library
                      , either
                      , containers
                      , lens
-                     , template-haskell
 
   hs-source-dirs:      src
   default-language:    Haskell2010
@@ -63,3 +60,4 @@ executable gelatin-gl-example
 
   hs-source-dirs:      app
   main-is:             Example.hs
+  default-language:    Haskell2010

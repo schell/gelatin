@@ -48,8 +48,8 @@ startupSDL2BackendsWithConfig cfg str = do
     return w
 
   -- Load the R2 and R3 shaders and set some default uniform values
-  sh2 <- loadSimple2DShader
-  sh3 <- loadSimple3DShader
+  sh2 <- R2.loadSimple2DShader
+  sh3 <- R3.loadSimple3DShader
   liftIO $ do
     glUseProgram sh2
     R2.updateAlpha sh2 1

@@ -1,7 +1,12 @@
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Gelatin.GL.Renderer.R2
   ( -- * Line rendering
     colorPolylineRenderer
@@ -33,8 +38,12 @@ module Gelatin.GL.Renderer.R2
   , updateMultiply
   , updateShouldReplaceColor
   , updateReplacementColor
+    -- * Loading the R2 shader
+  , loadSimple2DShader
   ) where
 
+import           Control.Monad.Except       (MonadError)
+import           Control.Monad.IO.Class     (MonadIO, liftIO)
 import           Data.Proxy                 (Proxy (..))
 import           Data.Vector.Unboxed        (Vector)
 import qualified Data.Vector.Unboxed        as V
@@ -42,16 +51,102 @@ import           Foreign.Marshal.Array
 import           Foreign.Marshal.Utils
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
+import           System.FilePath            ((</>))
 --------------------------------------------------------------------------------
 import           Gelatin
-import           Gelatin.Shaders
-import           Gelatin.Shaders.Simple2D   (PrimType (..),
-                                             Simple2DAttribBuffers,
-                                             Simple2DAttribToggles,
-                                             Simple2DUniforms)
+import           Gelatin.Shaders.GL
 --------------------------------------------------------------------------------
 import           Gelatin.GL.Renderer.Common
-import           Gelatin.GL.Shader
+import           Paths_gelatin_gl
+--------------------------------------------------------------------------------
+-- $layout
+-- Attributes layout locations are unique and global.
+--------------------------------------------------------------------------------
+type APosition = Attribute "position" (V2 Float) 0
+type AColor    = Attribute "color"    (V4 Float) 1
+type AUV       = Attribute "uv"       (V2 Float) 2
+type ABez      = Attribute "bez"      (V3 Float) 3
+type ABezUV    = Attribute "bezuv"    (V2 Float) 4
+type APrev     = Attribute "prev"     (V2 Float) 5
+type ANext     = Attribute "next"     (V2 Float) 6
+
+type Simple2DAttribs = '[APosition, AColor, AUV, ABez, ABezUV, APrev, ANext]
+type Simple2DAttribToggles = TypeMap AttributeToggling Simple2DAttribs
+type Simple2DAttribBuffers = TypeMap AttributeBuffering Simple2DAttribs
+
+--------------------------------------------------------------------------------
+-- $uniforms
+-- Uniform Helper Types
+--------------------------------------------------------------------------------
+data PrimType = PrimTri
+              | PrimBez
+              | PrimLine
+              | PrimMask
+              deriving (Show, Eq, Enum, Ord, Bounded)
+--------------------------------------------------------------------------------
+-- Updating uniforms
+--------------------------------------------------------------------------------
+type UPrimType           = Uniform "primitive"          PrimType
+type UProjection         = Uniform "projection"         (M44 Float)
+type UModelView          = Uniform "modelview"          (M44 Float)
+type UThickness          = Uniform "thickness"          Float
+type UFeather            = Uniform "feather"            Float
+type USumLength          = Uniform "sumlength"          Float
+type ULineCaps           = Uniform "cap"                (LineCap,LineCap)
+type UHasUV              = Uniform "hasUV"              Bool
+type USampler            = Uniform "sampler"            Int
+type UMainTex            = Uniform "mainTex"            Int
+type UMaskTex            = Uniform "maskTex"            Int
+type UAlpha              = Uniform "alpha"              Float
+type UMultiply           = Uniform "multiply"           (V4 Float)
+type UShouldReplaceColor = Uniform "shouldColorReplace" Bool
+type UReplaceColor       = Uniform "replaceColor"       (V4 Float)
+
+type Simple2DUniforms = '[ UPrimType
+                         , UProjection
+                         , UModelView
+                         , UThickness
+                         , UFeather
+                         , USumLength
+                         , ULineCaps
+                         , UHasUV
+                         , USampler
+                         , UMainTex
+                         , UMaskTex
+                         , UAlpha
+                         , UMultiply
+                         , UShouldReplaceColor
+                         , UReplaceColor
+                         ]
+
+type Simple2DShaders = '[VertexShader, FragmentShader]
+
+type Simple2DShader = GLuint
+
+$(genUniform [t|PrimType|] [|\loc ->
+  glUniform1i loc . fromIntegral . fromEnum |])
+
+$(genUniform [t|(LineCap, LineCap)|] [|\loc (a, b) ->
+  let [x,y] = map (fromIntegral . fromEnum) [a,b]
+  in glUniform2i loc x y |])
+
+
+-- | Compile all 2D shader programs and return a 2D renderer.
+loadSimple2DShader :: (MonadIO m, MonadError String m) => m Simple2DShader
+loadSimple2DShader = do
+  names <- liftIO $ sequence [simple2dVertFilePath, simple2dFragFilePath]
+  let paths :: ShaderSteps '[VertexShader, FragmentShader] FilePath
+      paths = ShaderSteps names
+  loadProgram paths (Proxy :: Proxy Simple2DAttribs)
+
+inShaderDir :: FilePath -> IO FilePath
+inShaderDir = getDataFileName . ("shaders" </>)
+
+simple2dVertFilePath :: IO FilePath
+simple2dVertFilePath = inShaderDir "simple2d.vert"
+
+simple2dFragFilePath :: IO FilePath
+simple2dFragFilePath = inShaderDir "simple2d.frag"
 --------------------------------------------------------------------------------
 -- Uniform updates for the Simple2DShader
 --------------------------------------------------------------------------------
@@ -144,13 +239,13 @@ enableAttribsForMask = disableAll >> enablePosition >> enableUV
 --------------------------------------------------------------------------------
 -- Attribute buffering
 --------------------------------------------------------------------------------
-bufferPosition :: GLint -> GLuint -> Vector (V2 Float) -> IO ()
-bufferColor :: GLint -> GLuint -> Vector (V4 Float) -> IO ()
-bufferUV :: GLint -> GLuint -> Vector (V2 Float) -> IO ()
-bufferBez :: GLint -> GLuint -> Vector (V3 Float) -> IO ()
-bufferBezUV :: GLint -> GLuint -> Vector (V2 Float) -> IO ()
-bufferPrev :: GLint -> GLuint -> Vector (V2 Float) -> IO ()
-bufferNext :: GLint -> GLuint -> Vector (V2 Float) -> IO ()
+bufferPosition :: GLint -> GLuint -> Vector (V2 Float) -> IO GLuint
+bufferColor :: GLint -> GLuint -> Vector (V4 Float) -> IO GLuint
+bufferUV :: GLint -> GLuint -> Vector (V2 Float) -> IO GLuint
+bufferBez :: GLint -> GLuint -> Vector (V3 Float) -> IO GLuint
+bufferBezUV :: GLint -> GLuint -> Vector (V2 Float) -> IO GLuint
+bufferPrev :: GLint -> GLuint -> Vector (V2 Float) -> IO GLuint
+bufferNext :: GLint -> GLuint -> Vector (V2 Float) -> IO GLuint
 bufferPosition
   :& bufferColor
   :& bufferUV

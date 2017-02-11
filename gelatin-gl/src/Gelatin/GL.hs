@@ -11,6 +11,5 @@ module Gelatin.GL
 import           Gelatin                    as G
 import           Gelatin.GL.Picture         as G
 import           Gelatin.GL.Renderer.Common as G
-import           Gelatin.GL.Shader          as G
 import           Graphics.GL.Core33         as GL
 import           Graphics.GL.Types          as GL

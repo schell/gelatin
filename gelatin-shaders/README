@@ -1,0 +1,1 @@
+GL agnostic types and type-level functions for writing bindings to shaders.

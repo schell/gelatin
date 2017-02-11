@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -10,69 +11,47 @@
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# OPTIONS_GHC -fno-warn-orphans      #-}
 {-# OPTIONS_GHC -fprint-explicit-kinds #-}
-module Gelatin.GL.Shader where
+module Gelatin.Shaders.GL (
+  -- * Re-exports
+    module G
+  -- * Compiling and loading shaders
+  , compileOGLShader
+  , compileOGLProgram
+  , loadSourcePaths
+  , compileSources
+  , compileProgram
+  , loadProgram
+  ) where
 
-import           Control.Exception          (assert)
+import           Control.Exception      (assert)
 import           Control.Monad
-import           Control.Monad.Except       (MonadError, throwError)
-import           Control.Monad.IO.Class     (MonadIO, liftIO)
-import           Data.ByteString.Char8      as B
-import qualified Data.Foldable              as F
-import           Data.Proxy                 (Proxy (..))
-import qualified Data.Vector.Storable       as S
-import           Data.Vector.Unboxed        (Unbox, Vector)
-import qualified Data.Vector.Unboxed        as V
+import           Control.Monad.Except   (MonadError, throwError)
+import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Data.ByteString.Char8  as B
+import qualified Data.Foldable          as F
+import           Data.Maybe             (fromMaybe)
+import           Data.Proxy             (Proxy (..))
+import qualified Data.Vector.Storable   as S
+import           Data.Vector.Unboxed    (Unbox, Vector)
+import qualified Data.Vector.Unboxed    as V
 import           Foreign.C.String
 import           Foreign.Marshal.Array
 import           Foreign.Marshal.Utils
 import           Foreign.Ptr
 import           Foreign.Storable
-import           GHC.TypeLits               (KnownNat, KnownSymbol, natVal,
-                                             symbolVal)
+import           GHC.TypeLits           (KnownNat, KnownSymbol, natVal,
+                                         symbolVal)
 import           Graphics.GL.Core33
 import           Graphics.GL.Types
-import           Prelude                    hiding (init)
-import           Prelude                    as P
+import           Prelude                hiding (init)
+import           Prelude                as P
 import           System.FilePath
 --------------------------------------------------------------------------------
-import           Gelatin
-import           Gelatin.Shaders
+import           Gelatin                as G
+import           Gelatin.Shaders        as G
 --------------------------------------------------------------------------------
-import           Gelatin.GL.Shader.Simple2D (PrimType (..), Simple2DAttribs)
-import           Gelatin.GL.Shader.Simple3D (Simple3DAttribs)
-import           Gelatin.GL.TH
-import           Paths_gelatin_gl           as S
---------------------------------------------------------------------------------
-
-type Simple2DShader = GLuint
-type Simple3DShader = GLuint
-
-inShaderDir :: FilePath -> IO FilePath
-inShaderDir = getDataFileName . ("shaders" </>)
-
-simple2dVertFilePath :: IO FilePath
-simple2dVertFilePath = inShaderDir "simple2d.vert"
-
-simple2dFragFilePath :: IO FilePath
-simple2dFragFilePath = inShaderDir "simple2d.frag"
-
-simple3dVertFilePath :: IO FilePath
-simple3dVertFilePath = inShaderDir "simple3d.vert"
-
-simple3dFragFilePath :: IO FilePath
-simple3dFragFilePath = inShaderDir "simple3d.frag"
-
-simple2dVertWebGLFilePath :: IO FilePath
-simple2dVertWebGLFilePath = inShaderDir "simple2dwebgl.vert"
-
-simple2dFragWebGLFilePath :: IO FilePath
-simple2dFragWebGLFilePath = inShaderDir "simple2dwebgl.frag"
-
-simple3dVertWebGLFilePath :: IO FilePath
-simple3dVertWebGLFilePath = inShaderDir "simple3dwebgl.vert"
-
-simple3dFragWebGLFilePath :: IO FilePath
-simple3dFragWebGLFilePath = inShaderDir "simple3dwebgl.frag"
+import           Gelatin.Shaders.Error
+import           Gelatin.Shaders.TH     as G
 --------------------------------------------------------------------------------
 -- IsShaderType instances
 --------------------------------------------------------------------------------
@@ -88,9 +67,6 @@ $(genUniform [t|Bool|] [| \loc bool ->
    glUniform1i loc $ if bool then 1 else 0 |])
 
 $(genUniform [t|Int|] [| \loc enum ->
-   glUniform1i loc $ fromIntegral $ fromEnum enum |])
-
-$(genUniform [t|PrimType|] [| \loc enum ->
    glUniform1i loc $ fromIntegral $ fromEnum enum |])
 
 $(genUniform [t|Float|] [| \loc float ->
@@ -115,13 +91,68 @@ $(genUniform [t|(Int,Int)|] [| \loc (a, b) ->
    let [x,y] = P.map fromIntegral [a, b]
    in glUniform2i loc x y |])
 
-$(genUniform [t|(LineCap,LineCap)|] [| \loc (a, b) ->
-   let [x,y] = P.map (fromIntegral . fromEnum) [a, b]
-   in glUniform2f loc x y |])
-
 $(genUniform [t|V2 Int|] [| \loc v ->
    let V2 x y = fmap fromIntegral v
    in glUniform2i loc x y |])
+--------------------------------------------------------------------------------
+-- Attribute buffering and toggling instances
+--------------------------------------------------------------------------------
+convertVec
+  :: (Unbox (f Float), Foldable f) => Vector (f Float) -> S.Vector GLfloat
+convertVec =
+  S.convert . V.map realToFrac . V.concatMap (V.fromList . F.toList)
+
+errCase :: String -> GLenum -> IO ()
+errCase msg = \case
+  0 -> return ()
+  e -> do
+    let err = P.unwords [msg, show e, fromMaybe "" $ lookupError e]
+    P.putStrLn err >> assert False (return ())
+
+instance
+  ( KnownNat loc, KnownSymbol name
+  , Foldable f
+  , Unbox (f Float), Storable (f Float)
+  ) => HasGenFunc (AttributeBuffering (Attribute name (f Float) loc)) where
+
+  type GenFunc (AttributeBuffering (Attribute name (f Float) loc))
+    = GLint
+   -- ^ The number of components in one vertex
+   -> GLuint
+   -- ^ The vao to be bound
+   -> Vector (f Float)
+   -- ^ The data to buffer
+   -> IO GLuint
+  genFunction _ n vao as = do
+    [buf] <- allocaArray 1 $ \ptr -> do
+      glGenBuffers 1 ptr
+      peekArray 1 ptr
+
+    let loc = fromIntegral $ natVal (Proxy :: Proxy loc)
+        asize = V.length as * sizeOf (V.head as)
+        ident = symbolVal (Proxy :: Proxy name)
+        msg = P.unwords [ "Error buffering attribute"
+                        , ident
+                        , "( location"
+                        , show loc
+                        , ")"
+                        ]
+    glBindVertexArray vao
+    glBindBuffer GL_ARRAY_BUFFER buf
+    S.unsafeWith (convertVec as) $ \ptr ->
+      glBufferData GL_ARRAY_BUFFER (fromIntegral asize) (castPtr ptr) GL_STATIC_DRAW
+    glEnableVertexAttribArray loc
+    glVertexAttribPointer loc n GL_FLOAT GL_FALSE 0 nullPtr
+    glBindVertexArray 0
+    return buf
+
+instance (KnownNat loc, KnownSymbol name)
+  => HasGenFunc (AttributeToggling (Attribute name val loc)) where
+  type GenFunc (AttributeToggling (Attribute name val loc)) = (IO (), IO ())
+  genFunction _ =
+    let ident = symbolVal (Proxy :: Proxy name)
+        aloc  = seq ident $ fromIntegral $ natVal (Proxy :: Proxy loc)
+    in (glEnableVertexAttribArray aloc, glDisableVertexAttribArray aloc)
 --------------------------------------------------------------------------------
 -- $opengl OpenGL shader only stuff
 --------------------------------------------------------------------------------
@@ -220,7 +251,7 @@ compileProgram
   -> m GLuint
 compileProgram p = compileOGLProgram (getSymbols p) . unShaderSteps
 
--- | Compile all 2D shader programs and return a 2D renderer.
+-- | Compile all shaders and return a program.
 loadProgram
   :: ( MonadIO m, MonadError String m
      , IsShaderType shadertypes [GLenum]
@@ -231,19 +262,3 @@ loadProgram
   -> m GLuint
 loadProgram shaderPaths pattribs =
   loadSourcePaths shaderPaths >>= compileSources >>= compileProgram pattribs
-
--- | Compile all 2D shader programs and return a 2D renderer.
-loadSimple2DShader :: (MonadIO m, MonadError String m) => m Simple2DShader
-loadSimple2DShader = do
-  names <- liftIO $ sequence [simple2dVertFilePath, simple2dFragFilePath]
-  let paths :: ShaderSteps '[VertexShader, FragmentShader] FilePath
-      paths = ShaderSteps names
-  loadProgram paths (Proxy :: Proxy Simple2DAttribs)
-
--- | Compile all 3D shader programs and return a 3D renderer.
-loadSimple3DShader :: (MonadIO m, MonadError String m) => m Simple3DShader
-loadSimple3DShader = do
-  names <- liftIO $ sequence [simple3dVertFilePath, simple3dFragFilePath]
-  let paths :: ShaderSteps '[VertexShader, FragmentShader] FilePath
-      paths = ShaderSteps names
-  loadProgram paths (Proxy :: Proxy Simple3DAttribs)
