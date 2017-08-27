@@ -35,7 +35,7 @@ startupSDL2Backends ww wh ws highDPI = do
     startupSDL2BackendsWithConfig window ws
 
 startupSDL2BackendsWithConfig :: (MonadIO m, MonadError String m)
-                              => WindowConfig -> String -> m SDL2Backends
+                              => WindowConfig -> String -> m (Window, SDL2Backends)
 startupSDL2BackendsWithConfig cfg str = do
   w <- liftIO $ do
     initializeAll
@@ -60,7 +60,7 @@ startupSDL2BackendsWithConfig cfg str = do
       ops  = glOps rz (updateWindowSDL2 w) pollEvents
       v2v4 = Backend ops $ glV2V4Compiler rz
       v2v2 = Backend ops $ glV2V2Compiler rz
-  return $ SDL2Backends v2v4 v2v2
+  return (w, SDL2Backends v2v4 v2v2)
 
 updateWindowSDL2 :: Window -> IO ()
 updateWindowSDL2 = glSwapWindow
