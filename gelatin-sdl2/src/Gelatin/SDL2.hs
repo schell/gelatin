@@ -32,7 +32,7 @@ startupSDL2Backends ww wh ws highDPI = do
                               , windowResizable = True
                               , windowHighDPI = highDPI
                               }
-    startupSDL2BackendsWithConfig window ws
+    snd <$> startupSDL2BackendsWithConfig window ws
 
 startupSDL2BackendsWithConfig :: (MonadIO m, MonadError String m)
                               => WindowConfig -> String -> m (Window, SDL2Backends)
