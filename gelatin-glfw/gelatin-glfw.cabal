@@ -16,7 +16,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Gelatin.GLFW
-  build-depends:       base       >= 4.6     && < 4.11
+  build-depends:       base       >= 4.8     && < 4.11
                      , linear     >= 1.20
                      , GLFW-b     >= 1.4
                      , gelatin-gl >= 0.0

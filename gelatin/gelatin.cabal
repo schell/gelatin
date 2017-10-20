@@ -30,7 +30,7 @@ library
                      , Gelatin.Picture
                      , Gelatin
 
-  build-depends:       base         >=4.6 && <4.11
+  build-depends:       base         >=4.8 && <4.11
                      , linear
                      , containers
                      , vector
@@ -45,7 +45,7 @@ library
 executable example
   ghc-options:         -Wall
 
-  build-depends:       base >= 4.6 && <4.11
+  build-depends:       base >= 4.8 && <4.11
                      , gelatin
                      , linear
                      --, halive
