@@ -21,6 +21,7 @@ library
                      , sdl2
                      , gelatin-gl
                      , mtl
+                     , transformers
   hs-source-dirs:      src
   default-language:    Haskell2010
 
