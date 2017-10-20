@@ -57,3 +57,4 @@ executable gelatin-gl-example
 
   hs-source-dirs:      app
   main-is:             Example.hs
+  default-language:    Haskell2010
