@@ -17,7 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Gelatin.Fruity
 
-  build-depends:       base >= 4.7 && < 5
+  build-depends:       base >= 4.8 && < 4.11
                      , gelatin
                      , FontyFruity
                      , vector

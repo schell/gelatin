@@ -1,0 +1,9 @@
+packages:
+  gelatin
+  gelatin-shaders
+  gelatin-gl
+  gelatin-sdl2
+  gelatin-fruity
+  gelatin-freetype2
+  gelatin-example
+
