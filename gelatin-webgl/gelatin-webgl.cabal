@@ -1,7 +1,7 @@
 name:                gelatin-webgl
 version:             0.1.0.0
-synopsis:            Initial project template from stack
-description:         Please see README.md
+synopsis:            Gelatin's WebGL renderer.
+description:         Gelatin's WebGL renderer. Please see README.md
 homepage:            https://github.com/schell/gelatin-webgl#readme
 license:             BSD3
 license-file:        LICENSE

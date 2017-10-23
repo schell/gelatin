@@ -1,7 +1,7 @@
 name:                gelatin-example
 version:             0.0.0.1
 synopsis:            A simple gelatin example.
-description:         Please see README.md
+description:         A simple gelatin example. Please see README.md
 homepage:            https://github.com/schell/gelatin#readme
 license:             BSD3
 license-file:        LICENSE
