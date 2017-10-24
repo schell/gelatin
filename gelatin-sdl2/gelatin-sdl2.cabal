@@ -35,4 +35,4 @@ executable gelatin-sdl2-example
                      , gelatin-sdl2
                      , sdl2                 >=2.1 && <2.4
                      , filepath             >=1.4 && <1.5
-                     , either               >=4.5 && <4.6
+                     , either               >=4.4 && <4.6

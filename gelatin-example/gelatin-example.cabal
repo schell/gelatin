@@ -19,7 +19,7 @@ executable gelatin-example
   other-modules:       Paths_gelatin_example
   ghc-options:         -rtsopts
   build-depends:       base                  >=4.8 && <4.11
-                     , either                >=4.5 && <4.6
+                     , either                >=4.4 && <4.6
                      , gelatin               >=0.0 && <0.1
                      , gelatin-sdl2          >=0.0 && <0.1
                      , gelatin-fruity        >=0.1 && <0.2
