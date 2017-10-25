@@ -12,6 +12,7 @@ category:            Graphics
 build-type:          Simple
 data-files:          assets/*.jpg, assets/*.ttf, assets/*.txt
 cabal-version:       >=1.10
+stability:           experimental
 
 executable gelatin-example
   hs-source-dirs:      src
