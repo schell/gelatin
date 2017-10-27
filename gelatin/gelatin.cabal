@@ -10,6 +10,7 @@ maintainer:          schell@takt.com
 stability:           experimental
 category:            Graphics
 build-type:          Simple
+stability:           experimental
 
 cabal-version:       >=1.10
 

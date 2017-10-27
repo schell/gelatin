@@ -11,6 +11,7 @@ copyright:           Schell Scivally
 category:            Web, Graphics
 build-type:          Simple
 cabal-version:       >=1.18
+stability:           experimental
 
 library
   hs-source-dirs:      src

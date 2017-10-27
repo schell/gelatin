@@ -12,6 +12,7 @@ copyright:           Schell Scivally
 category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
+stability:           experimental
 
 library
   ghc-options:         -Wall
