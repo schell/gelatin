@@ -20,7 +20,7 @@ library
   ghc-options:         -Wall
   build-depends:       base                 >=4.8 && <4.11
                      , sdl2                 >=2.1 && <2.4
-                     , gelatin-gl           >=0.0 && <0.1
+                     , gelatin-gl           >=0.1 && <0.2
                      , mtl                  >=2.2 && <2.3
                      , transformers         >=0.4 && <0.6
   hs-source-dirs:      src

@@ -23,8 +23,8 @@ library
                      , Gelatin.FreeType2
 
   build-depends:       base               >=4.8 && <4.11
-                     , gelatin            >=0.0 && <0.1
-                     , gelatin-gl         >=0.0 && <0.1
+                     , gelatin            >=0.1 && <0.2
+                     , gelatin-gl         >=0.1 && <0.2
                      , freetype2          >=0.1 && <0.2
                      , transformers       >=0.4 && <0.6
                      , mtl                >=2.2 && <2.3
