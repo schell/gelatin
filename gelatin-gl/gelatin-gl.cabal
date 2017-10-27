@@ -19,7 +19,7 @@ library
   ghc-options:         -Wall
   exposed-modules:     Gelatin.GL,
                        Gelatin.GL.Renderer,
-                       Gelatin.GL.Picture,
+                       Gelatin.GL.Compiler,
                        Gelatin.GL.Shader,
                        Gelatin.GL.Common,
                        Gelatin.GL.TH

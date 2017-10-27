@@ -1,5 +1,5 @@
 import           Gelatin
-import           Gelatin.GL.Picture
+import           Gelatin.GL
 import           Linear as L
 import qualified Data.Vector as B
 import qualified Data.Vector.Unboxed as V

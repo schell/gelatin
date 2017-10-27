@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-module Gelatin.GL.Picture where
+module Gelatin.GL.Compiler where
 
 import           Control.Lens        hiding (op)
 import           Control.Monad       ((>=>))
