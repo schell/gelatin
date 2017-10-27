@@ -7,7 +7,6 @@ license:             MIT
 license-file:        LICENSE
 author:              Schell Scivally
 maintainer:          schell@takt.com
-stability:           experimental
 category:            Graphics
 build-type:          Simple
 stability:           experimental
