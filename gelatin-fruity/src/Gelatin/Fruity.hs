@@ -1,4 +1,24 @@
 {-# LANGUAGE FlexibleContexts #-}
+-- |
+-- Module:     Gelatin.Fruity
+-- Copyright:  (c) 2017 Schell Scivally
+-- License:    MIT
+-- Maintainer: Schell Scivally <schell@takt.com>
+--
+-- Provides two high-level functions that create gelatin renderers:
+--
+-- ['coloredString']: font strings filled with color
+--
+-- ['texturedString']: font strings filled with a texture mapping
+--
+--
+-- Provides one mid-level function for extracting a font outline:
+--
+-- ['stringOutline']: raw geometry of a font string
+--
+--
+-- For help obtaining a 'Font' within your program, check out
+-- 'loadFontFile'.
 module Gelatin.Fruity (
   module TT,
   coloredString,
@@ -12,7 +32,6 @@ import           Data.Vector.Unboxed (Vector, Unbox)
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector as B
 import           Control.Arrow (first,second)
-import           Linear
 --------------------------------------------------------------------------------
 -- Font decomposition into triangles and beziers
 --------------------------------------------------------------------------------
@@ -62,8 +81,18 @@ stringCurve font dpi px str = getStringCurveAtPoint dpi (0,0) [(font, sz, str)]
     where --sz = pixelSizeInPointAtDpi px dpi
           sz = PointSize px
 
-stringOutline :: Font -> Int -> Float -> String
-              -> B.Vector (RawGeometry (V2 Float))
+-- | Extract the outlines of a given string using a font. Returns a
+-- vector of 'RawBeziers' and 'RawTriangles'.
+stringOutline
+  :: Font
+  -- ^ The font to extract geometry from.
+  -> Int
+  -- ^ The dpi to read the font at.
+  -> Float
+  -- ^ The target pixel width of the resulting geometry.
+  -> String
+  -- ^ The string to construct and extract the geometry with.
+  -> B.Vector (RawGeometry (V2 Float))
 stringOutline font dpi px str =
   B.fromList $ map RawLine $ concat $
     fromFonty (cleanSeqDupes . V.concatMap divide . toBeziers . V.map (fmap realToFrac)) $
@@ -80,9 +109,21 @@ fontBezAndTris font dpi px str =
        , B.map RawTriangleFan $ B.fromList ts
        )
 
-coloredString :: Backend t e (V2 Float, V4 Float) (V2 Float) Float s
-              -> Font -> Int -> Float -> String -> (V2 Float -> V4 Float)
-              -> IO (Renderer (V2 Float) Float s)
+-- | Creates a gelatin Renderer that renders the given string in 2d space.
+coloredString
+  :: Backend t e (V2 Float, V4 Float) (V2 Float) Float s
+  -- ^ A backend for rendering geometry with 'V2V4' vertices.
+  -> Font
+  -- ^ The font to use.
+  -> Int
+  -- ^ The dpi to use for reading the font geometry.
+  -> Float
+  -- ^ Your target pixel width.
+  -> String
+  -- ^ The string to render.
+  -> (V2 Float -> V4 Float)
+  -- ^ A function from font geometry/space to color.
+  -> IO (Renderer (V2 Float) Float s)
 coloredString b font dpi px str fill = do
   let g        = mapRawGeometry h
       h v      = (v, fill v)
@@ -96,9 +137,24 @@ coloredString b font dpi px str fill = do
 
   return $ r1 `mappend` r2
 
-texturedString :: Backend t e (V2 Float, V2 Float) (V2 Float) Float s
-               -> Font -> Int -> Float -> String -> t -> (V2 Float -> V2 Float)
-               -> IO (Renderer (V2 Float) Float s)
+-- | Creates a gelatin Renderer that renders the given string in 2d space,
+-- using a given texture.
+texturedString
+  :: Backend t e (V2 Float, V2 Float) (V2 Float) Float s
+  -- ^ A backend for rendering geometry with 'V2V2' vertices.
+  -> Font
+  -- ^ The font to use.
+  -> Int
+  -- ^ The dpi to use for reading the font geometry.
+  -> Float
+  -- ^ Your target pixel width.
+  -> String
+  -- ^ The string to render.
+  -> t
+  -- ^ The texture.
+  -> (V2 Float -> V2 Float)
+  -- ^ A function from font geometry/space to texture mapping (uv coords).
+  -> IO (Renderer (V2 Float) Float s)
 texturedString b font dpi px str t fill = do
   let g   = mapRawGeometry h
       h v = (v, fill v)

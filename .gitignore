@@ -16,3 +16,4 @@ cabal.config
 .DS_Store
 .projectile
 TAGS
+*.#*

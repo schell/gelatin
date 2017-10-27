@@ -1,15 +1,16 @@
 name:                gelatin-fruity
 version:             0.1.0.0
-synopsis:            Gelatin's support for TTF font rendering, using FontyFruity.
-description:         Gelatin's support for TTF font rendering, using FontyFruity.
-                     Please see README.md
+synopsis:            Gelatin's support for rendering TTF outlines, using FontyFruity.
+description:         Gelatin's support for rendering TTF outlines, using FontyFruity.
+                     Using FontyFruity gelatin can render smooth font geometry without
+                     freetype.
 homepage:            https://github.com/schell/gelatin-fruity#readme
 license:             BSD3
 license-file:        LICENSE
 author:              Schell Scivally
-maintainer:          schell@zyghost.com
+maintainer:          schell@takt.com
 copyright:           Schell Scivally
-category:            Web
+category:            Graphics
 build-type:          Simple
 cabal-version:       >=1.10
 stability:           experimental
