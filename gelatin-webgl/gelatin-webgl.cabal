@@ -22,18 +22,18 @@ library
                      , Gelatin.WebGL.Renderer
 
   build-depends:       base >= 4.8 && < 4.11
-                     , gelatin
-                     , gelatin-shaders
-                     , ghcjs-base
-                     , ghcjs-dom
+                     , gelatin >= 0.1 && < 0.2
+                     , gelatin-shaders >= 0.1 && < 0.2
+                     , ghcjs-base -any
+                     , ghcjs-dom  -any
                      , ghcjs-dom-jsffi
-                     , mtl
-                     , either
-                     , async
-                     , vector
-                     , bytestring
-                     , stm
-                     , transformers
+                     , mtl >= 2.2 & < 2.3
+                     , either >= 4.4 && < 4.6
+                     , async -any
+                     , vector >= 0.12 && < 0.13
+                     , bytestring >= 0.10 & < 0.11
+                     , stm -any
+                     , transformers >= 0.4 && < 0.6
 
   default-language:    Haskell2010
 

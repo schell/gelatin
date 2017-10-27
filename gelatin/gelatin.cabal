@@ -1,5 +1,5 @@
 name:                gelatin
-version:             0.0.0.1
+version:             0.1.0.0
 synopsis:            A graphics description language.
 description:         An EDSL for describing pictures and scenes.
 homepage:            https://github.com/schell/gelatin

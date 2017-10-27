@@ -1,5 +1,5 @@
 name:                gelatin-freetype2
-version:             0.0.0.1
+version:             0.1.0.0
 synopsis:            FreeType2 based text rendering for the gelatin realtime
                      rendering system.
 description:         FreeType2 based text rendering for the gelatin realtime

@@ -1,5 +1,5 @@
 name:                gelatin-gl
-version:             0.0.0.1
+version:             0.1.0.0
 synopsis:            OpenGL rendering routines for the gelatin-picture graphics
                      EDSL.
 description:         This package provides most of a backend to
