@@ -235,20 +235,20 @@ getRenderingOptions = use picDataOptions
 --------------------------------------------------------------------------------
 -- Measuring pictures
 --------------------------------------------------------------------------------
-extractSpatial :: (Monad m, Unbox v, Unbox s)
+mapToSpaceVec :: (Monad m, Unbox v, Unbox s)
                => (v -> s) -> PictureT t v m (V.Vector s)
-extractSpatial vertToSpace = do
+mapToSpaceVec vertToSpace = do
   gs <- use picDataGeometry
   let f = V.map vertToSpace . vertexData . (gs B.!)
   return $ V.concatMap f $ V.enumFromTo 0 (B.length gs - 1)
 
 pictureBounds2 :: (Monad m, Unbox v)
                => (v -> V2 Float) -> PictureT t v m (V2 Float, V2 Float)
-pictureBounds2 = (boundingBox <$>) . extractSpatial
+pictureBounds2 = (boundingBox <$>) . mapToSpaceVec
 
 pictureBounds3 :: (Monad m, Unbox v)
                => (v -> V3 Float) -> PictureT t v m BCube
-pictureBounds3 = (boundingCube <$>) . extractSpatial
+pictureBounds3 = (boundingCube <$>) . mapToSpaceVec
 
 pictureSize2 :: (Monad m, Unbox v)
              => (v -> V2 Float) -> PictureT t v m (V2 Float)

@@ -6,7 +6,8 @@ homepage:            https://github.com/schell/gelatin
 license:             MIT
 license-file:        LICENSE
 author:              Schell Scivally
-maintainer:          schell@zyghost.com
+maintainer:          schell@takt.com
+stability:           experimental
 category:            Graphics
 build-type:          Simple
 
@@ -14,7 +15,11 @@ cabal-version:       >=1.10
 
 library
   ghc-options:         -Wall
-  exposed-modules:     Gelatin.Core.Bezier
+
+  exposed-modules:     Gelatin
+                     , Gelatin.Compiler
+                     , Gelatin.Core
+                     , Gelatin.Core.Bezier
                      , Gelatin.Core.Bounds
                      , Gelatin.Core.Color
                      , Gelatin.Core.Font
@@ -23,12 +28,9 @@ library
                      , Gelatin.Core.Transform
                      , Gelatin.Core.Triangle
                      , Gelatin.Core.Utils
+                     , Gelatin.Picture
                      , Gelatin.Picture.Internal
                      , Gelatin.Picture.Shapes
-                     , Gelatin.Core
-                     , Gelatin.Compiler
-                     , Gelatin.Picture
-                     , Gelatin
 
   build-depends:       base                  >=4.8 && <4.11
                      , linear                >=1.20 && <1.21
@@ -37,7 +39,7 @@ library
                      , mtl                   >=2.2 && <2.3
                      , transformers          >=0.4 && <0.6
                      , bytestring            >=0.10 && <0.11
-                     , lens                  >=4.15 && <4.16
+                     , lens                  >=4.14 && <4.16
 
   hs-source-dirs:      src
   default-language:    Haskell2010

@@ -40,6 +40,7 @@ module Gelatin.Picture (
   , setRenderingOptions
   , getRenderingOptions
   -- * Measuring Pictures (2d)
+  , mapToSpaceVec
   , pictureBounds2
   , pictureSize2
   , pictureOrigin2
