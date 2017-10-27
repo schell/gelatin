@@ -1,9 +1,12 @@
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances #-}
+-- | Limited spatial transformations in 2 and 3 dimensions.
 module Gelatin.Core.Transform where
 
-import           Linear
 import           Data.Foldable (foldl')
+import           Linear        (Epsilon (..), M44, V1 (..), V2 (..),
+                                V3 (..), V4 (..), axisAngle, identity,
+                                mkTransformation, mkTransformationMat, (!*!))
 --------------------------------------------------------------------------------
 -- Affine Transformation
 --------------------------------------------------------------------------------
@@ -29,8 +32,8 @@ demoteV3 (V3 x y _) = V2 x y
 -- the z axis.
 promoteAffine2 :: Num a => Affine2 a -> Affine3 a
 promoteAffine2 (Translate v2) = Translate $ promoteV2 v2
-promoteAffine2 (Scale v2) = Scale $ promoteV2 v2
-promoteAffine2 (Rotate r) = Rotate (r, V3 0 0 1)
+promoteAffine2 (Scale v2)     = Scale $ promoteV2 v2
+promoteAffine2 (Rotate r)     = Rotate (r, V3 0 0 1)
 
 affine3Modelview :: (Num a, Real a, Floating a, Epsilon a)
                  => Affine3 a -> M44 a

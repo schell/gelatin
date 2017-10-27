@@ -1,3 +1,5 @@
+-- | CSS style colors! Also includes 'withAlpha' and 'fromHex', for
+-- convenience.
 module Gelatin.Core.Color where
 
 import           Data.Bits

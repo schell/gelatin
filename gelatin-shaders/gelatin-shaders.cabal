@@ -10,7 +10,6 @@ maintainer:          schell@zyghost.com
 copyright:           Schell Scivally
 category:            Web
 build-type:          Simple
--- extra-source-files:
 cabal-version:       >=1.10
 data-files:          shaders/*.frag,
                      shaders/*.vert

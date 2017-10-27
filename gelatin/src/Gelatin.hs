@@ -1,9 +1,27 @@
+-- |
+-- Module:     Gelatin
+-- Copyright:  (c) 2017 Schell Scivally
+-- License:    MIT
+-- Maintainer: Schell Scivally <schell@takt.com>
+--
+-- [@Core@]
+-- Core types and pure functions.
+--
+-- [@Picture@]
+-- Creating pictures.
+--
+-- [@Compiler@]
+-- Shared types for writing backends and compiling pictures.
+--
 module Gelatin
-  ( module G
-  , module L
+  ( -- * Re-exports
+    module Gelatin.Core
+  , module Gelatin.Picture
+  , module Gelatin.Compiler
+  , module Linear
   ) where
 
-import Gelatin.Core as G
-import Gelatin.Picture as G
-import Gelatin.Compiler as G
-import Linear as L hiding (rotate)
+import Gelatin.Core
+import Gelatin.Picture
+import Gelatin.Compiler
+import Linear hiding (rotate)

@@ -1,3 +1,5 @@
+-- | This module is planned to disappear in favor of a stateful polyline
+-- drawing mode. It's still here for various renderers.
 module Gelatin.Core.Polyline where
 
 import           Data.List           (unzip5)

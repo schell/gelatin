@@ -9,9 +9,10 @@ author:              Schell Scivally
 maintainer:          schell@takt.com
 category:            Graphics
 build-type:          Simple
+extra-doc-files:     docimages/*.png
 stability:           experimental
 
-cabal-version:       >=1.10
+cabal-version:       >=1.18
 
 library
   ghc-options:         -Wall
@@ -22,7 +23,7 @@ library
                      , Gelatin.Core.Bezier
                      , Gelatin.Core.Bounds
                      , Gelatin.Core.Color
-                     , Gelatin.Core.Font
+                     --, Gelatin.Core.Font
                      , Gelatin.Core.Polyline
                      , Gelatin.Core.Stroke
                      , Gelatin.Core.Transform

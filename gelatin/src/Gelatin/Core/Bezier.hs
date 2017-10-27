@@ -3,47 +3,50 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+-- | Here is a simple bezier algebra.
+-- To better server drawing beziers the 'Bezier' type's first
+-- record is a boolean representing its fill direction (inner or outer).
 module Gelatin.Core.Bezier (
-    -- * Types
-    Bezier,
-    QuadraticBezier,
-    CubicBezier,
-    -- * Smart Constructors
-    bezier,
-    bez3,
-    bez4,
-    -- * Special helpers
-    fmapBezier,
-    fmapQuadraticBezier,
-    fmapCubicBezier,
-    transformBezier,
-    transformQuadraticBezier,
-    transformCubicBezier,
-    triangleArea,
-    -- * Conversion
-    bezToBez3,
-    bez3ToBez,
-    bez3ToBezInner,
-    bez3ToBezOuter,
-    bez4ToBez,
-    bez4ToBezInner,
-    bez4ToBezOuter,
-    bez4sToPath,
-    flipBez4,
-    demoteCubic,
-    -- * Subdivision
-    deCasteljau,
-    subdivideAdaptive,
-    subdivideAdaptive3,
-    subdivideAdaptive4,
-    cleanSeqDupes,
-    -- * Shapes
-    arcBez4,
-    arcBez3,
-    ellipseBez4,
-    ellipseBez3,
-    cornerBez4,
-    cornerBez3
+  -- * Types
+  Bezier,
+  QuadraticBezier,
+  CubicBezier,
+  -- * Smart Constructors
+  bezier,
+  bez3,
+  bez4,
+  -- * Special helpers
+  fmapBezier,
+  fmapQuadraticBezier,
+  fmapCubicBezier,
+  transformBezier,
+  transformQuadraticBezier,
+  transformCubicBezier,
+  triangleArea,
+  -- * Conversion
+  bezToBez3,
+  bez3ToBez,
+  bez3ToBezInner,
+  bez3ToBezOuter,
+  bez4ToBez,
+  bez4ToBezInner,
+  bez4ToBezOuter,
+  bez4sToPath,
+  flipBez4,
+  demoteCubic,
+  -- * Subdivision
+  deCasteljau,
+  subdivideAdaptive,
+  subdivideAdaptive3,
+  subdivideAdaptive4,
+  cleanSeqDupes,
+  -- * Shapes
+  arcBez4,
+  arcBez3,
+  ellipseBez4,
+  ellipseBez3,
+  cornerBez4,
+  cornerBez3
 ) where
 
 import           Gelatin.Core.Transform
@@ -51,10 +54,13 @@ import           Linear
 import qualified Data.Vector.Unboxed as V
 import           Data.Vector.Unboxed (Vector, Unbox)
 
+-- | A bezier that fills internally or externally.
 type Bezier a = (Bool, a, a, a)
 
+-- | A simple quadratic bezier with no explicit fill direction.
 type QuadraticBezier a = (a, a, a)
 
+-- | A simple cubic bezier with no explicit fill direction.
 type CubicBezier a = (a, a, a, a)
 
 fmapBezier :: (a -> b) -> Bezier a -> Bezier b
