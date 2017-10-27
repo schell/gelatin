@@ -1,14 +1,13 @@
 name:                gelatin-sdl2
 version:             0.1.0.0
-synopsis:            An SDL2 backend for the gelatin-picture graphics DSL.
+synopsis:            An SDL2 backend for the gelatin renderer.
 description:         Using SDL2 this package provides a backend to
-                     gelatin-picture, a DSL for decribing two dimensional
-                     pictures.
+                     gelatin, an EDSL rendering pictures.
 homepage:            https://github.com/schell/gelatin
 license:             MIT
 license-file:        LICENSE
 author:              Schell Scivally
-maintainer:          schell.scivally@synapsegroup.com
+maintainer:          schell@takt.com
 category:            Graphics
 build-type:          Simple
 cabal-version:       >= 1.10
