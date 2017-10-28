@@ -1,16 +1,30 @@
+-- |
+-- Module:     Gelatin.GL
+-- Copyright:  (c) 2017 Schell Scivally
+-- License:    MIT
+-- Maintainer: Schell Scivally <schell@takt.com>
+--
+-- This module provides font string rendering through the legendary freetype2.
+-- It automatically manages a texture atlas and word atlas to speed up rendering.
 module Gelatin.FreeType2
-  ( GlyphSize(..)
-  , glyphWidth
-  , glyphHeight
-  , Atlas(..)
+  (-- * Getting straight to rendering
+    freetypeRenderer2
+    -- * Creating a gelatin picture
+  , freetypePicture
+    -- * Creating an Atlas
+  , allocAtlas
+  , asciiChars
+  , freeAtlas
   , loadWords
   , unloadMissingWords
+  , Atlas(..)
+    -- * Going deeper
+    -- ** Glyphs
+  , GlyphSize(..)
+  , glyphWidth
+  , glyphHeight
+    -- ** Measuring glyphs
   , GlyphMetrics(..)
-  , allocAtlas
-  , freeAtlas
-  , freetypePicture
-  , freetypeRenderer2
-  , asciiChars
   ) where
 
 import Gelatin.FreeType2.Internal
