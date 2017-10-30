@@ -1,5 +1,5 @@
 name:                gelatin-sdl2
-version:             0.1.0.0
+version:             0.1.1.0
 synopsis:            An SDL2 backend for the gelatin renderer.
 description:         Using SDL2 this package provides a backend to
                      gelatin, an EDSL rendering pictures.

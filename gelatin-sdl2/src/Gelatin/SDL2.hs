@@ -7,9 +7,12 @@
 module Gelatin.SDL2
   ( -- * Backend definitions
     SDL2Backends(..)
-    -- * Obtaining the backends
-  , startupSDL2Backends
+    -- * Getting a window and the backends
+  , initSDL2Window
+  , startupSDL2BackendsWithWindow
+    -- * Obtaining the backends without a window
   , startupSDL2BackendsWithConfig
+  , startupSDL2Backends
     -- * Re-exports
   , module Gelatin.GL
   ) where
@@ -29,6 +32,48 @@ data SDL2Backends = SDL2Backends
   }
 
 
+-- | Creates and returns an SDL2 window.
+initSDL2Window
+  :: MonadIO m
+  => WindowConfig
+  -- ^ The window configuration
+  -> String
+  -- ^ The window title.
+  -> m Window
+initSDL2Window cfg title = liftIO $ do
+  initializeAll
+  w     <- createWindow (fromString title) cfg
+  _     <- glCreateContext w
+  return w
+
+-- | Start up and return the sdl2 backends using the given window.
+startupSDL2BackendsWithWindow
+  :: (MonadIO m, MonadError String m)
+  => Window
+  -- ^ The 'Window' to use render into.
+  -> m SDL2Backends
+startupSDL2BackendsWithWindow window = do
+  sh <- loadSimple2DShader
+
+  liftIO $ do
+    glEnable GL_BLEND
+    glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+
+  let wsize =  do V2 x y <- get $ windowSize window
+                  return (fromIntegral x, fromIntegral y)
+      fsize = do V2 x y <- glGetDrawableSize window
+                 return (fromIntegral x, fromIntegral y)
+
+      ctx = Context { ctxFramebufferSize = fsize
+                    , ctxWindowSize = wsize
+                    }
+      rz   = Rez sh ctx
+      ops  = glOps rz (updateWindowSDL2 window) pollEvents
+      v2v4 = Backend ops $ glV2V4Compiler rz
+      v2v2 = Backend ops $ glV2V2Compiler rz
+  return $ SDL2Backends v2v4 v2v2
+
+
 -- | Start up and return the sdl2 backends according to the given
 -- sdl2 'WindowConfig'.
 startupSDL2BackendsWithConfig
@@ -39,30 +84,8 @@ startupSDL2BackendsWithConfig
   -- ^ The window title
   -> m SDL2Backends
 startupSDL2BackendsWithConfig cfg str = do
-  w <- liftIO $ do
-    initializeAll
-    w     <- createWindow (fromString str) cfg
-    _     <- glCreateContext w
-    return w
-  sh <- loadSimple2DShader
-
-  liftIO $ do
-    glEnable GL_BLEND
-    glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
-
-  let wsize =  do V2 x y <- get $ windowSize w
-                  return (fromIntegral x, fromIntegral y)
-      fsize = do V2 x y <- glGetDrawableSize w
-                 return (fromIntegral x, fromIntegral y)
-
-      ctx = Context { ctxFramebufferSize = fsize
-                    , ctxWindowSize = wsize
-                    }
-      rz   = Rez sh ctx
-      ops  = glOps rz (updateWindowSDL2 w) pollEvents
-      v2v4 = Backend ops $ glV2V4Compiler rz
-      v2v2 = Backend ops $ glV2V2Compiler rz
-  return $ SDL2Backends v2v4 v2v2
+  w <- initSDL2Window cfg str
+  startupSDL2BackendsWithWindow w
 
 
 -- | Start up and return the default backends.
