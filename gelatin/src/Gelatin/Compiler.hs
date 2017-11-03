@@ -167,14 +167,6 @@ compilePicture b pic = do
   glr <- compilePictureData b dat
   return (a, glr)
 
---extractTransformData :: PictureData t (V2 Float) Float v -> [RenderTransform]
---extractTransformData PictureData{..} =
---  let afs = map Spatial _picDataAffine
---      ts  = Alpha _picDataAlpha : Multiply _picDataMultiply : afs
---  in case _picDataReplaceColor of
---       Nothing -> ts
---       Just c  -> ColorReplacement c : ts
---
 compileGeometry :: GeometryCompiler vx v r s -> [StrokeAttr] -> RawGeometry vx
                 -> IO (Renderer v r s)
 compileGeometry GeometryCompiler{..} _ (RawTriangles v) =
@@ -199,39 +191,3 @@ compilePictureData b PictureData{..} = do
       clean = mapM_ fst glrs
       glr   = foldl (applyCompilerOption b) (clean, render) _picDataOptions
   return glr
-
---compileColorPictureData :: Rez -> ColorPictureData -> IO Renderer
---compileColorPictureData = compilePictureData rgbaCompiler
---
---compileTexturePictureData :: Rez -> TexturePictureData -> IO Renderer
---compileTexturePictureData = compilePictureData uvCompiler
-----------------------------------------------------------------------------------
----- Top level compilation functions
-----------------------------------------------------------------------------------
---compileColorPictureT :: MonadIO m => Rez -> ColorPictureT m a -> m (a, Renderer)
---compileColorPictureT rz pic = do
---  (a, dat) <- runPictureT pic
---  glr <- liftIO $ compileColorPictureData rz dat
---  return (a,glr)
---
---compileTexturePictureT :: MonadIO m => Rez -> TexturePictureT m a -> m (a, Renderer)
---compileTexturePictureT rz pic = do
---  (a, dat) <- runPictureT pic
---  glr <- liftIO $ compileTexturePictureData rz dat
---  return (a,glr)
---
---compileColorPicture :: MonadIO m => Rez -> ColorPicture a -> m (a, Renderer)
---compileColorPicture rz pic = do
---  let (a, dat) = runPicture pic
---  glr <- liftIO $ compileColorPictureData rz dat
---  return (a,glr)
---
---compileTexturePicture :: MonadIO m => Rez -> TexturePicture a -> m (a, Renderer)
---compileTexturePicture rz pic = do
---  let (a, dat) = runPicture pic
---  glr <- liftIO $ compileTexturePictureData rz dat
---  return (a,glr)
---------------------------------------------------------------------------------
--- Specifying a proper backend.
---------------------------------------------------------------------------------
-
