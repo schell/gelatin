@@ -1,7 +1,7 @@
 # For more information, see: http://docs.haskellstack.org/en/stable/yaml_configuration.html
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: lts-9.12
+resolver: nightly-2017-11-10
 
 # Local packages, usually specified by relative directory name
 packages:
@@ -13,7 +13,7 @@ packages:
 - gelatin-freetype2
 - gelatin-example
 - location:
-    git: https://github.com/haskell-game/sdl2.git
+    git: https://github.com/schell/sdl2.git
     commit: 0d1feb64251b12b01c400c0a735c2470c7a92374 
   extra-dep: true
 
