@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-7.14
+resolver: nightly-2017-11-10
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -44,8 +44,9 @@ packages:
 - ../gelatin-fruity
 - ../gelatin-freetype2
 - location:
-    git: https://github.com/schell/sdl2.git
-    commit: 183b0d57bf031d18f77c5668d8759fa841f57c6e
+    git: https://github.com/haskell-game/sdl2.git
+    commit: 0d1feb64251b12b01c400c0a735c2470c7a92374 
+  extra-dep: true
 # The following packages have been ignored due to incompatibility with the
 # resolver compiler, dependency conflicts with other packages
 # or unsatisfied dependencies.
