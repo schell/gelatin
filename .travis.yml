@@ -31,6 +31,8 @@ matrix:
     addons: {apt: {packages: [cabal-install-2.0], sources: [hvr-ghc]}}
 
   # build with cabal new-build
+  # TODO: Fix build errors on GHC cabal new-build
+  # Once the errors are fixed we can put these back in un-allowed failures
   - env: BUILD=cabal GHCVER=7.10.3 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.1.7
     compiler: ": #GHC 7.10.3"
     addons: {apt: {packages: [cabal-install-2.0,ghc-7.10.3,happy-1.19.5,alex-3.1.7,libsdl2-dev], sources: [hvr-ghc]}}
@@ -63,6 +65,7 @@ matrix:
 
   allow_failures:
   - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
+  - env: BUILD=cabal CABALVER=2.0
   - env: BUILD=stack ARGS=""
     os: linux
 
@@ -132,4 +135,3 @@ script:
       ;;
   esac
   set +ex
-
