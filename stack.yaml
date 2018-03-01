@@ -12,6 +12,10 @@ packages:
 - gelatin-fruity
 - gelatin-freetype2
 - gelatin-example
+- location:
+    git: https://github.com/schell/sdl2.git
+    commit: 0d1feb64251b12b01c400c0a735c2470c7a92374
+  extra-dep: true
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
