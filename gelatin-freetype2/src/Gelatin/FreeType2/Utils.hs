@@ -20,7 +20,7 @@ module Gelatin.FreeType2.Utils (
 ) where
 
 import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Control.Monad.Trans.Either
+import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.State.Strict
 import           Control.Monad (unless)
@@ -35,7 +35,7 @@ import           Graphics.Rendering.FreeType.Internal.Vector            as FT
 import           Foreign                                                as FT
 import           Foreign.C.String                                       as FT
 
-type FreeTypeT m = EitherT String (StateT FT_Library m)
+type FreeTypeT m = ExceptT String (StateT FT_Library m)
 type FreeTypeIO = FreeTypeT IO
 
 glyphFormatString :: FT_Glyph_Format -> String
@@ -48,8 +48,8 @@ glyphFormatString fmt
 
 liftE :: MonadIO m => IO (Either FT_Error a) -> FreeTypeT m a
 liftE f = (liftIO f) >>= \case
-  Left e  -> left $ "FreeType2 error:" ++ (show e)
-  Right a -> right a
+  Left e  -> fail $ "FreeType2 error:" ++ (show e)
+  Right a -> return a
 
 runIOErr :: MonadIO m => IO FT_Error -> FreeTypeT m ()
 runIOErr f = do
@@ -66,7 +66,7 @@ runFreeType f = do
     then do
       _ <- liftIO $ ft_Done_FreeType lib
       return $ Left $ "Error initializing FreeType2:" ++ show e
-    else (fmap (,lib)) <$> evalStateT (runEitherT f) lib
+    else (fmap (,lib)) <$> evalStateT (runExceptT f) lib
 
 withFreeType :: MonadIO m => Maybe FT_Library -> FreeTypeT m a -> m (Either String a)
 withFreeType Nothing f = runFreeType f >>= \case
@@ -74,7 +74,7 @@ withFreeType Nothing f = runFreeType f >>= \case
   Right (a,lib) -> do
     _ <- liftIO $ ft_Done_FreeType lib
     return $ Right a
-withFreeType (Just lib) f = evalStateT (runEitherT f) lib
+withFreeType (Just lib) f = evalStateT (runExceptT f) lib
 
 getLibrary :: MonadIO m => FreeTypeT m FT_Library
 getLibrary = lift get

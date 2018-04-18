@@ -2,7 +2,7 @@
 import           Control.Arrow
 import           Control.Concurrent         (threadDelay)
 import           Control.Monad              (forM_, forever, when)
-import           Control.Monad.Trans.Either (runEitherT)
+import           Control.Monad.Trans.Except (runExceptT)
 import           Gelatin.SDL2
 import           Paths_gelatin_sdl2
 import           SDL
@@ -52,7 +52,7 @@ isQuit (Event _ payload) = isKeyQ payload || payload == QuitEvent
 -- Start up our backend(s) and go!
 main :: IO ()
 main =
-  runEitherT (startupSDL2Backends 920 420 "gelatin-sdl2-example" True) >>= \case
+  runExceptT (startupSDL2Backends 920 420 "gelatin-sdl2-example" True) >>= \case
     Left err -> putStrLn err >> exitFailure
     Right (SDL2Backends glv2v4 glv2v2) -> do
       -- Load up a texture. This can be done with either backend, as they both
