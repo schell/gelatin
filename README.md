@@ -111,6 +111,8 @@ Drink your ☕, take a walk and rejoice...
 
 contributions
 -------------
-I welcome any and all contributions. This means bug reports, pull requests or
-even [donations through patreon](https://www.patreon.com/schell). This library 
-will always be free.
+I welcome any and all contributions. Feel free to [tackle an issue (or a TODO)](https://github.com/schell/gelatin/issues) by making a pull request! 
+
+If you'd like to make a donation you can do so [through patreon](https://www.patreon.com/schell). 
+
+This library will always be free.
