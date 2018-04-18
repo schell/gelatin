@@ -37,7 +37,7 @@ library
                      , linear                >=1.20 && <1.21
                      , containers            >=0.5  && <0.6
                      , vector                >=0.12 && <0.13
-                     , mtl       ssh root@138.197.232.80            >=2.2  && <2.3
+                     , mtl                   >=2.2  && <2.3
                      , transformers          >=0.4  && <0.6
                      , bytestring            >=0.10 && <0.11
                      , lens                  >=4.14 && <4.16
