@@ -1,7 +1,7 @@
 # For more information, see: http://docs.haskellstack.org/en/stable/yaml_configuration.html
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: lts-10.07
+resolver: lts-11.3
 
 # Local packages, usually specified by relative directory name
 packages:
@@ -12,10 +12,6 @@ packages:
 - gelatin-fruity
 - gelatin-freetype2
 - gelatin-example
-- location:
-    git: https://github.com/schell/sdl2.git
-    commit: 0d1feb64251b12b01c400c0a735c2470c7a92374
-  extra-dep: true
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:

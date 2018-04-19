@@ -28,7 +28,6 @@ library
                      , ghcjs-dom  -any
                      , ghcjs-dom-jsffi
                      , mtl >= 2.2 & < 2.3
-                     , either >= 4.4 && < 4.6
                      , async -any
                      , vector >= 0.12 && < 0.13
                      , bytestring >= 0.10 & < 0.11

@@ -1,17 +1,17 @@
 {-# LANGUAGE LambdaCase #-}
 import           Control.Arrow
-import           Control.Concurrent         (threadDelay)
-import           Control.Monad              (forever, when)
-import           Control.Monad.IO.Class     (liftIO)
-import           Control.Monad.Trans.Either (runEitherT)
-import qualified Data.Vector                as B
+import           Control.Concurrent     (threadDelay)
+import           Control.Monad          (forever, when)
+import           Control.Monad.Except   (runExceptT)
+import           Control.Monad.IO.Class (liftIO)
+import qualified Data.Vector            as B
 import           Gelatin.FreeType2
 import           Gelatin.Fruity
 import           Gelatin.SDL2
 import           Paths_gelatin_example
 import           SDL
-import           System.Exit                (exitFailure, exitSuccess)
-import           System.FilePath            ((</>))
+import           System.Exit            (exitFailure, exitSuccess)
+import           System.FilePath        ((</>))
 
 --------------------------------------------------------------------------------
 -- Regular pure pictures
@@ -70,7 +70,7 @@ main = do
             Left err -> putStrLn err >> exitFailure
             Right f  -> return f
 
-  runEitherT (startupSDL2Backends 1000 600 "gelatin-example" True) >>= \case
+  runExceptT (startupSDL2Backends 1000 600 "gelatin-example" True) >>= \case
     Left err -> putStrLn err
     Right (SDL2Backends glv2v4 glv2v2) -> do
       Just (sz, tex)   <- loadImage imgName
