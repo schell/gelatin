@@ -96,7 +96,7 @@ before_install:
   cd SDL2-2.0.8
   ./configure
   make
-  make install
+  sudo make install
 
 - PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
 
