@@ -36,7 +36,7 @@ library
                      , linear              >=1.20 && <1.21
                      , mtl                 >=2.2 && <2.3
                      , transformers        >=0.4 && <0.6
-                     , template-haskell    >=2.10 && <2.13
+                     , template-haskell    >=2.10 && <2.14
                      , vector              >=0.12 && <0.13
 
   hs-source-dirs:      src
