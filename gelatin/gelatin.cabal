@@ -33,7 +33,7 @@ library
                      , Gelatin.Picture.Internal
                      , Gelatin.Picture.Shapes
 
-  build-depends:       base                  >=4.8  && <4.11
+  build-depends:       base                  >=4.8  && <5.0
                      , linear                >=1.20 && <1.21
                      , containers            >=0.5  && <0.6
                      , vector                >=0.12 && <0.13

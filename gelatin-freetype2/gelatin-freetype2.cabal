@@ -22,7 +22,7 @@ library
                      , Gelatin.FreeType2.Utils
                      , Gelatin.FreeType2
 
-  build-depends:       base               >=4.8 && <4.11
+  build-depends:       base               >=4.8 && <5
                      , containers         >=0.5 && <0.6
                      , freetype2          >=0.1 && <0.2
                      , gelatin            >=0.1 && <0.2
