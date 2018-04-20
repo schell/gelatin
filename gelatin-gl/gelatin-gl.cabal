@@ -23,7 +23,7 @@ library
                        Gelatin.GL.Shader,
                        Gelatin.GL.Common,
                        Gelatin.GL.TH
-  build-depends:       base                >=4.8 && <5
+  build-depends:       base >=4.8 && < 4.12
                      , bytestring          >=0.10 && <0.11
                      , containers          >=0.5 && <0.6
                      , directory           >=1.2 && <1.4
@@ -45,7 +45,7 @@ library
 executable gelatin-gl-example
   ghc-options:         -Wall
 
-  build-depends:       base                >=4.8  && <4.11
+  build-depends:       base >=4.8 && < 4.12
                      , gelatin             >=0.1  && <0.2
                      , gelatin-gl
                      , linear              >=1.20 && <1.21

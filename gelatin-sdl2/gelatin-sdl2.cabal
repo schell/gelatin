@@ -17,7 +17,7 @@ stability:           experimental
 library
   exposed-modules:     Gelatin.SDL2
   ghc-options:         -Wall
-  build-depends:       base                 >=4.8     && <5
+  build-depends:       base >=4.8 && < 4.12
                      , sdl2                 >=2.4.0.1 && <2.5
                      , gelatin-gl           >=0.1     && <0.2
                      , mtl                  >=2.2     && <2.3
@@ -31,7 +31,7 @@ executable gelatin-sdl2-example
   other-modules:       Paths_gelatin_sdl2
   ghc-options:         -Wall
   default-language:    Haskell2010
-  build-depends:       base                 >=4.8     && <5
+  build-depends:       base >=4.8 && < 4.12
                      , gelatin-sdl2
                      , sdl2                 >=2.4.0.1 && <2.5
                      , filepath             >=1.4     && <1.5

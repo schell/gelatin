@@ -33,7 +33,7 @@ library
                      , Gelatin.Picture.Internal
                      , Gelatin.Picture.Shapes
 
-  build-depends:       base                  >=4.8  && <5.0
+  build-depends:       base >=4.8 && < 4.12
                      , linear                >=1.20 && <1.21
                      , containers            >=0.5  && <0.6
                      , vector                >=0.12 && <0.13
@@ -48,11 +48,11 @@ library
 executable example
   ghc-options:         -Wall
 
-  build-depends:       base                  >=4.8 && <5
+  build-depends:       base >=4.8 && < 4.12
                      , gelatin
                      , linear                >=1.20 && <1.21
                      , vector                >=0.12 && <0.13
-                     , mtl                   >=2.2 && <2.3
+                     , mtl                   >=2.2  && <2.3
 
   hs-source-dirs:      app
   main-is:             Example.hs

@@ -22,7 +22,7 @@ library
                      , Gelatin.FreeType2.Utils
                      , Gelatin.FreeType2
 
-  build-depends:       base               >=4.8 && <5
+  build-depends:       base >=4.8 && < 4.12
                      , containers         >=0.5 && <0.6
                      , freetype2          >=0.1 && <0.2
                      , gelatin            >=0.1 && <0.2
@@ -36,7 +36,7 @@ library
 --  hs-source-dirs:      app
 --  main-is:             Main.hs
 --  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
---  build-depends:       base >=4.8 && <4.11
+--  build-depends:       base >=4.8 && < 4.12
 --                     , gelatin
 --                     , gelatin-freetype2
 --                     , gelatin-sdl2
@@ -56,7 +56,7 @@ test-suite gelatin-freetype2-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs
-  build-depends:       base                  >=4.8 && <4.11
+  build-depends:       base >=4.8 && < 4.12
                      , gelatin-freetype2
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
