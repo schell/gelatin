@@ -19,41 +19,6 @@ module Gelatin.GL.Shader (
   , compileSources
   , compileProgram
   , loadSimple2DShader
-
-    --loadSumShader,
-    --loadGLShader,
-    ---- * GLShader types
-    --GLShaderProgram,
-    --GLShader,
-    --GLShaderDef,
-      ---- * GLShader prims
-    --PrimType(..),
-    ---- * Uniforms
-    --Simple2DUniform(..),
-    ---- * Updating uniforms for specific kinds of rendering
-    --updateUniformsForTris,
-    --updateUniformsForBezs,
-    --updateUniformsForLines,
-    --updateUniformsForMask,
-    --applyAlpha,
-    --applyMult,
-    ---- * Free form uniform updates
-    --updateUniform,
-    --updateUniforms,
-    ---- * Attributes
-    ---- $layout
-    --Simple2DAttrib(..),
-    --locToGLuint,
-    ---- * Enabling attribs for specific kinds of rendering
-    --enableAttribsForTris,
-    --enableAttribsForBezs,
-    --enableAttribsForLines,
-    --enableAttribsForMask,
-    ---- * Enabling and disabling any attribs
-    --onlyEnableAttribs,
-    ---- * GLShader compilation
-    --compileShader,
-    --compileProgram,
 ) where
 
 import           Control.Exception      (assert)
@@ -63,7 +28,6 @@ import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.ByteString.Char8  as B
 import qualified Data.Foldable          as F
 import           Data.Proxy             (Proxy (..))
-import qualified Data.Vector.Generic    as G
 import qualified Data.Vector.Storable   as S
 import           Data.Vector.Unboxed    (Unbox, Vector)
 import qualified Data.Vector.Unboxed    as V
@@ -79,116 +43,11 @@ import           Prelude                hiding (init)
 import           Prelude                as P
 
 import           Gelatin
-import           Gelatin.Shaders
-
 import           Gelatin.GL.TH
+import           Gelatin.Shaders
 
 
 type Simple2DShader = GLuint
---------------------------------------------------------------------------------
--- Updating shader uniforms
---------------------------------------------------------------------------------
----- | Updates uniforms for rendering triangles.
---updateUniformsForTris :: GLShader -> M44 Float -> M44 Float -> Bool -> Float
---                      -> V4 Float -> Maybe (V4 Float) -> IO ()
---updateUniformsForTris sh pj mv hasUV a m mr =
---  updateUniforms (uniformsForTris pj mv hasUV a m mr) sh
---{-# INLINE updateUniformsForTris #-}
---
----- | Updates uniforms for rendering loop-blinn beziers.
---updateUniformsForBezs :: GLShader -> M44 Float -> M44 Float -> Bool -> Float
---                      -> V4 Float -> Maybe (V4 Float) -> IO ()
---updateUniformsForBezs sh pj mv hasUV a m mr =
---  updateUniforms (uniformsForBezs pj mv hasUV a m mr) sh
---{-# INLINE updateUniformsForBezs #-}
---
----- | Updates uniforms for rendering projected polylines.
---updateUniformsForLines :: GLShader -> M44 Float -> M44 Float -> Bool -> Float
---                       -> V4 Float -> Maybe (V4 Float) -> Float -> Float -> Float
---                       -> (LineCap,LineCap) -> IO ()
---updateUniformsForLines sh pj mv hasUV a m mr thickness feather sumlength caps =
---  let us = uniformsForLines pj mv hasUV a m mr thickness feather sumlength caps
---  in updateUniforms us sh
---{-# INLINE updateUniformsForLines #-}
---
----- | Updates uniforms for rendering alpha masking.
---updateUniformsForMask :: GLShader -> M44 Float -> M44 Float -> Float -> V4 Float
---                      -> GLuint -> GLuint -> IO ()
---updateUniformsForMask sh pj mv a m main mask =
---  updateUniforms (uniformsForMask pj mv a m main mask) sh
---{-# INLINE updateUniformsForMask #-}
---
---updateUniforms :: [Simple2DUniform] -> GLShader -> IO ()
---updateUniforms us s = mapM_ (`updateUniform` s) us
---{-# INLINE updateUniforms #-}
---
---updateUniform :: Simple2DUniform -> GLShader -> IO ()
---updateUniform u s = withUniform (simple2DUniformIdentifier u) s $ \p loc -> do
---  glUseProgram p
---  uniformUpdateFunc u loc
---{-# INLINE updateUniform #-}
---
---uniformUpdateFunc :: Simple2DUniform -> GLint -> IO ()
---uniformUpdateFunc (UniformPrimType p) u =
---  glUniform1i u $ fromIntegral $ fromEnum p
---uniformUpdateFunc (UniformProjection m44) u =
---  with m44 $ glUniformMatrix4fv u 1 GL_TRUE . castPtr
---uniformUpdateFunc (UniformModelView m44) u =
---  with m44 $ glUniformMatrix4fv u 1 GL_TRUE . castPtr
---uniformUpdateFunc (UniformThickness t) u = glUniform1f u t
---uniformUpdateFunc (UniformFeather f) u = glUniform1f u f
---uniformUpdateFunc (UniformSumLength l) u = glUniform1f u l
---uniformUpdateFunc (UniformLineCaps (capx, capy)) u =
---  let [x,y] = P.map (fromIntegral . fromEnum) [capx,capy] in glUniform2f u x y
---uniformUpdateFunc (UniformHasUV has) u = glUniform1i u $ if has then 1 else 0
---uniformUpdateFunc (UniformSampler s) u = glUniform1i u $ fromIntegral s
---uniformUpdateFunc (UniformMainTex t) u = glUniform1i u $ fromIntegral t
---uniformUpdateFunc (UniformMaskTex t) u = glUniform1i u $ fromIntegral t
---uniformUpdateFunc (UniformAlpha a) u = glUniform1f u $ realToFrac a
---uniformUpdateFunc (UniformMult v) u =
---  let (V4 r g b a) = realToFrac <$> v in glUniform4f u r g b a
---uniformUpdateFunc (UniformShouldReplaceColor s) u =
---  glUniform1i u $ if s then 1 else 0
---uniformUpdateFunc (UniformReplaceColor c) u =
---  let (V4 r g b a) = realToFrac <$> c in glUniform4f u r g b a
---{-# INLINE uniformUpdateFunc #-}
---
---withUniform :: String -> GLShader -> (GLuint -> GLint -> IO ()) -> IO ()
---withUniform name (Shader p ls) f =
---    case lookup name ls of
---        Nothing  -> do P.putStrLn $ "could not find uniform " ++ name
---                       exitFailure
---        Just loc -> f p loc
---{-# INLINE withUniform #-}
---------------------------------------------------------------------------------
--- $layout
--- Attributes layout locations are unique and global.
---------------------------------------------------------------------------------
---locToGLuint :: Simple2DAttrib -> GLuint
---locToGLuint = fromIntegral . fromEnum
---
----- | Enables the provided attributes and disables all others.
---onlyEnableAttribs :: [Simple2DAttrib] -> IO ()
---onlyEnableAttribs atts = do
---   mapM_ (glDisableVertexAttribArray . locToGLuint) allAttribs
---   mapM_ (glEnableVertexAttribArray . locToGLuint) atts
-
---enableAttribsForTris :: Bool -> IO ()
---enableAttribsForTris True  = onlyEnableAttribs [PositionLoc,UVLoc]
---enableAttribsForTris False = onlyEnableAttribs [PositionLoc,ColorLoc]
---
---enableAttribsForBezs :: Bool -> IO ()
---enableAttribsForBezs True  = onlyEnableAttribs [PositionLoc,UVLoc,BezLoc]
---enableAttribsForBezs False = onlyEnableAttribs [PositionLoc,ColorLoc,BezLoc]
---
---enableAttribsForLines :: Bool -> IO ()
---enableAttribsForLines True =
---  onlyEnableAttribs [PositionLoc,UVLoc,BezUVLoc,NextLoc,PrevLoc]
---enableAttribsForLines False =
---  onlyEnableAttribs [PositionLoc,ColorLoc,BezUVLoc,NextLoc,PrevLoc]
---
---enableAttribsForMask :: IO ()
---enableAttribsForMask = onlyEnableAttribs [PositionLoc,UVLoc]
 --------------------------------------------------------------------------------
 -- IsShaderType instances
 --------------------------------------------------------------------------------

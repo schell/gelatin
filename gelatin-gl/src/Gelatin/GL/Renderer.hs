@@ -136,7 +136,6 @@ colorPolylineRenderer win sh thickness feather caps verts colors = do
         toFrac = realToFrac
         vs = V.map (fmap toFrac) vs_
         cs = V.map (fmap toFrac) cs_
-        uvs = V.map (fmap toFrac) cs_
         us = V.map (fmap toFrac) us_
         ns = V.map (fmap toFrac) ns_
         ps = V.map (fmap toFrac) ps_
@@ -156,6 +155,7 @@ colorPolylineRenderer win sh thickness feather caps verts colors = do
             let (mv, a, m, mr) = unwrapTransforms t
             pj <- orthoContextProjection win
             updatePrimitive sh PrimLine
+            updateProjection sh pj
             updateModelView sh mv
             updateHasUV sh False
             updateThickness sh thickness
@@ -169,9 +169,9 @@ colorPolylineRenderer win sh thickness feather caps verts colors = do
                            updateReplacementColor sh c
               _      -> updateShouldReplaceColor sh False
             drawBuffer sh vao GL_TRIANGLE_STRIP num
-          c = do withArray bufs $ glDeleteBuffers 5
-                 withArray [vao] $ glDeleteVertexArrays 1
-      return (c,r)
+          free = do withArray bufs $ glDeleteBuffers 5
+                    withArray [vao] $ glDeleteVertexArrays 1
+      return (free,r)
 
 -- | Creates and returns a renderer that renders a textured, expanded 2d
 -- polyline projected in 2d space.
@@ -186,7 +186,6 @@ texPolylineRenderer win sh thickness feather caps verts uvs = do
         toFrac = realToFrac
         vs = V.map (fmap toFrac) vs_
         cs = V.map (fmap toFrac) cs_
-        uvs = V.map (fmap toFrac) cs_
         us = V.map (fmap toFrac) us_
         ns = V.map (fmap toFrac) ns_
         ps = V.map (fmap toFrac) ps_

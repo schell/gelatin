@@ -26,8 +26,18 @@ corner xr yr =
   let vs = cleanSeqDupes $ V.concatMap (subdivideAdaptive 100 0) $ cornerBez3 xr yr
   in Vertices $ modify (V.++ vs)
 
-arc :: (Unbox a, Epsilon a, RealFloat a, Monad m)
-    => a -> a -> a -> a -> VerticesT (V2 a) m ()
+-- | Create an arched sequence of vertices along an ellipse.
+arc
+  :: (Unbox a, Epsilon a, RealFloat a, Monad m)
+  => a
+  -- ^ Width of the ellipse.
+  -> a
+  -- ^ Height of the ellipse.
+  -> a
+  -- ^ Starting position of the arc on the ellipse in radians.
+  -> a
+  -- ^ Ending position of the arc on the ellipse in radians.
+  -> VerticesT (V2 a) m ()
 arc w h start stop =
   let vs = cleanSeqDupes $ V.concatMap (subdivideAdaptive 100 0) $ arcBez3 w h start stop
   in Vertices $ modify (V.++ vs)
