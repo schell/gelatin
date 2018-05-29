@@ -3,7 +3,11 @@ version:             0.1.0.0
 synopsis:            Gelatin's support for rendering TTF outlines, using FontyFruity.
 description:         Gelatin's support for rendering TTF outlines, using FontyFruity.
                      Using FontyFruity gelatin can render smooth font geometry without
-                     freetype.
+                     freetype. This smooth font geometry can be scaled arbitrarily.
+                     The process of extracting outlines and triangulating is a bit CPU
+                     intensive so if your application requires frequent text updates it
+                     is recommended you use gelatin-freetype2, which is much faster at
+                     the cost of scalability.
 homepage:            https://github.com/schell/gelatin-fruity#readme
 license:             BSD3
 license-file:        LICENSE

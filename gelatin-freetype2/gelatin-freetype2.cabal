@@ -2,8 +2,12 @@ name:                gelatin-freetype2
 version:             0.1.0.0
 synopsis:            FreeType2 based text rendering for the gelatin realtime
                      rendering system.
-description:         FreeType2 based text rendering for the gelatin realtime
-                     rendering system. Please see README.md.
+description:         gelatin-freetype2 is a text rendering engine. It's fast enough
+                     to render frequently changing, long form text in realtime. It
+                     exposes a familiar gelatin based API. It uses word and font
+                     level maps (atlases) along with freetype2 to achieve reliable
+                     performance.
+                     For rendering text as scalable vector graphics, see gelatin-fruity.
 homepage:            https://github.com/schell/gelatin/gelatin-freetype2#readme
 license:             BSD3
 license-file:        LICENSE
