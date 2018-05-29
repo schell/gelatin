@@ -12,36 +12,41 @@ libraries
 
 ### [gelatin (core)](https://github.com/schell/gelatin/tree/master/gelatin)
 * Backend definitions
-* Primitives for drawing 
- * triangles 
+* Primitives for drawing
+ * triangles
  * triangle strips
  * triangle fans
- * beziers (fill below curve) + inverted beziers (fill above curve) 
- * thick, feathered stroked lines and for creating new backends. 
-* Definitions and functions for post compilation affine transformation, 
-  color multiply, red channel replacement (for font textures) 
+ * beziers (fill below curve) + inverted beziers (fill above curve)
+ * thick, feathered stroked lines and for creating new backends.
+* Definitions and functions for post compilation affine transformation,
+  color multiply, red channel replacement (for font textures)
 
 ### [gelatin-gl](https://github.com/schell/gelatin/tree/master/gelatin-gl)
-* Backend for compiling `gelatin` pictures using OpenGL. 
+Backend for compiling `gelatin` pictures using OpenGL.
 
 ### [gelatin-freetype2](https://github.com/schell/gelatin/tree/master/gelatin-freetype2)
-* freetype2 text with character atlas and word map.
+`freetype2` text using character atlases and word maps for fast rendering. Use
+this if your text changes frequently but does not often get resized. It is fast to
+compile renderings but unless the text is rendered with a large character size, scaling up
+the rendering will show pixels.
 
 ### [gelatin-fruity](https://github.com/schell/gelatin/tree/master/gelatin-fruity)
-* Functions for extracting truetype font geometry as `gelatin` primitives. 
+Functions for extracting truetype font geometry as `gelatin` primitives. Use this
+if your text resizes frequently but otherwise does not change. It is slow to compile
+renderings but once compiled those renderings can be displayed at any scale.
 
 ### [gelatin-sdl2](https://github.com/schell/gelatin/tree/master/gelatin-sdl2)
-* SDL2 initialization and windowing. 
+SDL2 initialization and windowing.
 
 ### [gelatin-webgl](https://github.com/schell/gelatin/tree/master/gelatin-webgl)
-* WebGL backend via ghcjs (experimental) 
+WebGL backend via ghcjs (experimental)
 
 
 examples
 --------
-For examples please see 
+For examples please see
 [gelatin-example](https://github.com/schell/gelatin/tree/master/gelatin-example)
-and 
+and
 [odin](https://github.com/schell/odin)
 
 
@@ -97,12 +102,12 @@ If you just installed stack, run
 Go make some ☕ and then...
 
     stack build
-    
+
 Note on Windows that if you run into [this error](https://github.com/commercialhaskell/stack/issues/3492)
 
     ghc-pkg.EXE: C:\sr\snapshots\3c4ad812\pkgdb\package.cache: you don't have
     permission to modify this file
-    
+
 You can simply run `stack build` over and over until the thing finally compiles.
 _facepalm_ - this will be fixed with ghc 8.2.
 
@@ -111,8 +116,8 @@ Drink your ☕, take a walk and rejoice...
 
 contributions
 -------------
-I welcome any and all contributions. Feel free to [tackle an issue (or a TODO)](https://github.com/schell/gelatin/issues) by making a pull request! 
+I welcome any and all contributions. Feel free to [tackle an issue (or a TODO)](https://github.com/schell/gelatin/issues) by making a pull request!
 
-If you'd like to make a donation you can do so [through patreon](https://www.patreon.com/schell). 
+If you'd like to make a donation you can do so [through patreon](https://www.patreon.com/schell).
 
 This library will always be free.
