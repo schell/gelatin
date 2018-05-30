@@ -27,10 +27,10 @@ library
                      , ghcjs-base -any
                      , ghcjs-dom  -any
                      , ghcjs-dom-jsffi
-                     , mtl >= 2.2 & < 2.3
+                     , mtl >= 2.2 && < 2.3
                      , async -any
                      , vector >= 0.12 && < 0.13
-                     , bytestring >= 0.10 & < 0.11
+                     , bytestring >= 0.10 && < 0.11
                      , stm -any
                      , transformers >= 0.4 && < 0.6
 
