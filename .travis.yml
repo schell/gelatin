@@ -27,32 +27,39 @@ matrix:
   # We grab the appropriate GHC and cabal-install versions from hvr's PPA. See:
   # https://github.com/hvr/multi-ghc-travis
   # Quick metadata check
-  - env: BUILD=meta CABALVER=2.0
+  - env: BUILD=meta CABALVER=2.2
     compiler: ": #cabal"
-    addons: {apt: {packages: [cabal-install-2.0], sources: [hvr-ghc]}}
+    addons: {apt: {packages: [cabal-install-2.2], sources: [hvr-ghc]}}
 
   # build with cabal new-build
   # TODO: Fix build errors on GHC cabal new-build
   # Once the errors are fixed we can put these back in un-allowed failures
-  - env: BUILD=cabal GHCVER=7.10.3 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.1.7
+  - env: BUILD=cabal GHCVER=7.10.3 CABALVER=2.2 HAPPYVER=1.19.5 ALEXVER=3.1.7
     compiler: ": #GHC 7.10.3"
     addons:
       apt:
         update: true
-        packages: [cabal-install-2.0,ghc-7.10.3,happy-1.19.5,alex-3.1.7]
+        packages: [cabal-install-2.2,ghc-7.10.3,happy-1.19.5,alex-3.1.7]
         sources: [hvr-ghc]
-  - env: BUILD=cabal GHCVER=8.0.1 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.1.7
+  - env: BUILD=cabal GHCVER=8.0.1 CABALVER=2.2 HAPPYVER=1.19.5 ALEXVER=3.1.7
     compiler: ": #GHC 8.0.1"
     addons:
       apt:
-        packages: [cabal-install-2.0,ghc-8.0.1,happy-1.19.5,alex-3.1.7]
+        packages: [cabal-install-2.2,ghc-8.0.1,happy-1.19.5,alex-3.1.7]
         sources: [hvr-ghc]
         update: true
-  - env: BUILD=cabal GHCVER=8.2.1 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.1.7
-    compiler: ": #GHC 8.2.1"
+  - env: BUILD=cabal GHCVER=8.2.2 CABALVER=2.2 HAPPYVER=1.19.5 ALEXVER=3.1.7
+    compiler: ": #GHC 8.2.2"
     addons:
       apt:
-        packages: [cabal-install-2.0,ghc-8.2.1,happy-1.19.5,alex-3.1.7]
+        packages: [cabal-install-2.2,ghc-8.2.2,happy-1.19.5,alex-3.1.7]
+        sources: [hvr-ghc]
+        update: true
+  - env: BUILD=cabal GHCVER=8.4.3 CABALVER=2.2 HAPPYVER=1.19.5 ALEXVER=3.1.7
+    compiler: ": #GHC 8.4.3"
+    addons:
+      apt:
+        packages: [cabal-install-2.2,ghc-8.4.3,happy-1.19.5,alex-3.1.7]
         sources: [hvr-ghc]
         update: true
 
@@ -86,7 +93,6 @@ matrix:
 
   allow_failures:
   - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
-  - env: BUILD=cabal CABALVER=2.0
   - env: BUILD=stack ARGS=""
     os: linux
 
